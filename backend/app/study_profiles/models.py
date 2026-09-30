@@ -42,6 +42,10 @@ class StudyProfile(Base):
         SqlEnum(StudyProfileStatus, native_enum=False),
         default=StudyProfileStatus.ACTIVE,
     )
+    # Niveles CEFR (A1..C2). Ver documento funcional §6.
+    selected_level: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    estimated_level: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    operational_level: Mapped[str | None] = mapped_column(String(2), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )

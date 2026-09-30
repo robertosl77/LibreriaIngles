@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+import app.models  # noqa: F401  (registra todas las tablas en el metadata)
 from app.api import router
 from app.core.config import settings
 
+if settings.is_production and settings.jwt_secret.startswith("dev-insecure"):
+    raise RuntimeError("Configurá JWT_SECRET antes de levantar en production.")
 
 app = FastAPI(
     title=settings.app_name,

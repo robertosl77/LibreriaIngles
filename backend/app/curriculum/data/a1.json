@@ -1,0 +1,472 @@
+{
+  "level": "A1",
+  "name": "Principiante",
+  "description": "Usuario básico: frases cotidianas, presentaciones, información personal simple.",
+  "areas": [
+    {
+      "key": "grammar",
+      "name": "Grammar",
+      "topics": [
+        {
+          "key": "to_be",
+          "name": "To be",
+          "skills": [
+            {
+              "key": "affirmative",
+              "name": "Afirmativo (am / is / are)",
+              "objectives": ["elegir am/is/are según el sujeto"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with am, is or are.",
+                  "question": "My sister ___ a nurse.",
+                  "acceptedAnswers": ["is"],
+                  "commonErrors": [
+                    {"answer": "are", "feedback": "Con he/she/it o un sustantivo singular se usa 'is'.", "conceptResults": [{"concept": "be_agreement", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["be_agreement"]
+                },
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with am, is or are.",
+                  "question": "We ___ from Argentina.",
+                  "acceptedAnswers": ["are"],
+                  "commonErrors": [
+                    {"answer": "is", "feedback": "Con we/you/they se usa 'are'.", "conceptResults": [{"concept": "be_agreement", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["be_agreement"]
+                }
+              ]
+            },
+            {
+              "key": "negative",
+              "name": "Negativo",
+              "objectives": ["formar negativo con not", "usar contracciones isn't / aren't"],
+              "exerciseTypes": ["rewrite", "fill_blank"],
+              "examples": [
+                {
+                  "type": "rewrite",
+                  "instruction": "Make the sentence negative.",
+                  "question": "They are at home.",
+                  "acceptedAnswers": ["They are not at home.", "They aren't at home.", "They're not at home."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["be_negative", "word_order"]
+                }
+              ]
+            },
+            {
+              "key": "questions",
+              "name": "Preguntas",
+              "objectives": ["invertir sujeto y verbo to be"],
+              "exerciseTypes": ["rewrite", "multiple_choice"],
+              "examples": [
+                {
+                  "type": "rewrite",
+                  "instruction": "Make a question.",
+                  "question": "He is your brother.",
+                  "acceptedAnswers": ["Is he your brother?"],
+                  "commonErrors": [
+                    {"answer": "He is your brother?", "feedback": "En las preguntas, 'is' va antes del sujeto.", "conceptResults": [{"concept": "be_question_inversion", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["be_question_inversion"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "present_simple",
+          "name": "Present Simple",
+          "skills": [
+            {
+              "key": "third_person_singular",
+              "name": "Tercera persona (-s / -es)",
+              "objectives": ["agregar -s/-es con he/she/it", "verbo base con I/you/we/they"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with the correct form of the verb in brackets.",
+                  "question": "Tom ___ (watch) TV every evening.",
+                  "acceptedAnswers": ["watches"],
+                  "commonErrors": [
+                    {"answer": "watch", "feedback": "Con he/she/it, los verbos terminados en -ch agregan -es.", "conceptResults": [{"concept": "third_person_s", "status": "incorrect"}]},
+                    {"answer": "watchs", "feedback": "Los verbos terminados en -ch llevan -es, no -s.", "conceptResults": [{"concept": "third_person_s", "status": "correct"}, {"concept": "spelling_es", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["third_person_s", "spelling_es"]
+                }
+              ]
+            },
+            {
+              "key": "negative",
+              "name": "Negativo (don't / doesn't)",
+              "objectives": ["usar don't/doesn't", "verbo base después de doesn't"],
+              "exerciseTypes": ["rewrite", "fill_blank"],
+              "examples": [
+                {
+                  "type": "rewrite",
+                  "instruction": "Make the sentence negative.",
+                  "question": "She plays tennis.",
+                  "acceptedAnswers": ["She doesn't play tennis.", "She does not play tennis."],
+                  "commonErrors": [
+                    {"answer": "She doesn't plays tennis.", "feedback": "Después de 'doesn't' va el verbo en forma base.", "conceptResults": [{"concept": "doesnt", "status": "correct"}, {"concept": "base_verb_after_doesnt", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["doesnt", "base_verb_after_doesnt"]
+                }
+              ]
+            },
+            {
+              "key": "questions_do_does",
+              "name": "Preguntas con do / does",
+              "objectives": ["elegir do/does", "verbo base después de does"],
+              "exerciseTypes": ["fill_blank", "rewrite"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete the question with do or does.",
+                  "question": "___ she work on Saturdays?",
+                  "acceptedAnswers": ["Does"],
+                  "commonErrors": [
+                    {"answer": "Do", "feedback": "Con he/she/it se usa 'does'.", "conceptResults": [{"concept": "do_does_choice", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["do_does_choice"]
+                },
+                {
+                  "type": "rewrite",
+                  "instruction": "Make a question.",
+                  "question": "Your parents live in Rosario.",
+                  "acceptedAnswers": ["Do your parents live in Rosario?"],
+                  "commonErrors": [
+                    {"answer": "Does your parents live in Rosario?", "feedback": "'Your parents' es plural: se usa 'do'.", "conceptResults": [{"concept": "do_does_choice", "status": "incorrect"}, {"concept": "base_verb_after_do", "status": "correct"}]}
+                  ],
+                  "expectedConcepts": ["do_does_choice", "base_verb_after_do"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "present_continuous",
+          "name": "Present Continuous",
+          "skills": [
+            {
+              "key": "affirmative",
+              "name": "Afirmativo (am/is/are + -ing)",
+              "objectives": ["am/is/are + verbo-ing", "ortografía de -ing"],
+              "exerciseTypes": ["fill_blank"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with the present continuous of the verb in brackets.",
+                  "question": "Look! The children ___ (run) in the park.",
+                  "acceptedAnswers": ["are running", "'re running"],
+                  "commonErrors": [
+                    {"answer": "are runing", "feedback": "Se duplica la consonante final: run → running.", "conceptResults": [{"concept": "be_plus_ing", "status": "correct"}, {"concept": "ing_spelling", "status": "incorrect"}]},
+                    {"answer": "running", "feedback": "Falta am/is/are antes del verbo con -ing.", "conceptResults": [{"concept": "be_plus_ing", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["be_plus_ing", "ing_spelling"]
+                }
+              ]
+            },
+            {
+              "key": "questions",
+              "name": "Preguntas",
+              "objectives": ["am/is/are antes del sujeto"],
+              "exerciseTypes": ["rewrite"],
+              "examples": [
+                {
+                  "type": "rewrite",
+                  "instruction": "Make a question.",
+                  "question": "You are listening to music.",
+                  "acceptedAnswers": ["Are you listening to music?"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["be_question_inversion", "be_plus_ing"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "can",
+          "name": "Can / can't",
+          "skills": [
+            {
+              "key": "ability",
+              "name": "Habilidad",
+              "objectives": ["can/can't + verbo base"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
+              "examples": [
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Choose the correct option.",
+                  "question": "My grandmother ___ use a computer. She never learned.",
+                  "options": ["can", "can't", "cans"],
+                  "acceptedAnswers": ["can't"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["can_meaning"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "there_is_are",
+          "name": "There is / there are",
+          "skills": [
+            {
+              "key": "basic",
+              "name": "Uso básico",
+              "objectives": ["there is + singular", "there are + plural"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with there is or there are.",
+                  "question": "___ two banks near my house.",
+                  "acceptedAnswers": ["There are", "There're"],
+                  "commonErrors": [
+                    {"answer": "There is", "feedback": "'Two banks' es plural: se usa 'there are'.", "conceptResults": [{"concept": "there_agreement", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["there_agreement"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "articles",
+          "name": "Articles",
+          "skills": [
+            {
+              "key": "a_an",
+              "name": "a / an",
+              "objectives": ["a antes de sonido consonante", "an antes de sonido vocal"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with a or an.",
+                  "question": "She is ___ engineer.",
+                  "acceptedAnswers": ["an"],
+                  "commonErrors": [
+                    {"answer": "a", "feedback": "'Engineer' empieza con sonido vocal: se usa 'an'.", "conceptResults": [{"concept": "a_an_sound", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["a_an_sound"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "possessives",
+          "name": "Possessive adjectives",
+          "skills": [
+            {
+              "key": "possessive_adjectives",
+              "name": "my / your / his / her / our / their",
+              "objectives": ["elegir el posesivo según el poseedor"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
+              "examples": [
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Choose the correct option.",
+                  "question": "Anna and Mark live with ___ parents.",
+                  "options": ["their", "there", "they"],
+                  "acceptedAnswers": ["their"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["possessive_choice"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "prepositions_time",
+          "name": "Prepositions of time",
+          "skills": [
+            {
+              "key": "in_on_at",
+              "name": "in / on / at",
+              "objectives": ["at + hora", "on + día", "in + mes/año/parte del día"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with in, on or at.",
+                  "question": "The meeting is ___ Monday.",
+                  "acceptedAnswers": ["on"],
+                  "commonErrors": [
+                    {"answer": "in", "feedback": "Con los días de la semana se usa 'on'.", "conceptResults": [{"concept": "time_preposition", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["time_preposition"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "wh_questions",
+          "name": "Wh- questions",
+          "skills": [
+            {
+              "key": "basic",
+              "name": "what / where / who / when / how",
+              "objectives": ["elegir la palabra interrogativa correcta"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
+              "examples": [
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Choose the correct question word.",
+                  "question": "___ do you live? — In Buenos Aires.",
+                  "options": ["Where", "When", "Who"],
+                  "acceptedAnswers": ["Where"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["wh_word_choice"]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "vocabulary",
+      "name": "Vocabulary",
+      "topics": [
+        {
+          "key": "daily_life",
+          "name": "Daily life",
+          "skills": [
+            {
+              "key": "routines",
+              "name": "Rutinas",
+              "objectives": ["verbos y expresiones de rutina diaria"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
+              "examples": [
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Choose the best word.",
+                  "question": "I ___ up at 7 o'clock every day.",
+                  "options": ["get", "go", "make"],
+                  "acceptedAnswers": ["get"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["routine_collocation"]
+                }
+              ]
+            },
+            {
+              "key": "family",
+              "name": "Familia",
+              "objectives": ["nombres de miembros de la familia"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with a family word.",
+                  "question": "My mother's brother is my ___.",
+                  "acceptedAnswers": ["uncle"],
+                  "commonErrors": [
+                    {"answer": "aunt", "feedback": "'Aunt' es tía. El hermano de tu mamá es tu 'uncle'.", "conceptResults": [{"concept": "family_word", "status": "incorrect"}]}
+                  ],
+                  "expectedConcepts": ["family_word"]
+                }
+              ]
+            },
+            {
+              "key": "food",
+              "name": "Comida",
+              "objectives": ["alimentos y comidas del día"],
+              "exerciseTypes": ["multiple_choice"],
+              "examples": [
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Choose the word that does not belong.",
+                  "question": "apple · banana · carrot · orange",
+                  "options": ["apple", "banana", "carrot", "orange"],
+                  "acceptedAnswers": ["carrot"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["food_category"]
+                }
+              ]
+            },
+            {
+              "key": "jobs",
+              "name": "Trabajos",
+              "objectives": ["profesiones comunes y lugares de trabajo"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with the job.",
+                  "question": "A ___ works in a hospital and helps doctors.",
+                  "acceptedAnswers": ["nurse"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["job_word"]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "reading",
+      "name": "Reading",
+      "topics": [
+        {
+          "key": "short_texts",
+          "name": "Short texts",
+          "skills": [
+            {
+              "key": "comprehension",
+              "name": "Comprensión de textos breves",
+              "objectives": ["identificar información concreta en un texto corto"],
+              "exerciseTypes": ["reading_multiple_choice"],
+              "examples": [
+                {
+                  "type": "reading_multiple_choice",
+                  "instruction": "Read the text and answer the question.",
+                  "passage": "Hi, I'm Lucía. I'm 28 and I live in Córdoba. I work in a small café. I start work at 8 a.m. and finish at 4 p.m. After work, I go to the gym.",
+                  "question": "What does Lucía do after work?",
+                  "options": ["She goes to the gym.", "She works in a café.", "She starts work."],
+                  "acceptedAnswers": ["She goes to the gym."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["detail_comprehension"]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "writing",
+      "name": "Writing",
+      "topics": [
+        {
+          "key": "about_me",
+          "name": "About me",
+          "skills": [
+            {
+              "key": "simple_sentences",
+              "name": "Oraciones simples sobre uno mismo",
+              "objectives": ["escribir 2-3 oraciones simples", "usar presente simple y to be correctamente"],
+              "exerciseTypes": ["short_writing"],
+              "examples": [
+                {
+                  "type": "short_writing",
+                  "instruction": "Write 2 or 3 sentences.",
+                  "question": "Describe your typical morning.",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["present_simple_use", "sentence_structure", "task_completion"]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

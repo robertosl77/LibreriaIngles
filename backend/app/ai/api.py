@@ -1,0 +1,189 @@
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
+
+from app.accounts.models import Account, PlatformRole
+from app.ai.models import AIConnection, AIConnectionOwnerType, AIConnectionStatus
+from app.ai.providers import PROVIDERS
+from app.ai.service import check_connection
+from app.core.config import settings
+from app.core.deps import CurrentAccount, DbSession
+from app.core.security import encrypt_secret, mask_secret
+from sqlalchemy import select
+
+router = APIRouter(prefix="/ai", tags=["ai"])
+
+Scope = Literal["account", "platform"]
+
+
+class ConnectionCreate(BaseModel):
+    provider: str
+    name: str = Field(min_length=1, max_length=120)
+    model: str | None = Field(default=None, max_length=120)
+    apiKey: str | None = Field(default=None, max_length=2000)
+    priority: int = Field(default=100, ge=1, le=10_000)
+    scope: Scope = "account"
+
+
+class ConnectionUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    model: str | None = Field(default=None, max_length=120)
+    apiKey: str | None = Field(default=None, max_length=2000)
+    priority: int | None = Field(default=None, ge=1, le=10_000)
+    active: bool | None = None
+
+
+def _is_platform_owner(account: Account) -> bool:
+    return account.platform_role == PlatformRole.PLATFORM_OWNER
+
+
+def _owner_filter(account: Account, scope: Scope):
+    if scope == "platform":
+        if not _is_platform_owner(account):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo PLATFORM_OWNER.")
+        return AIConnectionOwnerType.PLATFORM, None
+    return AIConnectionOwnerType.ACCOUNT, account.id
+
+
+def _serialize(connection: AIConnection) -> dict:
+    return {
+        "id": connection.id,
+        "scope": "platform"
+        if connection.owner_type == AIConnectionOwnerType.PLATFORM
+        else "account",
+        "provider": connection.provider,
+        "name": connection.name,
+        "model": connection.model or PROVIDERS[connection.provider].default_model,
+        "credentialHint": connection.credential_hint,
+        "priority": connection.priority,
+        "active": connection.active,
+        "status": connection.status.value,
+        "usable": connection.is_usable,
+        "backoffUntil": connection.backoff_until,
+        "lastCheckAt": connection.last_check_at,
+        "lastUsedAt": connection.last_used_at,
+        "lastErrorCode": connection.last_error_code,
+    }
+
+
+def _get_owned(db, account: Account, connection_id: int) -> AIConnection:
+    connection = db.get(AIConnection, connection_id)
+    if connection is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conexión inexistente.")
+    if connection.owner_type == AIConnectionOwnerType.ACCOUNT:
+        if connection.owner_id != account.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Conexión inexistente.")
+    elif connection.owner_type == AIConnectionOwnerType.PLATFORM:
+        if not _is_platform_owner(account):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Conexión inexistente.")
+    else:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conexión inexistente.")
+    return connection
+
+
+@router.get("/providers")
+def providers() -> list[dict]:
+    return [
+        {
+            "key": info.key,
+            "label": info.label,
+            "defaultModel": info.default_model,
+            "requiresKey": info.requires_key,
+        }
+        for info in PROVIDERS.values()
+        if info.key != "MOCK" or settings.mock_ai_allowed
+    ]
+
+
+@router.get("/connections")
+def list_connections(
+    account: CurrentAccount, db: DbSession, scope: Scope = "account"
+) -> list[dict]:
+    owner_type, owner_id = _owner_filter(account, scope)
+    query = select(AIConnection).where(AIConnection.owner_type == owner_type)
+    query = query.where(
+        AIConnection.owner_id.is_(None)
+        if owner_id is None
+        else AIConnection.owner_id == owner_id
+    )
+    rows = db.scalars(query.order_by(AIConnection.priority, AIConnection.id)).all()
+    return [_serialize(c) for c in rows]
+
+
+@router.post("/connections", status_code=status.HTTP_201_CREATED)
+def create_connection(
+    payload: ConnectionCreate, account: CurrentAccount, db: DbSession
+) -> dict:
+    provider = payload.provider.upper()
+    info = PROVIDERS.get(provider)
+    if info is None or (provider == "MOCK" and not settings.mock_ai_allowed):
+        raise HTTPException(422, "Proveedor no soportado.")
+    if info.requires_key and not payload.apiKey:
+        raise HTTPException(422, "Falta la API key.")
+
+    owner_type, owner_id = _owner_filter(account, payload.scope)
+    connection = AIConnection(
+        owner_type=owner_type,
+        owner_id=owner_id,
+        provider=provider,
+        name=payload.name.strip(),
+        model=(payload.model or "").strip() or info.default_model,
+        priority=payload.priority,
+        active=True,
+        status=AIConnectionStatus.AVAILABLE,
+    )
+    if payload.apiKey:
+        key = payload.apiKey.strip()
+        connection.credentials_encrypted = encrypt_secret(key)
+        connection.credential_hint = mask_secret(key)
+    db.add(connection)
+    db.commit()
+
+    # Documento funcional §26.3: al agregar una conexión, probarla de inmediato.
+    ok, error = check_connection(db, connection)
+    return {**_serialize(connection), "test": {"ok": ok, "error": error}}
+
+
+@router.patch("/connections/{connection_id}")
+def update_connection(
+    connection_id: int,
+    payload: ConnectionUpdate,
+    account: CurrentAccount,
+    db: DbSession,
+) -> dict:
+    connection = _get_owned(db, account, connection_id)
+    if payload.name is not None:
+        connection.name = payload.name.strip()
+    if payload.model is not None:
+        connection.model = payload.model.strip() or PROVIDERS[connection.provider].default_model
+    if payload.priority is not None:
+        connection.priority = payload.priority
+    if payload.active is not None:
+        connection.active = payload.active
+    credentials_changed = False
+    if payload.apiKey:
+        key = payload.apiKey.strip()
+        connection.credentials_encrypted = encrypt_secret(key)
+        connection.credential_hint = mask_secret(key)
+        credentials_changed = True
+    db.commit()
+
+    if credentials_changed or payload.model is not None:
+        ok, error = check_connection(db, connection)
+        return {**_serialize(connection), "test": {"ok": ok, "error": error}}
+    return _serialize(connection)
+
+
+@router.delete("/connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_connection(connection_id: int, account: CurrentAccount, db: DbSession) -> None:
+    connection = _get_owned(db, account, connection_id)
+    db.delete(connection)
+    db.commit()
+
+
+@router.post("/connections/{connection_id}/test")
+def test_connection(connection_id: int, account: CurrentAccount, db: DbSession) -> dict:
+    connection = _get_owned(db, account, connection_id)
+    ok, error = check_connection(db, connection)
+    return {**_serialize(connection), "test": {"ok": ok, "error": error}}

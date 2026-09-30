@@ -1,0 +1,245 @@
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+
+from app.ai.models import AIConnection
+from app.classes import generation, service
+from app.core.deps import CurrentStudy, DbSession
+from app.learning.models import (
+    Attempt,
+    ClassSession,
+    ClassSessionStatus,
+    DraftAnswer,
+    Exercise,
+)
+from app.progress.service import skill_name
+
+router = APIRouter(prefix="/classes", tags=["classes"])
+
+SWITCH_NOTICE = "Se cambió automáticamente el proveedor de IA."
+
+
+class AnswerRequest(BaseModel):
+    answer: str = Field(default="", max_length=4000)
+
+
+class SubmitRequest(BaseModel):
+    answers: dict[int, str] = Field(default_factory=dict)
+
+
+def _get_class(db, study, class_id: int) -> ClassSession:
+    session = db.get(ClassSession, class_id)
+    if session is None or session.study_profile_id != study.profile.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Clase inexistente.")
+    return session
+
+
+def _conflict(exc: Exception) -> HTTPException:
+    return HTTPException(status.HTTP_409_CONFLICT, str(exc))
+
+
+def _result_payload(attempt: Attempt, exercise: Exercise) -> dict | None:
+    if attempt.score is None:
+        return None
+    result = attempt.evaluation_result or {}
+    return {
+        "score": attempt.score,
+        "result": result.get("result"),
+        "feedback": result.get("feedback"),
+        "correctAnswer": result.get("correctAnswer"),
+        "errors": result.get("errors") or [],
+        "suggestions": result.get("suggestions") or [],
+        "conceptResults": result.get("conceptResults") or [],
+        "evaluationSource": attempt.evaluation_source.value if attempt.evaluation_source else None,
+        "appeal": result.get("appeal"),
+        "canAppeal": attempt.score < 100
+        and attempt.appealed_at is None
+        and bool(attempt.normalized_answer),
+    }
+
+
+def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
+    exercises = service.exercises_of(db, session)
+    drafts = service.drafts_of(db, session)
+    attempts = service.attempts_of(db, session)
+    current = {a.exercise_id: a for a in attempts if a.attempt_number == session.current_attempt}
+
+    rounds: dict[int, list[float]] = {}
+    for attempt in attempts:
+        if attempt.score is not None:
+            rounds.setdefault(attempt.attempt_number, []).append(attempt.score)
+
+    items = []
+    for exercise in exercises:
+        attempt = current.get(exercise.id)
+        draft = drafts.get(exercise.id)
+        items.append(
+            {
+                "id": exercise.id,
+                "position": exercise.position,
+                "type": exercise.exercise_type,
+                "area": exercise.area,
+                "skillKey": exercise.skill_key,
+                "skillName": skill_name(exercise.skill_key),
+                "instruction": exercise.instruction,
+                "question": exercise.prompt,
+                "passage": (exercise.content or {}).get("passage"),
+                "options": (exercise.content or {}).get("options"),
+                "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else ""),
+                "result": _result_payload(attempt, exercise) if attempt else None,
+            }
+        )
+
+    connection = (
+        db.get(AIConnection, session.generated_by_connection_id)
+        if session.generated_by_connection_id
+        else None
+    )
+    return {
+        "id": session.id,
+        "title": session.title,
+        "status": session.status.value,
+        "targetLevel": session.target_level,
+        "currentAttempt": session.current_attempt,
+        "score": session.score,
+        "createdAt": session.created_at,
+        "submittedAt": session.submitted_at,
+        "evaluatedAt": session.evaluated_at,
+        "generationError": session.generation_error,
+        "generatedBy": connection.name if connection else None,
+        "exercises": items,
+        "answered": sum(1 for i in items if (i["answer"] or "").strip()),
+        "history": [
+            {"attempt": number, "score": round(sum(scores) / len(scores), 1)}
+            for number, scores in sorted(rounds.items())
+            if number != session.current_attempt or session.status == ClassSessionStatus.COMPLETED
+        ],
+        "notice": notice,
+    }
+
+
+@router.get("")
+def list_classes(study: CurrentStudy, db: DbSession, limit: int = 50) -> list[dict]:
+    sessions = db.scalars(
+        select(ClassSession)
+        .where(ClassSession.study_profile_id == study.profile.id)
+        .order_by(ClassSession.created_at.desc(), ClassSession.id.desc())
+        .limit(min(limit, 200))
+    ).all()
+    ids = [s.id for s in sessions]
+    totals = dict(
+        db.execute(
+            select(Exercise.class_session_id, func.count())
+            .where(Exercise.class_session_id.in_(ids))
+            .group_by(Exercise.class_session_id)
+        ).all()
+    ) if ids else {}
+    answered = dict(
+        db.execute(
+            select(DraftAnswer.class_session_id, func.count())
+            .where(DraftAnswer.class_session_id.in_(ids), DraftAnswer.answer_text != "")
+            .group_by(DraftAnswer.class_session_id)
+        ).all()
+    ) if ids else {}
+    return [
+        {
+            "id": s.id,
+            "title": s.title,
+            "status": s.status.value,
+            "targetLevel": s.target_level,
+            "score": s.score,
+            "currentAttempt": s.current_attempt,
+            "createdAt": s.created_at,
+            "total": totals.get(s.id, 0),
+            "answered": answered.get(s.id, 0),
+        }
+        for s in sessions
+    ]
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_class(study: CurrentStudy, db: DbSession) -> dict:
+    try:
+        session, result = generation.create_class(db, study)
+    except generation.GenerationFailed as exc:
+        raise HTTPException(422, str(exc))
+    notice = SWITCH_NOTICE if result and result.switched else None
+    return _detail(db, session, notice)
+
+
+@router.post("/process-pending")
+def process_pending(study: CurrentStudy, db: DbSession) -> dict:
+    return service.process_pending(db, study)
+
+
+@router.get("/{class_id}")
+def get_class(class_id: int, study: CurrentStudy, db: DbSession) -> dict:
+    return _detail(db, _get_class(db, study, class_id))
+
+
+@router.post("/{class_id}/retry-generation")
+def retry_generation(class_id: int, study: CurrentStudy, db: DbSession) -> dict:
+    session = _get_class(db, study, class_id)
+    if session.status != ClassSessionStatus.GENERATION_FAILED:
+        raise HTTPException(status.HTTP_409_CONFLICT, "La clase no falló al generarse.")
+    session.status = ClassSessionStatus.GENERATING
+    db.commit()
+    result = generation.generate_content(db, study, session)
+    notice = SWITCH_NOTICE if result and result.switched else None
+    return _detail(db, session, notice)
+
+
+@router.put("/{class_id}/answers/{exercise_id}")
+def save_answer(
+    class_id: int, exercise_id: int, payload: AnswerRequest, study: CurrentStudy, db: DbSession
+) -> dict:
+    session = _get_class(db, study, class_id)
+    try:
+        draft = service.save_draft(db, study, session, exercise_id, payload.answer)
+    except service.ClassStateError as exc:
+        raise _conflict(exc)
+    return {"exerciseId": exercise_id, "savedAt": draft.updated_at, "status": session.status.value}
+
+
+@router.post("/{class_id}/submit")
+def submit_class(
+    class_id: int, payload: SubmitRequest, study: CurrentStudy, db: DbSession
+) -> dict:
+    session = _get_class(db, study, class_id)
+    try:
+        service.submit(db, study, session, payload.answers)
+    except service.ClassStateError as exc:
+        raise _conflict(exc)
+    notice = None
+    if session.status == ClassSessionStatus.AWAITING_EVALUATION:
+        notice = (
+            "Tus respuestas están guardadas. La corrección está pendiente porque "
+            "no hay conexiones de IA disponibles; se reintentará automáticamente."
+        )
+    return _detail(db, session, notice)
+
+
+@router.post("/{class_id}/retake")
+def retake_class(class_id: int, study: CurrentStudy, db: DbSession) -> dict:
+    session = _get_class(db, study, class_id)
+    try:
+        service.retake(db, session)
+    except service.ClassStateError as exc:
+        raise _conflict(exc)
+    return _detail(db, session)
+
+
+@router.post("/{class_id}/exercises/{exercise_id}/appeal")
+def appeal_exercise(class_id: int, exercise_id: int, study: CurrentStudy, db: DbSession) -> dict:
+    session = _get_class(db, study, class_id)
+    try:
+        attempt = service.appeal(db, study, session, exercise_id)
+    except service.ClassStateError as exc:
+        raise _conflict(exc)
+    accepted = bool((attempt.evaluation_result or {}).get("appeal", {}).get("accepted"))
+    notice = (
+        "Revisión aceptada: tu respuesta se consideró válida."
+        if accepted
+        else "La revisión mantuvo la corrección original."
+    )
+    return _detail(db, session, notice)
