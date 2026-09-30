@@ -22,6 +22,7 @@ import { AuthService } from '../../core/auth.service';
 import { ClassDetail, Exercise, Lesson } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { AudioPlayerComponent } from '../../shared/audio-player.component';
+import { AudioRecorderComponent, RecordedAudio } from '../../shared/audio-recorder.component';
 import { LessonPanelComponent } from '../../shared/lesson-panel.component';
 import { STATUS_LABELS, scoreChip, statusChip } from '../../shared/status';
 
@@ -46,7 +47,15 @@ const RESULT_LABELS: Record<string, string> = {
 
 @Component({
   selector: 'app-class',
-  imports: [FormsModule, RouterLink, DatePipe, NgTemplateOutlet, LessonPanelComponent, AudioPlayerComponent],
+  imports: [
+    FormsModule,
+    RouterLink,
+    DatePipe,
+    NgTemplateOutlet,
+    LessonPanelComponent,
+    AudioPlayerComponent,
+    AudioRecorderComponent
+  ],
   template: `
     <main class="page stack">
       @if (loading()) {
@@ -159,14 +168,14 @@ const RESULT_LABELS: Record<string, string> = {
 
           @if (editable()) {
             <p class="muted small">
-              Tus respuestas se guardan solas mientras escribís. {{ answeredCount() }}/{{ c.exercises.length }} respondidas.
+              Tus respuestas se guardan automáticamente. {{ answeredCount() }}/{{ c.exercises.length }} respondidas.
             </p>
           }
 
           @for (exercise of c.exercises; track exercise.id; let i = $index) {
             <article class="card exercise" [class]="resultClass(exercise)">
               <header class="exercise-head">
-                <span class="muted small">{{ i + 1 }}. {{ typeLabels[exercise.type] }}@if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> } · {{ exercise.skillName }}</span>
+                <span class="muted small">{{ i + 1 }}. {{ typeLabels[exercise.type] }}@if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }@if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> } · {{ exercise.skillName }}</span>
                 @if (editable() && saveState()[exercise.id]; as state) {
                   <span class="small muted">
                     @switch (state) {
@@ -228,6 +237,18 @@ const RESULT_LABELS: Record<string, string> = {
               }
 
               @if (editable()) {
+                @if (exercise.response === 'SPEAK') {
+                  <app-audio-recorder
+                    [busy]="transcribingId() === exercise.id"
+                    (accepted)="transcribe(exercise, $event)"
+                  />
+                  @if (answers()[exercise.id]) {
+                    <p class="your-answer transcript-answer">
+                      <span class="muted small">Transcripción:</span>
+                      <strong>{{ answers()[exercise.id] }}</strong>
+                    </p>
+                  }
+                } @else {
                 @switch (exercise.type) {
                   @case ('multiple_choice') {
                     <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
@@ -257,6 +278,7 @@ const RESULT_LABELS: Record<string, string> = {
                       [placeholder]="exercise.type === 'rewrite' ? 'Escribí la oración completa' : 'Palabra(s) que completan el espacio'"
                     />
                   }
+                }
                 }
               } @else {
                 <p class="your-answer">
@@ -348,6 +370,7 @@ const RESULT_LABELS: Record<string, string> = {
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
     .transcript em { font-style: normal; }
+    .transcript-answer { padding: 0.55rem 0.7rem; background: var(--bg); border-radius: 0.5rem; }
     .lesson-btn {
       align-self: flex-start;
       display: inline-flex; align-items: center; gap: 0.4rem;
@@ -418,6 +441,7 @@ export class ClassComponent implements OnDestroy {
   readonly lessons = signal<Record<string, Lesson>>({});
   readonly openLesson = signal<number | null>(null);
   readonly lessonLoading = signal<number | null>(null);
+  readonly transcribingId = signal<number | null>(null);
 
   readonly editable = computed(() => {
     const status = this.klass()?.status;
@@ -507,7 +531,31 @@ export class ClassComponent implements OnDestroy {
     this.edits.next({ exerciseId, answer, immediate });
   }
 
-  /** Áreas + modalidades transversales (Escucha) en las barras del resultado del examen. */
+  async transcribe(exercise: Exercise, recording: RecordedAudio): Promise<void> {
+    const c = this.klass();
+    if (!c || exercise.response !== 'SPEAK') {
+      return;
+    }
+    this.transcribingId.set(exercise.id);
+    this.markSave(exercise.id, 'saving');
+    try {
+      const result = await firstValueFrom(
+        this.api.transcribeAnswer(c.id, exercise.id, recording.blob, recording.durationMs)
+      );
+      this.answers.update((current) => ({ ...current, [exercise.id]: result.transcript }));
+      this.markSave(exercise.id, 'saved');
+      if (result.switched) {
+        this.toast.show('Se cambió automáticamente el proveedor para transcribir el audio.');
+      }
+    } catch (err) {
+      this.markSave(exercise.id, 'error');
+      this.toast.error(errorMessage(err, 'No se pudo transcribir la grabación.'));
+    } finally {
+      this.transcribingId.set(null);
+    }
+  }
+
+  /** Áreas + modalidades transversales (Escucha/Habla) en las barras del resultado del examen. */
   examRows(result: NonNullable<ClassDetail['examResult']>) {
     return [
       ...result.areas,

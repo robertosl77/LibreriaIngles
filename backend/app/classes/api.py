@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from app.ai.models import AIConnection
+from app.ai.service import NoAIAvailable, transcribe_audio
 from app.classes import generation, service
 from app.core.deps import CurrentStudy, DbSession
 from app.curriculum.lessons import get_lesson
@@ -19,6 +20,8 @@ from app.progress.service import skill_name
 router = APIRouter(prefix="/classes", tags=["classes"])
 
 SWITCH_NOTICE = "Se cambió automáticamente el proveedor de IA."
+MAX_AUDIO_BYTES = 6 * 1024 * 1024
+MAX_AUDIO_DURATION_MS = 65_000
 
 
 class AnswerRequest(BaseModel):
@@ -110,6 +113,11 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 "stimulus": _stimulus(exercise),
                 "options": (exercise.content or {}).get("options"),
                 "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else ""),
+                "audioDurationMs": (
+                    attempt.audio_duration_ms
+                    if attempt
+                    else (draft.audio_duration_ms if draft else None)
+                ),
                 "assistance": (
                     attempt.assistance.value
                     if attempt
@@ -244,6 +252,75 @@ def save_answer(
     except service.ClassStateError as exc:
         raise _conflict(exc)
     return {"exerciseId": exercise_id, "savedAt": draft.updated_at, "status": session.status.value}
+
+
+@router.post("/{class_id}/answers/{exercise_id}/transcribe")
+async def transcribe_answer_audio(
+    class_id: int,
+    exercise_id: int,
+    request: Request,
+    study: CurrentStudy,
+    db: DbSession,
+) -> dict:
+    """SPEAK: audio temporal -> transcripción literal -> borrador textual."""
+    session = _get_class(db, study, class_id)
+    if session.status not in (ClassSessionStatus.READY, ClassSessionStatus.IN_PROGRESS):
+        raise HTTPException(status.HTTP_409_CONFLICT, "La clase ya fue enviada.")
+
+    exercise = db.get(Exercise, exercise_id)
+    if exercise is None or exercise.class_session_id != session.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ejercicio inexistente.")
+    if exercise.response_mode.value != "SPEAK":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Este ejercicio no se responde hablando.")
+
+    audio = await request.body()
+    if not audio:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "La grabación está vacía.")
+    if len(audio) > MAX_AUDIO_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "La grabación supera 6 MB.")
+
+    mime_type = (request.headers.get("content-type") or "audio/webm").split(";", 1)[0].strip()
+    if not mime_type.startswith("audio/"):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Formato de audio no soportado.")
+
+    duration_header = request.headers.get("x-audio-duration-ms")
+    try:
+        duration_ms = int(duration_header) if duration_header else None
+    except ValueError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Duración de audio inválida.")
+    if duration_ms is not None and not (1 <= duration_ms <= MAX_AUDIO_DURATION_MS):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "La grabación supera 60 segundos.")
+
+    try:
+        result = transcribe_audio(
+            db, study.account, audio=audio, mime_type=mime_type
+        )
+    except NoAIAvailable as exc:
+        detail = "No hay una conexión disponible que pueda transcribir audio."
+        if exc.errors:
+            detail += " " + "; ".join(exc.errors)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
+
+    try:
+        draft = service.save_draft(
+            db,
+            study,
+            session,
+            exercise_id,
+            result.text,
+            audio_duration_ms=duration_ms,
+        )
+    except service.ClassStateError as exc:
+        raise _conflict(exc)
+
+    return {
+        "exerciseId": exercise_id,
+        "transcript": result.text,
+        "durationMs": duration_ms,
+        "savedAt": draft.updated_at,
+        "provider": result.connection.name,
+        "switched": result.switched,
+    }
 
 
 @router.post("/{class_id}/submit")

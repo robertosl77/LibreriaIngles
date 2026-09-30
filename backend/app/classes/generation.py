@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from app.ai.models import utcnow
-from app.ai.service import AIResult, NoAIAvailable, run_json_task
+from app.ai.service import AIResult, NoAIAvailable, has_audio_connection, run_json_task
 from app.classes.normalize import BLANK, normalize_answer, normalize_blank
 from app.classes.prompts import GENERATION_SYSTEM, generation_user_prompt
 from app.core.deps import StudyContext
@@ -22,6 +22,7 @@ from app.learning.models import (
     EvaluationMode,
     Exercise,
     PresentationMode,
+    ResponseMode,
     SessionKind,
     default_response_mode,
 )
@@ -42,6 +43,9 @@ AUDIO_RATE_BY_LEVEL = {"A1": 0.85, "A2": 0.9, "B1": 0.95}
 STIMULUS_MAX = 600
 # Porción de ejercicios que se presentan escuchando (si la skill lo admite).
 LISTEN_SHARE = 0.3
+# Respuestas habladas: solo sobre tipos que normalmente se escriben.
+SPEAK_SHARE = 0.3
+SPEAK_TYPES = {"fill_blank", "rewrite", "short_writing"}
 
 
 class GenerationFailed(Exception):
@@ -65,7 +69,12 @@ def _weight(skill: Skill, progress) -> float:
 
 
 def select_slots(
-    skills: list[Skill], progress: dict, count: int = EXERCISES_PER_CLASS, rng=None
+    skills: list[Skill],
+    progress: dict,
+    count: int = EXERCISES_PER_CLASS,
+    rng=None,
+    *,
+    allow_speaking: bool = False,
 ) -> list[dict]:
     rng = rng or random.Random()
     pool = list(skills)
@@ -89,8 +98,10 @@ def select_slots(
     area_order = {"grammar": 0, "vocabulary": 1, "listening": 2, "reading": 3, "writing": 4}
     chosen.sort(key=lambda s: area_order.get(s.area_key, 9))
 
-    slots = [slot_for(skill, rng) for skill in chosen]
+    slots = [slot_for(skill, rng, allow_speaking=allow_speaking) for skill in chosen]
     ensure_listening(slots, skills, 1, rng)
+    if allow_speaking:
+        ensure_speaking(slots, 1, rng)
     return slots
 
 
@@ -115,7 +126,20 @@ def ensure_listening(slots: list[dict], skills: list[Skill], minimum: int, rng) 
         slot["presentation"] = "LISTEN"
 
 
-def slot_for(skill: Skill, rng) -> dict:
+def ensure_speaking(slots: list[dict], minimum: int, rng) -> None:
+    """Garantiza habla si entre los slots elegidos hay un tipo compatible."""
+    missing = minimum - sum(1 for slot in slots if slot["response"] == "SPEAK")
+    candidates = [
+        slot
+        for slot in slots
+        if slot["response"] == "WRITE" and slot["allowedTypes"][0] in SPEAK_TYPES
+    ]
+    rng.shuffle(candidates)
+    for slot in candidates[: max(0, missing)]:
+        slot["response"] = "SPEAK"
+
+
+def slot_for(skill: Skill, rng, *, allow_speaking: bool = False) -> dict:
     """Pedido de un ejercicio para una skill (lo que la IA debe generar)."""
     # Preferir tipos con ejemplo semilla: sirve de guía a la IA (y al simulado).
     seeded = [t for t in skill.exercise_types if any(e.get("type") == t for e in skill.examples)]
@@ -124,6 +148,9 @@ def slot_for(skill: Skill, rng) -> dict:
         (e for e in skill.examples if e.get("type") == exercise_type),
         skill.examples[0] if skill.examples else None,
     )
+    response = default_response_mode(exercise_type).value
+    if allow_speaking and exercise_type in SPEAK_TYPES and rng.random() < SPEAK_SHARE:
+        response = ResponseMode.SPEAK.value
     return {
         "skillKey": skill.key,
         "area": skill.area_name,
@@ -133,7 +160,7 @@ def slot_for(skill: Skill, rng) -> dict:
         "allowedTypes": [exercise_type],
         # Modalidades (T-025): el tipo no cambia; cambia cómo se presenta y se responde.
         "presentation": _presentation_for(skill, rng),
-        "response": default_response_mode(exercise_type).value,
+        "response": response,
         "example": example,
         # Solo para el proveedor simulado.
         "examples": [e for e in skill.examples if e.get("type") == exercise_type]
@@ -266,7 +293,11 @@ def create_class(
     if curriculum is None:
         raise GenerationFailed("Elegí un nivel disponible antes de pedir una clase.")
 
-    slots = select_slots(list(curriculum.skills), progress_by_skill(db, study.profile.id))
+    slots = select_slots(
+        list(curriculum.skills),
+        progress_by_skill(db, study.profile.id),
+        allow_speaking=has_audio_connection(db, study.account),
+    )
     session = ClassSession(
         study_profile_id=study.profile.id,
         account_id=study.account.id,
@@ -333,7 +364,9 @@ def generate_content(
                 prompt=item.question,
                 content=_content(item, request.get("level")),
                 presentation_mode=PresentationMode(slot.get("presentation", "READ")),
-                response_mode=default_response_mode(item.type),
+                response_mode=ResponseMode(
+                    slot.get("response", default_response_mode(item.type).value)
+                ),
                 expected_concepts=item.expectedConcepts,
                 answer_key={
                     "acceptedAnswers": item.acceptedAnswers,

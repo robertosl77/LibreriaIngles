@@ -218,6 +218,8 @@ class DraftAnswer(Base):
         ForeignKey("accounts.id"), nullable=True
     )
     answer_text: Mapped[str] = mapped_column(Text, default="")
+    # Solo SPEAK: duración del audio original. El archivo nunca se persiste.
+    audio_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     assistance: Mapped[Assistance] = mapped_column(
         SqlEnum(Assistance, native_enum=False, length=20),
         default=Assistance.NONE,
@@ -260,6 +262,8 @@ class Attempt(Base):
         default=ResponseMode.WRITE,
         server_default=ResponseMode.WRITE.value,
     )
+    # SPEAK: metadato de la grabación; el audio ya fue descartado.
+    audio_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Si respondió después de consultar la lección (o una pista): no vale igual como evidencia.
     assistance: Mapped[Assistance] = mapped_column(
         SqlEnum(Assistance, native_enum=False, length=20),

@@ -35,6 +35,7 @@ export interface ProviderInfo {
   label: string;
   defaultModel: string;
   requiresKey: boolean;
+  supportsAudioInput: boolean;
 }
 
 export type ConnectionScope = 'account' | 'platform';
@@ -57,6 +58,7 @@ export interface AiConnection {
   dailyRequestLimit: number | null;
   perAccountDailyLimit: number | null;
   usage24h: number | null;
+  supportsAudioInput: boolean;
   test?: { ok: boolean; error: string | null };
 }
 
@@ -118,6 +120,7 @@ export interface Exercise {
   stimulus: { mode: 'READ' | 'LISTEN'; text: string; lang: string; rate: number } | null;
   options: string[] | null;
   answer: string;
+  audioDurationMs: number | null;
   assistance: Assistance;
   hasLesson: boolean;
   result: ExerciseResult | null;

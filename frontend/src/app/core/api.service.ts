@@ -127,6 +127,34 @@ export class ApiService {
     );
   }
 
+  transcribeAnswer(
+    classId: number,
+    exerciseId: number,
+    audio: Blob,
+    durationMs: number
+  ): Observable<{
+    exerciseId: number;
+    transcript: string;
+    durationMs: number | null;
+    savedAt: string;
+    provider: string;
+    switched: boolean;
+  }> {
+    return this.http.post<{
+      exerciseId: number;
+      transcript: string;
+      durationMs: number | null;
+      savedAt: string;
+      provider: string;
+      switched: boolean;
+    }>(`${this.base}/classes/${classId}/answers/${exerciseId}/transcribe`, audio, {
+      headers: {
+        'Content-Type': audio.type || 'audio/webm',
+        'X-Audio-Duration-Ms': String(durationMs)
+      }
+    });
+  }
+
   submitClass(classId: number, answers: Record<number, string>): Observable<ClassDetail> {
     return this.http.post<ClassDetail>(`${this.base}/classes/${classId}/submit`, { answers });
   }

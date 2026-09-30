@@ -105,6 +105,7 @@ def _serialize(connection: AIConnection, db=None) -> dict:
         "dailyRequestLimit": connection.daily_request_limit,
         "perAccountDailyLimit": connection.per_account_daily_limit,
         "usage24h": usage,
+        "supportsAudioInput": PROVIDERS[connection.provider].supports_audio_input,
     }
 
 
@@ -131,6 +132,7 @@ def providers() -> list[dict]:
             "label": info.label,
             "defaultModel": info.default_model,
             "requiresKey": info.requires_key,
+            "supportsAudioInput": info.supports_audio_input,
         }
         for info in PROVIDERS.values()
         if info.key != "MOCK" or settings.mock_ai_allowed

@@ -23,7 +23,7 @@ from app.ai.models import (
     AIUsageEvent,
     utcnow,
 )
-from app.ai.providers import ProviderError, build_provider
+from app.ai.providers import PROVIDERS, ProviderError, build_provider
 from app.core.security import decrypt_secret
 
 LIMIT_WINDOW = timedelta(hours=24)
@@ -55,6 +55,17 @@ class AIResult:
         return bool(self.failed_connections)
 
 
+@dataclass
+class AudioTranscriptionResult:
+    text: str
+    connection: AIConnection
+    failed_connections: list[str] = field(default_factory=list)
+
+    @property
+    def switched(self) -> bool:
+        return bool(self.failed_connections)
+
+
 def candidate_connections(
     db: Session, account: Account, *, include_backoff: bool = False
 ) -> list[AIConnection]:
@@ -76,6 +87,26 @@ def candidate_connections(
     if include_backoff:
         return list(rows)
     return [c for c in rows if c.is_usable]
+
+
+def connection_supports_audio(connection: AIConnection) -> bool:
+    info = PROVIDERS.get(connection.provider.upper())
+    return bool(info and info.supports_audio_input)
+
+
+def audio_connections(
+    db: Session, account: Account, *, include_backoff: bool = False
+) -> list[AIConnection]:
+    """Conexiones utilizables por prioridad que pueden recibir audio."""
+    return [
+        connection
+        for connection in candidate_connections(db, account, include_backoff=include_backoff)
+        if connection_supports_audio(connection)
+    ]
+
+
+def has_audio_connection(db: Session, account: Account) -> bool:
+    return bool(audio_connections(db, account))
 
 
 def provider_for(connection: AIConnection):
@@ -194,6 +225,45 @@ def run_json_task(
         record_usage(db, connection, account=account, operation=operation)
         db.commit()
         return AIResult(data=data, connection=connection, failed_connections=failed)
+    raise NoAIAvailable(errors)
+
+
+def transcribe_audio(
+    db: Session,
+    account: Account,
+    *,
+    audio: bytes,
+    mime_type: str,
+) -> AudioTranscriptionResult:
+    """Transcribe sin persistir el audio y con el mismo failover/límites del router de IA."""
+    errors: list[str] = []
+    failed: list[str] = []
+    for connection in audio_connections(db, account):
+        reason = limit_reason(db, connection, account)
+        if reason:
+            errors.append(f"{connection.name}: {reason}")
+            continue
+        try:
+            text = provider_for(connection).transcribe_audio(audio, mime_type).strip()
+            if not text:
+                raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "No se detectó voz.")
+        except ProviderError as exc:
+            _mark_failure(connection, exc)
+            record_usage(
+                db, connection, account=account, operation="transcribe_audio", error=exc
+            )
+            failed.append(connection.name)
+            errors.append(f"{connection.name}: {exc.message}")
+            db.commit()
+            continue
+        _mark_success(connection)
+        record_usage(db, connection, account=account, operation="transcribe_audio")
+        db.commit()
+        return AudioTranscriptionResult(
+            text=text, connection=connection, failed_connections=failed
+        )
+    if not errors:
+        errors.append("No hay conexiones activas compatibles con audio.")
     raise NoAIAvailable(errors)
 
 

@@ -5,6 +5,7 @@ Los errores se traducen a `ProviderError` con un estado de `AIConnectionStatus`,
 que el router usa para decidir el failover.
 """
 
+import base64
 import json
 import re
 from dataclasses import dataclass
@@ -29,13 +30,16 @@ class ProviderInfo:
     label: str
     default_model: str
     requires_key: bool = True
+    supports_audio_input: bool = False
 
 
 PROVIDERS: dict[str, ProviderInfo] = {
-    "OPENAI": ProviderInfo("OPENAI", "OpenAI", "gpt-4o-mini"),
-    "GEMINI": ProviderInfo("GEMINI", "Google Gemini", "gemini-2.5-flash"),
+    "OPENAI": ProviderInfo("OPENAI", "OpenAI", "gpt-4o-mini", supports_audio_input=True),
+    "GEMINI": ProviderInfo("GEMINI", "Google Gemini", "gemini-2.5-flash", supports_audio_input=True),
     "ANTHROPIC": ProviderInfo("ANTHROPIC", "Anthropic Claude", "claude-sonnet-4-5"),
-    "MOCK": ProviderInfo("MOCK", "Simulado (solo desarrollo)", "mock", requires_key=False),
+    "MOCK": ProviderInfo(
+        "MOCK", "Simulado (solo desarrollo)", "mock", requires_key=False, supports_audio_input=True
+    ),
 }
 
 
@@ -47,6 +51,8 @@ class ModelInfo:
 
 class AIProvider(Protocol):
     def complete_json(self, system: str, user: str, task: dict) -> dict: ...
+
+    def transcribe_audio(self, audio: bytes, mime_type: str) -> str: ...
 
     def health_check(self) -> None: ...
 
@@ -162,6 +168,32 @@ class OpenAIProvider(_HttpProvider):
         chat.sort(key=lambda row: row.get("created", 0), reverse=True)
         return [ModelInfo(row["id"], row["id"]) for row in chat]
 
+    def transcribe_audio(self, audio: bytes, mime_type: str) -> str:
+        """Speech-to-text literal. El audio vive solo durante este request."""
+        response = self._request(
+            "POST",
+            f"{self.base_url}/audio/transcriptions",
+            headers=self._headers(),
+            data={
+                "model": "gpt-4o-mini-transcribe",
+                "language": "en",
+                "prompt": (
+                    "Transcribe exactly what the learner says in English. "
+                    "Do not fix grammar, word choice, verb forms, or pronunciation mistakes."
+                ),
+            },
+            files={"file": ("answer.webm", audio, mime_type or "audio/webm")},
+        )
+        try:
+            text = str(response.json()["text"]).strip()
+        except (KeyError, ValueError) as exc:
+            raise ProviderError(
+                AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de OpenAI al transcribir."
+            ) from exc
+        if not text:
+            raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "OpenAI no detectó voz.")
+        return text
+
 
 class GeminiProvider(_HttpProvider):
     base_url = "https://generativelanguage.googleapis.com/v1beta"
@@ -216,6 +248,44 @@ class GeminiProvider(_HttpProvider):
             if not page_token:
                 break
         return models
+
+    def transcribe_audio(self, audio: bytes, mime_type: str) -> str:
+        """Transcripción literal usando audio inline; suficiente para respuestas cortas."""
+        encoded = base64.b64encode(audio).decode("ascii")
+        mime = (mime_type or "audio/webm").split(";", 1)[0].strip()
+        response = self._request(
+            "POST",
+            f"{self.base_url}/models/{self.model}:generateContent",
+            headers=self._headers(),
+            json={
+                "systemInstruction": {
+                    "parts": [{
+                        "text": (
+                            "You are a literal speech-to-text engine for an English learner. "
+                            "Never correct grammar, vocabulary, verb forms or wording."
+                        )
+                    }]
+                },
+                "contents": [{
+                    "role": "user",
+                    "parts": [
+                        {"text": "Transcribe exactly what is spoken. Return only the transcript."},
+                        {"inlineData": {"mimeType": mime, "data": encoded}},
+                    ],
+                }],
+                "generationConfig": {"temperature": 0},
+            },
+        )
+        try:
+            parts = response.json()["candidates"][0]["content"]["parts"]
+            text = "".join(part.get("text", "") for part in parts).strip()
+        except (KeyError, IndexError, ValueError) as exc:
+            raise ProviderError(
+                AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de Gemini al transcribir."
+            ) from exc
+        if not text:
+            raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Gemini no detectó voz.")
+        return text
 
 
 class AnthropicProvider(_HttpProvider):

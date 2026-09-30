@@ -61,7 +61,13 @@ def attempts_of(db: Session, session: ClassSession) -> list[Attempt]:
 
 
 def save_draft(
-    db: Session, study: StudyContext, session: ClassSession, exercise_id: int, answer: str
+    db: Session,
+    study: StudyContext,
+    session: ClassSession,
+    exercise_id: int,
+    answer: str,
+    *,
+    audio_duration_ms: int | None = None,
 ) -> DraftAnswer:
     if session.status not in (ClassSessionStatus.READY, ClassSessionStatus.IN_PROGRESS):
         raise ClassStateError("La clase ya fue enviada.")
@@ -74,6 +80,7 @@ def save_draft(
         draft = DraftAnswer(class_session_id=session.id, exercise_id=exercise_id)
         db.add(draft)
     draft.answer_text = answer
+    draft.audio_duration_ms = audio_duration_ms
     draft.account_id = study.account.id
     draft.updated_at = utcnow()
     session.status = ClassSessionStatus.IN_PROGRESS
@@ -143,6 +150,9 @@ def submit(
                 raw_answer=text,
                 normalized_answer=normalize_answer(text),
                 response_mode=exercise.response_mode,
+                audio_duration_ms=(
+                    drafts[exercise.id].audio_duration_ms if exercise.id in drafts else None
+                ),
                 assistance=(
                     drafts[exercise.id].assistance if exercise.id in drafts else Assistance.NONE
                 ),
