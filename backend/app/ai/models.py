@@ -125,6 +125,8 @@ class AIUsageEvent(Base):
         SqlEnum(AIConnectionOwnerType, native_enum=False)
     )
     provider: Mapped[str] = mapped_column(String(80))
+    # Modelo usado en esa llamada: una conexión puede cambiar de modelo con el tiempo.
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
     account_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts.id", name="fk_ai_usage_events_account_id"), nullable=True
     )

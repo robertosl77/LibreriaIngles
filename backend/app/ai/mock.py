@@ -9,7 +9,7 @@
 import random
 
 from app.ai.models import AIConnectionStatus
-from app.ai.providers import ProviderError
+from app.ai.providers import ModelInfo, ProviderError
 
 _FAILURES = {
     "mock-fail-quota": (AIConnectionStatus.QUOTA_EXCEEDED, "Cuota agotada (simulado)."),
@@ -29,6 +29,13 @@ class MockProvider:
 
     def health_check(self) -> None:
         self._maybe_fail()
+
+    def list_models(self) -> list[ModelInfo]:
+        self._maybe_fail()
+        return [ModelInfo("mock", "Simulado")] + [
+            ModelInfo(name, f"Simulado · {message.split(' (')[0].lower()}")
+            for name, (_, message) in _FAILURES.items()
+        ]
 
     def complete_json(self, system: str, user: str, task: dict) -> dict:
         self._maybe_fail()

@@ -12,6 +12,7 @@ import {
   ConnectionScope,
   Dashboard,
   Me,
+  ModelOption,
   PlatformOverview,
   ProviderInfo,
   TokenResponse
@@ -85,6 +86,14 @@ export class ApiService {
     }>
   ): Observable<AiConnection> {
     return this.http.patch<AiConnection>(`${this.base}/ai/connections/${id}`, body);
+  }
+
+  listModels(provider: string, apiKey: string | null): Observable<ModelOption[]> {
+    return this.http.post<ModelOption[]>(`${this.base}/ai/models`, { provider, apiKey });
+  }
+
+  connectionModels(id: number): Observable<ModelOption[]> {
+    return this.http.get<ModelOption[]>(`${this.base}/ai/connections/${id}/models`);
   }
 
   deleteConnection(id: number): Observable<void> {

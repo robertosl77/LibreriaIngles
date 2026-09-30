@@ -131,10 +131,20 @@ Menú **Plataforma** → `/app/plataforma`.
   cuenta, operación, éxito/error). Nunca se guardan prompts ni respuestas.
 - Los límites solo se aceptan en conexiones de plataforma; en conexiones propias la API
   responde 422.
+- **Editar conexión** (propias y de plataforma): nombre, modelo y API key. El proveedor no se
+  cambia (para otro proveedor se crea otra conexión). Cambiar modelo o key vuelve a probarla.
+  Así no se pierde el historial de consumo, la prioridad ni los límites.
+- **Lista de modelos del proveedor**: al alta (con la API key recién pegada, que no se guarda)
+  y al editar (con la key guardada o una nueva), la app consulta los modelos disponibles en
+  la cuenta: OpenAI `GET /v1/models` (solo modelos de chat), Gemini `GET /v1beta/models`
+  (solo los que soportan `generateContent`) y Anthropic `GET /v1/models`. Si la consulta falla,
+  se puede escribir el modelo a mano. Si el modelo actual ya no figura en la lista, se avisa
+  (probablemente discontinuado).
+- Cada registro de consumo guarda el modelo usado (migración `0004_usage_model`).
 - Qué conexiones usa cada usuario (propias, de plataforma o ambas según el plan) queda para
   T-003/T-004.
 
-Migración: `0003_platform_ai_usage`.
+Migraciones: `0003_platform_ai_usage` y `0004_usage_model`.
 
 # 7. Flujo técnico
 
@@ -174,6 +184,8 @@ GET  /api/v1/me
 PUT  /api/v1/me/level
 
 GET    /api/v1/ai/providers
+POST   /api/v1/ai/models                         (modelos para una key nueva, no se guarda)
+GET    /api/v1/ai/connections/{id}/models        (modelos con la key guardada)
 GET    /api/v1/ai/connections?scope=account|platform
 POST   /api/v1/ai/connections
 PATCH  /api/v1/ai/connections/{id}

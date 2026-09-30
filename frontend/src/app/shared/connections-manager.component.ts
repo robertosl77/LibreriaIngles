@@ -5,8 +5,9 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
-import { AiConnection, ConnectionScope, ProviderInfo } from '../core/models';
+import { AiConnection, ConnectionScope, ModelOption, ProviderInfo } from '../core/models';
 import { ToastService } from '../core/toast.service';
+import { ModelPickerComponent } from './model-picker.component';
 
 const STATUS_TEXT: Record<string, string> = {
   AVAILABLE: 'Disponible',
@@ -34,7 +35,7 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
 /** Lista + alta de conexiones de IA. scope=account (BYOK) o scope=platform (PLATFORM_OWNER). */
 @Component({
   selector: 'app-connections-manager',
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, ModelPickerComponent],
   template: `
     <section class="card">
       <h2>{{ title() }}</h2>
@@ -94,9 +95,44 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
                 <button class="btn btn-sm" type="button" (click)="test(c)" [disabled]="busyId() === c.id">
                   @if (busyId() === c.id) { <span class="spinner"></span> } Probar
                 </button>
+                <button class="btn btn-sm" type="button" (click)="startEdit(c)" [disabled]="editingId() === c.id">Editar</button>
                 <button class="btn btn-sm" type="button" (click)="toggle(c)">{{ c.active ? 'Pausar' : 'Activar' }}</button>
                 <button class="btn btn-sm btn-danger" type="button" (click)="remove(c)">Eliminar</button>
               </div>
+              @if (editingId() === c.id) {
+                <form class="edit stack" (ngSubmit)="saveEdit(c)">
+                  <div class="grid">
+                    <label class="field">
+                      Nombre
+                      <input class="input" name="editName" [(ngModel)]="edit.name" required />
+                    </label>
+                    <div class="field">
+                      Proveedor
+                      <span class="input readonly">{{ providerLabel(c.provider) }}</span>
+                      <span class="small muted">No se puede cambiar: para otro proveedor, creá otra conexión.</span>
+                    </div>
+                  </div>
+                  <div class="field">
+                    Modelo
+                    <app-model-picker name="editModel" [(value)]="edit.model" [options]="editModels()"
+                      [loading]="editModelsLoading()" [error]="editModelsError()" (refresh)="loadEditModels(c)" />
+                  </div>
+                  @if (requiresKey(c.provider)) {
+                    <label class="field">
+                      Nueva API key
+                      <input class="input" type="password" name="editKey" [(ngModel)]="edit.apiKey" autocomplete="off"
+                        placeholder="Dejar vacío para mantener la actual ({{ c.credentialHint }})"
+                        (change)="edit.apiKey && loadEditModels(c)" />
+                    </label>
+                  }
+                  <div class="row">
+                    <button class="btn btn-primary btn-sm" type="submit" [disabled]="saving() || !edit.name.trim() || !edit.model.trim()">
+                      @if (saving()) { <span class="spinner"></span> Guardando… } @else { Guardar y probar }
+                    </button>
+                    <button class="btn btn-sm" type="button" (click)="cancelEdit()">Cancelar</button>
+                  </div>
+                </form>
+              }
             </li>
           }
         </ul>
@@ -120,10 +156,6 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
             <input class="input" name="name" [(ngModel)]="form.name" placeholder="Ej: OpenAI principal" required />
           </label>
           <label class="field">
-            Modelo
-            <input class="input" name="model" [(ngModel)]="form.model" [placeholder]="selectedProvider()?.defaultModel || ''" />
-          </label>
-          <label class="field">
             Prioridad
             <input class="input" type="number" min="1" name="priority" [(ngModel)]="form.priority" />
           </label>
@@ -141,9 +173,19 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
         @if (selectedProvider()?.requiresKey !== false) {
           <label class="field">
             API key
-            <input class="input" type="password" name="apiKey" [(ngModel)]="form.apiKey" autocomplete="off" required />
+            <input class="input" type="password" name="apiKey" [(ngModel)]="form.apiKey" autocomplete="off" required
+              (change)="loadNewModels()" />
           </label>
         }
+        <div class="field">
+          Modelo
+          <app-model-picker name="model" [(value)]="form.model" [options]="newModels()"
+            [loading]="newModelsLoading()" [error]="newModelsError()"
+            [placeholder]="selectedProvider()?.defaultModel || ''"
+            [canRefresh]="selectedProvider()?.requiresKey === false || !!form.apiKey"
+            hint="Pegá la API key y se cargan los modelos disponibles en tu cuenta."
+            (refresh)="loadNewModels()" />
+        </div>
         <div class="row">
           <button class="btn btn-primary" type="submit"
             [disabled]="creating() || !form.name || (selectedProvider()?.requiresKey !== false && !form.apiKey)">
@@ -164,6 +206,8 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
     .usage-bar { width: 120px; }
     .limit-field { display: flex; align-items: center; gap: 0.4rem; }
     .limit-field .input { width: 6.5rem; padding: 0.35rem 0.5rem; }
+    .edit { flex-basis: 100%; border-top: 1px dashed var(--border); padding-top: 0.9rem; margin-top: 0.3rem; }
+    .readonly { background: var(--bg); color: var(--muted); }
   `
 })
 export class ConnectionsManagerComponent implements OnInit {
@@ -186,6 +230,17 @@ export class ConnectionsManagerComponent implements OnInit {
     this.providers().find((p) => p.key === this.selectedProviderKey())
   );
   readonly isPlatform = computed(() => this.scope() === 'platform');
+
+  // Modelos disponibles (consultados al proveedor)
+  readonly newModels = signal<ModelOption[] | null>(null);
+  readonly newModelsLoading = signal(false);
+  readonly newModelsError = signal<string | null>(null);
+  readonly editingId = signal<number | null>(null);
+  readonly editModels = signal<ModelOption[] | null>(null);
+  readonly editModelsLoading = signal(false);
+  readonly editModelsError = signal<string | null>(null);
+  readonly saving = signal(false);
+  edit = { name: '', model: '', apiKey: '' };
 
   form: NewConnection = {
     provider: '',
@@ -235,9 +290,108 @@ export class ConnectionsManagerComponent implements OnInit {
     return Math.min(100, Math.round(((c.usage24h ?? 0) / c.dailyRequestLimit) * 100));
   }
 
+  requiresKey(provider: string): boolean {
+    return this.providers().find((p) => p.key === provider)?.requiresKey !== false;
+  }
+
+  /** Alta: consulta los modelos con la key recién pegada (no se guarda). */
+  async loadNewModels(): Promise<void> {
+    const provider = this.form.provider;
+    const needsKey = this.requiresKey(provider);
+    if (!provider || (needsKey && !this.form.apiKey.trim())) {
+      return;
+    }
+    this.newModelsLoading.set(true);
+    this.newModelsError.set(null);
+    try {
+      const models = await firstValueFrom(
+        this.api.listModels(provider, needsKey ? this.form.apiKey.trim() : null)
+      );
+      if (provider !== this.form.provider) {
+        return; // cambió el proveedor mientras se consultaba
+      }
+      this.newModels.set(models);
+      if (!this.form.model || !models.some((m) => m.id === this.form.model)) {
+        const fallback = this.selectedProvider()?.defaultModel;
+        this.form.model = models.find((m) => m.id === fallback)?.id ?? models[0]?.id ?? '';
+      }
+    } catch (err) {
+      this.newModels.set(null);
+      this.newModelsError.set(errorMessage(err, 'No se pudo obtener la lista de modelos.'));
+    } finally {
+      this.newModelsLoading.set(false);
+    }
+  }
+
+  startEdit(c: AiConnection): void {
+    this.editingId.set(c.id);
+    this.edit = { name: c.name, model: c.model, apiKey: '' };
+    this.editModels.set(null);
+    void this.loadEditModels(c);
+  }
+
+  cancelEdit(): void {
+    this.editingId.set(null);
+  }
+
+  /** Edición: con la key nueva si se ingresó, o con la guardada. */
+  async loadEditModels(c: AiConnection): Promise<void> {
+    this.editModelsLoading.set(true);
+    this.editModelsError.set(null);
+    try {
+      const request = this.edit.apiKey.trim()
+        ? this.api.listModels(c.provider, this.edit.apiKey.trim())
+        : this.api.connectionModels(c.id);
+      this.editModels.set(await firstValueFrom(request));
+    } catch (err) {
+      this.editModels.set(null);
+      this.editModelsError.set(errorMessage(err, 'No se pudo obtener la lista de modelos.'));
+    } finally {
+      this.editModelsLoading.set(false);
+    }
+  }
+
+  async saveEdit(c: AiConnection): Promise<void> {
+    const body: { name?: string; model?: string; apiKey?: string } = {};
+    if (this.edit.name.trim() !== c.name) {
+      body.name = this.edit.name.trim();
+    }
+    if (this.edit.model.trim() !== c.model) {
+      body.model = this.edit.model.trim();
+    }
+    if (this.edit.apiKey.trim()) {
+      body.apiKey = this.edit.apiKey.trim();
+    }
+    if (!Object.keys(body).length) {
+      this.cancelEdit();
+      return;
+    }
+    this.saving.set(true);
+    try {
+      const updated = await firstValueFrom(this.api.updateConnection(c.id, body));
+      this.report(updated);
+      if (!updated.test) {
+        this.toast.success(`"${updated.name}" actualizada.`);
+      }
+      this.editingId.set(null);
+      await this.afterChange();
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
   onProvider(key: string): void {
     this.form.provider = key;
     this.selectedProviderKey.set(key);
+    this.form.model = '';
+    this.form.apiKey = ''; // cada API key vale para un solo proveedor
+    this.newModels.set(null);
+    this.newModelsError.set(null);
+    if (!this.requiresKey(key)) {
+      void this.loadNewModels();
+    }
     const info = this.providers().find((p) => p.key === key);
     if (info && (!this.form.name || this.providers().some((p) => p.label === this.form.name))) {
       this.form.name = info.label;
@@ -285,6 +439,10 @@ export class ConnectionsManagerComponent implements OnInit {
       this.report(created);
       this.form.apiKey = '';
       this.form.model = '';
+      this.newModels.set(null);
+      if (!this.requiresKey(this.form.provider)) {
+        void this.loadNewModels();
+      }
       this.form.dailyRequestLimit = null;
       this.form.perAccountDailyLimit = null;
       await this.afterChange();

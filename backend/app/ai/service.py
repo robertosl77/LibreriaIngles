@@ -122,6 +122,7 @@ def record_usage(
             connection_id=connection.id,
             owner_type=connection.owner_type,
             provider=connection.provider,
+            model=connection.model,
             account_id=account.id if account else None,
             operation=operation,
             success=error is None,
