@@ -11,6 +11,7 @@ import { STATUS_LABELS, scoreChip, statusChip } from '../../shared/status';
 @Component({
   selector: 'app-history',
   imports: [RouterLink, DatePipe],
+  styles: `.chip-exam { margin-left: 0.4rem; background: #fbf3dc; color: #8a6a1f; }`,
   template: `
     <main class="page stack">
       <div class="page-header">
@@ -31,6 +32,7 @@ import { STATUS_LABELS, scoreChip, statusChip } from '../../shared/status';
               <li class="list-item">
                 <div>
                   <a [routerLink]="['/app/clase', item.id]"><strong>{{ item.title || 'Clase ' + item.id }}</strong></a>
+                  @if (item.kind === 'EXAM') { <span class="chip chip-exam">Examen</span> }
                   <div class="muted small">
                     #{{ item.id }} · {{ item.targetLevel }} · {{ item.createdAt | date: 'dd/MM/yyyy HH:mm' }}
                     @if (item.currentAttempt > 1) { · intento {{ item.currentAttempt }} }

@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 import { authGuard, guestGuard, platformOwnerGuard } from './core/auth.guard';
 import { ShellComponent } from './layout/shell.component';
 import { AiSettingsComponent } from './pages/ai-settings/ai-settings.component';
+import { CertificateComponent } from './pages/certificate/certificate.component';
 import { ClassComponent } from './pages/class/class.component';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { HistoryComponent } from './pages/history/history.component';
@@ -14,6 +15,8 @@ import { PlatformComponent } from './pages/platform/platform.component';
 
 export const routes: Routes = [
   { path: '', component: LandingComponent, title: 'Librería Inglés' },
+  // Público: verificación del certificado de nivel (T-024).
+  { path: 'certificado/:code', component: CertificateComponent, title: 'Certificado · Librería Inglés' },
   { path: 'login', component: LoginComponent, canActivate: [guestGuard], title: 'Ingresar · Librería Inglés' },
   {
     path: 'app',

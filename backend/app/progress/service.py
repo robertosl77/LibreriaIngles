@@ -9,7 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.ai.models import utcnow
 from app.curriculum.service import find_skill, get_level
-from app.learning.models import Assistance, Attempt, Exercise, StudySkillProgress
+from app.learning.models import (
+    Assistance,
+    Attempt,
+    ClassSession,
+    Exercise,
+    SessionKind,
+    StudySkillProgress,
+)
 
 MASTERED_SCORE = 85
 MASTERED_MIN_ATTEMPTS = 5
@@ -61,10 +68,13 @@ def recompute_skill(
     query = (
         select(Attempt.score, Attempt.evaluated_at, Attempt.membership_id, Attempt.assistance)
         .join(Exercise, Exercise.id == Attempt.exercise_id)
+        .join(ClassSession, ClassSession.id == Exercise.class_session_id)
         .where(
             Attempt.study_profile_id == study_profile_id,
             Exercise.skill_key == skill_key,
             Attempt.score.is_not(None),
+            # El examen de nivel es independiente del progreso de las clases (T-024).
+            ClassSession.kind == SessionKind.CLASS,
         )
         .order_by(Attempt.evaluated_at, Attempt.id)
     )

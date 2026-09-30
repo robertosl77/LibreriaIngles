@@ -166,6 +166,30 @@ de la clase y después responde ese mismo ejercicio.
 
 Migración: `0005_assistance`.
 
+## 6.2 Examen de aprobación de nivel y certificado (T-024)
+
+- **Cuándo se habilita** (tarjeta "Examen de nivel" en Inicio): haber practicado al menos el
+  70 % de los temas del nivel y tener 70 % o más de promedio en lo practicado. Si no se cumple,
+  la tarjeta muestra qué falta.
+- **El examen** es una sesión aparte (`class_sessions.kind = EXAM`): 12 ejercicios repartidos
+  por área (gramática 5, vocabulario 3, lectura 2, escritura 2), temas al azar del nivel,
+  sin lecciones y sin "rehacer". Usa la misma generación, autoguardado y corrección que las
+  clases (también la apelación). **No modifica el progreso** de las clases.
+- **Aprobación:** 70 % global **y** al menos 60 % en cada área (una debilidad no se compensa
+  con otras áreas). Si no aprueba, puede volver a rendir a las 24 h.
+- **Certificado:** al aprobar se emite uno propio de Librería Inglés con código de verificación
+  (`LI-A1-XXXX-XXXX`). Se guardan los datos (`level_certificates`); el documento es una
+  plantilla fija sin IA que se regenera idéntica, así que no hace falta almacenar el PDF.
+  "Descargar PDF" usa la impresión del navegador (A4 horizontal).
+- **Verificación pública:** `/certificado/<código>` se puede abrir sin sesión. El certificado
+  aclara que no es una certificación oficial CEFR ni de Cambridge.
+- Parámetros en `backend/app/exams/service.py` (`EXAM_BLUEPRINT`, `PASS_SCORE`,
+  `AREA_MIN_SCORE`, `ELIGIBLE_COVERAGE`, `ELIGIBLE_SCORE`, `RETRY_COOLDOWN`).
+- Al aprobar, si existe la currícula del nivel siguiente se ofrece cambiar; hoy A2 figura como
+  "próximamente".
+
+Migración: `0006_level_exams`.
+
 # 7. Flujo técnico
 
 ```text
@@ -222,6 +246,11 @@ POST /api/v1/classes/{id}/retry-generation
 POST /api/v1/classes/{id}/retake
 POST /api/v1/classes/{id}/exercises/{exercise_id}/appeal
 POST /api/v1/classes/{id}/exercises/{exercise_id}/lesson   (lección del tema; registra la ayuda)
+
+GET  /api/v1/exams/status                 (requisitos, examen en curso, aprobación)
+POST /api/v1/exams                        (arma el examen del nivel actual)
+GET  /api/v1/certificates                 (mis certificados)
+GET  /api/v1/certificates/{code}          (público: verificación)
 
 GET  /api/v1/progress
 

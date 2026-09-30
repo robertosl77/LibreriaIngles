@@ -21,6 +21,7 @@ from app.learning.models import (
     ClassSessionStatus,
     EvaluationMode,
     Exercise,
+    SessionKind,
 )
 from app.progress.service import progress_by_skill
 
@@ -80,30 +81,30 @@ def select_slots(
     area_order = {"grammar": 0, "vocabulary": 1, "reading": 2, "writing": 3}
     chosen.sort(key=lambda s: area_order.get(s.area_key, 9))
 
-    slots = []
-    for skill in chosen:
-        # Preferir tipos con ejemplo semilla: sirve de guía a la IA (y al simulado).
-        seeded = [t for t in skill.exercise_types if any(e.get("type") == t for e in skill.examples)]
-        exercise_type = rng.choice(seeded or list(skill.exercise_types))
-        example = next(
-            (e for e in skill.examples if e.get("type") == exercise_type),
-            skill.examples[0] if skill.examples else None,
-        )
-        slots.append(
-            {
-                "skillKey": skill.key,
-                "area": skill.area_name,
-                "topic": skill.topic_name,
-                "skill": skill.name,
-                "objectives": list(skill.objectives),
-                "allowedTypes": [exercise_type],
-                "example": example,
-                # Solo para el proveedor simulado.
-                "examples": [e for e in skill.examples if e.get("type") == exercise_type]
-                or list(skill.examples),
-            }
-        )
-    return slots
+    return [slot_for(skill, rng) for skill in chosen]
+
+
+def slot_for(skill: Skill, rng) -> dict:
+    """Pedido de un ejercicio para una skill (lo que la IA debe generar)."""
+    # Preferir tipos con ejemplo semilla: sirve de guía a la IA (y al simulado).
+    seeded = [t for t in skill.exercise_types if any(e.get("type") == t for e in skill.examples)]
+    exercise_type = rng.choice(seeded or list(skill.exercise_types))
+    example = next(
+        (e for e in skill.examples if e.get("type") == exercise_type),
+        skill.examples[0] if skill.examples else None,
+    )
+    return {
+        "skillKey": skill.key,
+        "area": skill.area_name,
+        "topic": skill.topic_name,
+        "skill": skill.name,
+        "objectives": list(skill.objectives),
+        "allowedTypes": [exercise_type],
+        "example": example,
+        # Solo para el proveedor simulado.
+        "examples": [e for e in skill.examples if e.get("type") == exercise_type]
+        or list(skill.examples),
+    }
 
 
 # ---------------------------------------------------------------- validación
@@ -185,6 +186,15 @@ def _match_slots(exercises: list, slots: list[dict]) -> list[tuple[dict, Exercis
 # ---------------------------------------------------------------- flujo
 
 
+def _enough(session: ClassSession, slots: list[dict], matched: list) -> bool:
+    """Una clase sirve con la mitad; un examen necesita casi todo y todas las áreas."""
+    if session.kind != SessionKind.EXAM:
+        return len(matched) >= max(1, len(slots) // 2)
+    areas_requested = {s["skillKey"].split(".")[1] for s in slots}
+    areas_matched = {slot["skillKey"].split(".")[1] for slot, _ in matched}
+    return len(matched) * 4 >= len(slots) * 3 and areas_requested <= areas_matched
+
+
 def create_class(
     db: Session, study: StudyContext
 ) -> tuple[ClassSession, AIResult | None]:
@@ -220,7 +230,9 @@ def generate_content(
             db,
             study.account,
             system=GENERATION_SYSTEM,
-            user=generation_user_prompt(request.get("level", ""), public_slots),
+            user=generation_user_prompt(
+                request.get("level", ""), public_slots, purpose=request.get("purpose", "class")
+            ),
             task={"kind": "generate_class", "level": request.get("level"), "slots": slots},
         )
     except NoAIAvailable as exc:
@@ -230,11 +242,13 @@ def generate_content(
         return None
 
     matched = _match_slots(result.data.get("exercises") or [], slots)
-    if len(matched) < max(1, len(slots) // 2):
+    if not _enough(session, slots, matched):
         session.status = ClassSessionStatus.GENERATION_FAILED
         session.generation_error = (
             f"La IA devolvió {len(matched)} ejercicios válidos de {len(slots)} pedidos."
         )
+        if session.kind == SessionKind.EXAM:
+            session.generation_error += " El examen necesita ejercicios de todas las áreas."
         session.generated_by_connection_id = result.connection.id
         db.commit()
         return None
@@ -268,7 +282,10 @@ def generate_content(
             )
         )
     title = str(result.data.get("title") or "").strip()[:200]
-    session.title = title or f"Clase {request.get('level')}"
+    if session.kind == SessionKind.EXAM:
+        session.title = f"Examen de nivel {request.get('level')}"
+    else:
+        session.title = title or f"Clase {request.get('level')}"
     session.status = ClassSessionStatus.READY
     session.generation_error = None
     session.generated_at = utcnow()

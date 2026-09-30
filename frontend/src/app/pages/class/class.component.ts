@@ -52,7 +52,7 @@ const RESULT_LABELS: Record<string, string> = {
         <div class="page-header">
           <div>
             <p class="muted small">
-              <a routerLink="/app">Inicio</a> · Clase #{{ c.id }} · {{ c.targetLevel }}
+              <a routerLink="/app">Inicio</a> · {{ c.kind === 'EXAM' ? 'Examen' : 'Clase' }} #{{ c.id }} · {{ c.targetLevel }}
               @if (c.currentAttempt > 1) { · Intento {{ c.currentAttempt }} }
             </p>
             <h1>{{ c.title || 'Clase ' + c.id }}</h1>
@@ -89,7 +89,49 @@ const RESULT_LABELS: Record<string, string> = {
             </div>
           }
 
-          @if (c.status === 'COMPLETED') {
+          @if (c.kind === 'EXAM' && editable()) {
+            <p class="banner banner-info small">
+              <strong>Examen de nivel {{ c.targetLevel }}.</strong> {{ c.exercises.length }} ejercicios de todas las
+              áreas, sin lecciones. Para aprobar: 70% en total y al menos 60% en cada área. Tus
+              respuestas se guardan solas; cuando termines, tocá <strong>Finalizar examen</strong>.
+            </p>
+          }
+
+          @if (c.status === 'COMPLETED' && c.kind === 'EXAM' && c.examResult; as r) {
+            <section class="card exam-result" [class.ok]="r.passed">
+              <div class="exam-result-head">
+                <div>
+                  <p class="muted small">Resultado del examen</p>
+                  <p class="big-number">{{ r.score }}%</p>
+                  <p class="verdict">{{ r.passed ? '¡Aprobaste el nivel ' + c.targetLevel + '!' : 'No aprobado' }}</p>
+                </div>
+                <div class="row">
+                  @if (c.certificateCode) {
+                    <a class="btn btn-primary" [routerLink]="['/certificado', c.certificateCode]">Ver certificado</a>
+                  }
+                  <a class="btn" routerLink="/app">Volver al inicio</a>
+                </div>
+              </div>
+              <ul class="area-bars">
+                @for (area of r.areas; track area.key) {
+                  <li>
+                    <span class="area-name">{{ area.name }}</span>
+                    <span class="bar" [attr.aria-label]="area.name + ' ' + area.score + '%'">
+                      <span class="fill" [class.low]="!area.passed" [style.width.%]="area.score"></span>
+                      <span class="min" [style.left.%]="r.areaMinScore" title="Mínimo por área"></span>
+                    </span>
+                    <strong [class.error-text]="!area.passed">{{ area.score }}%</strong>
+                  </li>
+                }
+              </ul>
+              <p class="muted small">
+                Se aprueba con {{ r.passScore }}% en total y al menos {{ r.areaMinScore }}% en cada área (línea vertical).
+                @if (!r.passed) { Podés volver a rendirlo en 24 horas; mientras tanto, practicá las áreas marcadas. }
+              </p>
+            </section>
+          }
+
+          @if (c.status === 'COMPLETED' && c.kind !== 'EXAM') {
             <section class="card score-card">
               <div>
                 <p class="muted small">Resultado</p>
@@ -264,7 +306,7 @@ const RESULT_LABELS: Record<string, string> = {
             <div class="submit-bar">
               <span class="muted small">{{ answeredCount() }}/{{ c.exercises.length }} respondidas</span>
               <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="busy()">
-                @if (busy()) { <span class="spinner"></span> Corrigiendo… } @else { Finalizar y comprobar }
+                @if (busy()) { <span class="spinner"></span> Corrigiendo… } @else { {{ c.kind === 'EXAM' ? 'Finalizar examen' : 'Finalizar y comprobar' }} }
               </button>
             </div>
           }
@@ -311,6 +353,19 @@ const RESULT_LABELS: Record<string, string> = {
     .suggestion { color: #5a3d00; }
     .feedback .btn-link { align-self: flex-start; }
     .error-text { color: var(--bad); }
+    .exam-result { display: flex; flex-direction: column; gap: 0.9rem; }
+    .exam-result.ok { border-color: #d8c48a; background: linear-gradient(180deg, #fffdf6, var(--surface)); }
+    .exam-result p { margin: 0; }
+    .exam-result-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .verdict { font-weight: 700; }
+    .exam-result.ok .verdict { color: var(--ok); }
+    .area-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    .area-bars li { display: grid; grid-template-columns: 7rem 1fr 3.5rem; align-items: center; gap: 0.8rem; }
+    .area-bars strong { text-align: right; }
+    .bar { position: relative; height: 0.6rem; border-radius: 999px; background: var(--info-bg); }
+    .bar .fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--ok); }
+    .bar .fill.low { background: var(--bad); }
+    .bar .min { position: absolute; top: -0.25rem; bottom: -0.25rem; width: 2px; background: var(--text); opacity: 0.5; }
     .score-card { display: flex; gap: 1.5rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
     .score-card p { margin: 0; }
     .history { display: flex; flex-direction: column; gap: 0.2rem; }
