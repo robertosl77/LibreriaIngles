@@ -17,6 +17,16 @@
             "tsConfig": "tsconfig.app.json",
             "polyfills": ["zone.js"],
             "styles": ["src/styles.css"]
+          },
+          "configurations": {
+            "production": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.prod.ts"
+                }
+              ]
+            }
           }
         },
         "serve": {
@@ -24,6 +34,9 @@
           "configurations": {
             "development": {
               "buildTarget": "libreria-ingles:build"
+            },
+            "production": {
+              "buildTarget": "libreria-ingles:build:production"
             }
           },
           "defaultConfiguration": "development"

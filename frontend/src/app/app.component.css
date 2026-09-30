@@ -113,3 +113,14 @@ h1 {
     padding-top: 4rem;
   }
 }
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.backend-status {
+  font-size: 0.8rem;
+  color: #666;
+}
