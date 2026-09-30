@@ -60,6 +60,28 @@ class SessionKind(str, Enum):
     EXAM = "EXAM"
 
 
+class PresentationMode(str, Enum):
+    """Cómo recibe el alumno el ejercicio (independiente del tipo de ejercicio)."""
+
+    READ = "READ"
+    LISTEN = "LISTEN"
+
+
+class ResponseMode(str, Enum):
+    """Cómo responde el alumno. SPEAK: la transcripción entra al evaluador como texto."""
+
+    WRITE = "WRITE"
+    SELECT = "SELECT"
+    SPEAK = "SPEAK"
+
+
+SELECT_TYPES = {"multiple_choice", "reading_multiple_choice"}
+
+
+def default_response_mode(exercise_type: str) -> "ResponseMode":
+    return ResponseMode.SELECT if exercise_type in SELECT_TYPES else ResponseMode.WRITE
+
+
 class Assistance(str, Enum):
     """Ayuda usada para responder un ejercicio (T-020; HINT queda para T-018).
 
@@ -160,6 +182,17 @@ class Exercise(Base):
     content: Mapped[dict] = mapped_column(JSON, default=dict)
     expected_concepts: Mapped[list] = mapped_column(JSON, default=list)
     answer_key: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Modalidades (T-025): el tipo no cambia; cambia cómo se presenta y cómo se responde.
+    presentation_mode: Mapped[PresentationMode] = mapped_column(
+        SqlEnum(PresentationMode, native_enum=False, length=10),
+        default=PresentationMode.READ,
+        server_default=PresentationMode.READ.value,
+    )
+    response_mode: Mapped[ResponseMode] = mapped_column(
+        SqlEnum(ResponseMode, native_enum=False, length=10),
+        default=ResponseMode.WRITE,
+        server_default=ResponseMode.WRITE.value,
+    )
     evaluation_mode: Mapped[EvaluationMode] = mapped_column(
         SqlEnum(EvaluationMode, native_enum=False)
     )
@@ -221,6 +254,12 @@ class Attempt(Base):
     attempt_number: Mapped[int] = mapped_column(Integer, default=1)
     raw_answer: Mapped[str] = mapped_column(Text)
     normalized_answer: Mapped[str] = mapped_column(Text)
+    # Modalidad con la que respondió efectivamente (SPEAK → raw_answer es la transcripción).
+    response_mode: Mapped[ResponseMode] = mapped_column(
+        SqlEnum(ResponseMode, native_enum=False, length=10),
+        default=ResponseMode.WRITE,
+        server_default=ResponseMode.WRITE.value,
+    )
     # Si respondió después de consultar la lección (o una pista): no vale igual como evidencia.
     assistance: Mapped[Assistance] = mapped_column(
         SqlEnum(Assistance, native_enum=False, length=20),

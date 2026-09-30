@@ -60,17 +60,23 @@ def _result_payload(attempt: Attempt, exercise: Exercise) -> dict | None:
     }
 
 
-def _audio(exercise: Exercise) -> dict | None:
-    """Listening (T-025): el frontend sintetiza la voz con este texto y lo muestra recién
-    después de la corrección."""
+def _stimulus(exercise: Exercise) -> dict | None:
+    """Estímulo del ejercicio según la presentación (T-025).
+
+    LISTEN: el frontend sintetiza la voz con este texto y lo muestra recién después de la
+    corrección. READ: el pasaje (si hay) se muestra escrito, como siempre.
+    """
     content = exercise.content or {}
-    if not content.get("audioText"):
-        return None
-    return {
-        "text": content["audioText"],
-        "lang": content.get("audioLang", "en-US"),
-        "rate": content.get("audioRate", 1.0),
-    }
+    if exercise.presentation_mode.value == "LISTEN" and content.get("stimulus"):
+        return {
+            "mode": "LISTEN",
+            "text": content["stimulus"],
+            "lang": content.get("stimulusLang", "en-US"),
+            "rate": content.get("stimulusRate", 1.0),
+        }
+    if content.get("passage"):
+        return {"mode": "READ", "text": content["passage"], "lang": "en-US", "rate": 1.0}
+    return None
 
 
 def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
@@ -99,7 +105,9 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 "instruction": exercise.instruction,
                 "question": exercise.prompt,
                 "passage": (exercise.content or {}).get("passage"),
-                "audio": _audio(exercise),
+                "presentation": exercise.presentation_mode.value,
+                "response": exercise.response_mode.value,
+                "stimulus": _stimulus(exercise),
                 "options": (exercise.content or {}).get("options"),
                 "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else ""),
                 "assistance": (

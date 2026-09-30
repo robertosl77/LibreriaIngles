@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.accounts.models import Account
 from app.ai.models import utcnow
 from app.ai.service import AIResult
-from app.classes.generation import GenerationFailed, generate_content, slot_for
+from app.classes.generation import GenerationFailed, ensure_listening, generate_content, slot_for
 from app.core.deps import StudyContext
 from app.curriculum.service import CEFR_LEVELS, available_levels, get_level
 from app.exams.models import LevelCertificate
@@ -40,6 +40,9 @@ AREA_MIN_SCORE = 60  # mínimo en cada área
 ELIGIBLE_COVERAGE = 0.7  # porción de skills del nivel practicadas
 ELIGIBLE_SCORE = 70  # promedio de las skills practicadas
 RETRY_COOLDOWN = timedelta(hours=24)
+# Modalidades (T-025): mínimo de ejercicios escuchados y mínimo de puntaje en esa modalidad.
+EXAM_MIN_LISTEN = 3
+MODALITY_NAMES = {"LISTEN": "Escucha", "SPEAK": "Habla"}
 
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sin 0/O ni 1/I
 
@@ -172,6 +175,7 @@ def exam_slots(level: str, rng=None) -> list[dict]:
         rng.shuffle(pool)
         for index in range(count):
             slots.append(slot_for(pool[index % len(pool)], rng))
+    ensure_listening(slots, list(curriculum.skills), EXAM_MIN_LISTEN, rng)
     return slots
 
 
@@ -252,15 +256,41 @@ def finalize_exam(db: Session, session: ClassSession) -> dict:
                 "passed": score >= AREA_MIN_SCORE,
             }
         )
+    # Modalidades transversales: todo lo escuchado (y, cuando exista, lo hablado).
+    by_modality: dict[str, list[float]] = {}
+    for attempt, exercise in attempts:
+        if exercise.presentation_mode and exercise.presentation_mode.value == "LISTEN":
+            by_modality.setdefault("LISTEN", []).append(attempt.score or 0)
+        if attempt.response_mode and attempt.response_mode.value == "SPEAK":
+            by_modality.setdefault("SPEAK", []).append(attempt.score or 0)
+    modalities = []
+    for key, scores in by_modality.items():
+        value = round(sum(scores) / len(scores), 1)
+        modalities.append(
+            {
+                "key": key,
+                "name": MODALITY_NAMES.get(key, key),
+                "score": value,
+                "items": len(scores),
+                "passed": value >= AREA_MIN_SCORE,
+            }
+        )
+
     total = [attempt.score or 0 for attempt, _ in attempts]
     score = round(sum(total) / len(total), 1) if total else 0.0
-    passed = bool(areas) and score >= PASS_SCORE and all(a["passed"] for a in areas)
+    passed = (
+        bool(areas)
+        and score >= PASS_SCORE
+        and all(a["passed"] for a in areas)
+        and all(m["passed"] for m in modalities)
+    )
     session.exam_result = {
         "passed": passed,
         "score": score,
         "passScore": PASS_SCORE,
         "areaMinScore": AREA_MIN_SCORE,
         "areas": areas,
+        "modalities": modalities,
     }
 
     if passed and certificate_of(db, session.study_profile_id, session.target_level) is None:

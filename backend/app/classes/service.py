@@ -142,6 +142,7 @@ def submit(
                 attempt_number=session.current_attempt,
                 raw_answer=text,
                 normalized_answer=normalize_answer(text),
+                response_mode=exercise.response_mode,
                 assistance=(
                     drafts[exercise.id].assistance if exercise.id in drafts else Assistance.NONE
                 ),

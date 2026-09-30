@@ -62,7 +62,7 @@ def _result_label(score: float) -> str:
 
 def _accepted_normalized(exercise: Exercise) -> set[str]:
     accepted = list(exercise.answer_key.get("acceptedAnswers") or [])
-    if exercise.exercise_type in ("fill_blank", "listening_fill_blank"):
+    if exercise.exercise_type == "fill_blank":
         accepted += fill_blank_variants(exercise.prompt, accepted)
     return {normalize_answer(a) for a in accepted if a}
 
@@ -180,8 +180,10 @@ def _ai_payload(exercise: Exercise, answer: str) -> dict:
         "instruction": exercise.instruction,
         "question": exercise.prompt,
         "passage": (exercise.content or {}).get("passage"),
-        # Listening: lo que el alumno escuchó (no lo vio escrito).
-        "audioText": (exercise.content or {}).get("audioText"),
+        # Modalidades (T-025): con LISTEN, el estímulo lo escuchó (no lo vio escrito).
+        "presentation": exercise.presentation_mode.value if exercise.presentation_mode else "READ",
+        "response": exercise.response_mode.value if exercise.response_mode else "WRITE",
+        "stimulus": (exercise.content or {}).get("stimulus"),
         "options": (exercise.content or {}).get("options"),
         "referenceAnswers": exercise.answer_key.get("acceptedAnswers") or [],
         "expectedConcepts": exercise.expected_concepts or [],

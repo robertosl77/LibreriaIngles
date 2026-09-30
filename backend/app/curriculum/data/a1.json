@@ -425,15 +425,16 @@
                 "entender números, precios y horas en frases cortas"
               ],
               "exerciseTypes": [
-                "listening_fill_blank",
-                "listening_multiple_choice"
+                "fill_blank",
+                "multiple_choice"
               ],
+              "presentations": ["LISTEN"],
               "examples": [
                 {
-                  "type": "listening_fill_blank",
+                  "type": "fill_blank",
                   "instruction": "Listen and complete with the time.",
                   "question": "The train to London leaves at ___.",
-                  "audioText": "Good morning. The next train to London leaves at half past eight.",
+                  "stimulus": "Good morning. The next train to London leaves at half past eight.",
                   "acceptedAnswers": [
                     "half past eight",
                     "8:30",
@@ -457,10 +458,10 @@
                   ]
                 },
                 {
-                  "type": "listening_multiple_choice",
+                  "type": "multiple_choice",
                   "instruction": "Listen and choose the correct answer.",
                   "question": "How much is the coffee?",
-                  "audioText": "The coffee is three dollars and the cake is five dollars.",
+                  "stimulus": "The coffee is three dollars and the cake is five dollars.",
                   "options": [
                     "$3",
                     "$5",
@@ -483,15 +484,16 @@
                 "entender nombre, edad, país y deletreo en una presentación"
               ],
               "exerciseTypes": [
-                "listening_fill_blank",
-                "listening_multiple_choice"
+                "fill_blank",
+                "multiple_choice"
               ],
+              "presentations": ["LISTEN"],
               "examples": [
                 {
-                  "type": "listening_fill_blank",
+                  "type": "fill_blank",
                   "instruction": "Listen and complete with a number.",
                   "question": "Laura is ___ years old.",
-                  "audioText": "Hi, I'm Laura. I'm twenty-six years old and I'm from Canada.",
+                  "stimulus": "Hi, I'm Laura. I'm twenty-six years old and I'm from Canada.",
                   "acceptedAnswers": [
                     "26",
                     "twenty-six",
@@ -503,10 +505,10 @@
                   ]
                 },
                 {
-                  "type": "listening_multiple_choice",
+                  "type": "multiple_choice",
                   "instruction": "Listen and choose the correct answer.",
                   "question": "Where is Laura from?",
-                  "audioText": "Hi, I'm Laura. I'm twenty-six years old and I'm from Canada.",
+                  "stimulus": "Hi, I'm Laura. I'm twenty-six years old and I'm from Canada.",
                   "options": [
                     "Canada",
                     "Australia",
@@ -529,14 +531,15 @@
                 "entender la idea principal de un diálogo cotidiano breve (saludar, comprar, pedir comida)"
               ],
               "exerciseTypes": [
-                "listening_multiple_choice"
+                "multiple_choice"
               ],
+              "presentations": ["LISTEN"],
               "examples": [
                 {
-                  "type": "listening_multiple_choice",
+                  "type": "multiple_choice",
                   "instruction": "Listen to the conversation and choose the correct answer.",
                   "question": "What does the customer order?",
-                  "audioText": "Can I have a cheese sandwich and an orange juice, please? Sure. Anything else? No, thank you.",
+                  "stimulus": "Can I have a cheese sandwich and an orange juice, please? Sure. Anything else? No, thank you.",
                   "options": [
                     "A cheese sandwich and an orange juice",
                     "A cheese sandwich and a coffee",
@@ -551,10 +554,10 @@
                   ]
                 },
                 {
-                  "type": "listening_multiple_choice",
+                  "type": "multiple_choice",
                   "instruction": "Listen to the conversation and choose the correct answer.",
                   "question": "Where are they going on Saturday?",
-                  "audioText": "Are you free on Saturday? Yes, why? Let's go to the cinema. Great idea!",
+                  "stimulus": "Are you free on Saturday? Yes, why? Let's go to the cinema. Great idea!",
                   "options": [
                     "To the cinema",
                     "To the park",
@@ -577,15 +580,16 @@
                 "entender instrucciones simples de clase o de la vida diaria"
               ],
               "exerciseTypes": [
-                "listening_fill_blank",
-                "listening_multiple_choice"
+                "fill_blank",
+                "multiple_choice"
               ],
+              "presentations": ["LISTEN"],
               "examples": [
                 {
-                  "type": "listening_fill_blank",
+                  "type": "fill_blank",
                   "instruction": "Listen and complete the instruction.",
                   "question": "Please ___ the window.",
-                  "audioText": "Please close the window. It's cold in here.",
+                  "stimulus": "Please close the window. It's cold in here.",
                   "acceptedAnswers": [
                     "close"
                   ],
@@ -606,10 +610,10 @@
                   ]
                 },
                 {
-                  "type": "listening_multiple_choice",
+                  "type": "multiple_choice",
                   "instruction": "Listen and choose the correct answer.",
                   "question": "Which page do the students open?",
-                  "audioText": "Open your books at page twelve and read the text.",
+                  "stimulus": "Open your books at page twelve and read the text.",
                   "options": [
                     "Page 12",
                     "Page 20",
