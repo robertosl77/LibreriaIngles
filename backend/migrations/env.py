@@ -13,12 +13,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# SQLAlchemy puede renderizar una ruta de Windows como E%3A/...
-# Alembic usa ConfigParser internamente, donde "%" activa interpolación.
-# Se escapa como "%%"; al leerla, ConfigParser devuelve nuevamente "%".
+database_url = config.attributes.get("database_url", settings.resolved_database_url)
+
 config.set_main_option(
     "sqlalchemy.url",
-    escape_configparser_value(settings.resolved_database_url),
+    escape_configparser_value(database_url),
 )
 target_metadata = Base.metadata
 
@@ -39,7 +38,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    ensure_database_directory()
+    ensure_database_directory(database_url)
 
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),

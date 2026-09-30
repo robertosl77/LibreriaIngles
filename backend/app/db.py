@@ -12,8 +12,8 @@ class Base(DeclarativeBase):
     pass
 
 
-def ensure_database_directory() -> None:
-    url = make_url(settings.resolved_database_url)
+def ensure_database_directory(database_url: str | None = None) -> None:
+    url = make_url(database_url or settings.resolved_database_url)
 
     if url.get_backend_name() != "sqlite":
         return

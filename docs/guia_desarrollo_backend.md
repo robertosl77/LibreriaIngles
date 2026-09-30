@@ -450,3 +450,36 @@ Por lo tanto, la base inicial del backend queda operativa con:
 - SQLite;
 - Alembic;
 - launch de VS Code.
+
+
+---
+
+# 13. Launch de VS Code y compatibilidad
+
+La configuración actual de `.vscode/launch.json` y `.vscode/tasks.json` utiliza explícitamente:
+
+```text
+backend/.venv/Scripts/python.exe
+```
+
+Por lo tanto, el launch actual está preparado para **Windows**.
+
+Esto es aceptado para la etapa local actual. Si se necesita Linux/macOS, deberá usarse una resolución portable del intérprete o una configuración específica por plataforma.
+
+
+---
+
+# 14. Reinicializar la base tras el cambio de roles/modelo
+
+Durante esta etapa no existen datos productivos y la migración inicial `0001_initial_schema` se edita directamente.
+
+Después de actualizar a la versión que cambia `MembershipRole.OWNER` por `MembershipRole.ADMIN` y agrega las nuevas tablas, ejecutar localmente desde `backend/`:
+
+```powershell
+alembic downgrade base
+alembic upgrade head
+```
+
+Esto recrea el esquema local conforme a la migración inicial actualizada.
+
+No aplicar este procedimiento sobre una base con datos productivos.
