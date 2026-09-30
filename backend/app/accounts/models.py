@@ -37,6 +37,7 @@ class Account(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    display_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     google_subject: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True, index=True
     )

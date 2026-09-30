@@ -20,6 +20,22 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/libreria_ingles.db"
     cors_origins: str = "http://localhost:4200"
 
+    # Autenticación
+    jwt_secret: str = "dev-insecure-change-me-in-production-32b"
+    jwt_expire_minutes: int = 60 * 24 * 7
+    google_client_id: str = ""
+    # Login sin Google para desarrollo local. Nunca se habilita en production.
+    dev_login_enabled: bool = False
+    # Emails (separados por coma) que reciben el rol PLATFORM_OWNER al ingresar.
+    platform_owner_emails: str = ""
+
+    # Cifrado de API keys (clave Fernet). Obligatoria en production.
+    encryption_key: str = ""
+
+    # Proveedor de IA simulado para desarrollo y tests. Nunca en production.
+    mock_ai_enabled: bool = False
+    ai_timeout_seconds: float = 60.0
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",
@@ -29,6 +45,26 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.lower() in {"production", "prod"}
+
+    @property
+    def dev_login_allowed(self) -> bool:
+        return self.dev_login_enabled and not self.is_production
+
+    @property
+    def mock_ai_allowed(self) -> bool:
+        return self.mock_ai_enabled and not self.is_production
+
+    @property
+    def platform_owner_email_set(self) -> set[str]:
+        return {
+            email.strip().lower()
+            for email in self.platform_owner_emails.split(",")
+            if email.strip()
+        }
 
     @property
     def resolved_database_url(self) -> str:
