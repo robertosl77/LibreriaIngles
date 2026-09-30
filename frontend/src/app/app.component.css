@@ -1,0 +1,115 @@
+:host {
+  display: block;
+}
+
+.landing {
+  min-height: 100vh;
+  padding: 0 6vw 5rem;
+}
+
+.topbar {
+  min-height: 5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  color: inherit;
+  font-size: 1.15rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.link-button,
+.primary,
+.secondary {
+  border-radius: 0.8rem;
+  padding: 0.85rem 1.15rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.link-button {
+  border: 0;
+  background: transparent;
+}
+
+.hero {
+  max-width: 760px;
+  padding: 8vh 0 9vh;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+h1 {
+  margin: 0.5rem 0 1.25rem;
+  font-size: clamp(3rem, 8vw, 6.5rem);
+  line-height: 0.92;
+  letter-spacing: -0.055em;
+}
+
+.lead {
+  max-width: 650px;
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-top: 2rem;
+}
+
+.primary {
+  background: #111;
+  color: #fff;
+  border: 1px solid #111;
+}
+
+.secondary {
+  background: transparent;
+  border: 1px solid #bbb;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.cards article {
+  min-height: 180px;
+  padding: 1.4rem;
+  border: 1px solid #ddd;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.cards span {
+  font-size: 0.75rem;
+}
+
+.cards h2 {
+  margin-top: 2rem;
+}
+
+.cards p {
+  line-height: 1.55;
+}
+
+@media (max-width: 760px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding-top: 4rem;
+  }
+}
