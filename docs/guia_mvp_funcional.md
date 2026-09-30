@@ -1,4 +1,4 @@
-# Librería Inglés — MVP funcional (rama `fix/mvp-funcional`)
+# Librería Inglés — MVP funcional
 
 **Objetivo:** que la app se pueda usar de punta a punta con una cuenta personal:
 login → nivel → conexión de IA → clase → corrección → progreso.
@@ -17,6 +17,7 @@ login → nivel → conexión de IA → clase → corrección → progreso.
 | Proveedor simulado para probar sin keys | ✅ solo local (`MOCK_AI_ENABLED=true`) |
 | Router de IA: prioridad, failover, backoff, estados | ✅ |
 | Conexiones de plataforma (PLATFORM_OWNER) | ✅ vía `PLATFORM_OWNER_EMAILS` |
+| Portal de plataforma: límites de consumo y uso de IA (T-006) | ✅ `/app/plataforma` |
 | Generación de clase (solicitud persistida antes de llamar a la IA) | ✅ `GENERATING` / `GENERATION_FAILED` + reintento |
 | Autoguardado por ejercicio | ✅ |
 | Evaluación híbrida (reglas → errores comunes → caché → IA) | ✅ |
@@ -42,7 +43,7 @@ JWT_SECRET=<secreto de 32+ caracteres>
 DEV_LOGIN_ENABLED=true          # login sin Google (solo local)
 MOCK_AI_ENABLED=true            # proveedor simulado (solo local)
 GOOGLE_CLIENT_ID=               # ver punto 3
-PLATFORM_OWNER_EMAILS=tu@email  # recibe el rol PLATFORM_OWNER al ingresar
+PLATFORM_OWNER_EMAILS=sr.macros@gmail.com  # recibe el rol PLATFORM_OWNER al ingresar
 ENCRYPTION_KEY=                 # opcional en local; obligatoria en production
 ```
 
@@ -111,7 +112,31 @@ Si el proveedor responde 404, el nombre del modelo no existe: editarlo por uno v
 
 ---
 
-# 6. Flujo técnico
+# 6. Portal de plataforma (T-006)
+
+Solo para cuentas con rol `PLATFORM_OWNER` (emails en `PLATFORM_OWNER_EMAILS`).
+Menú **Plataforma** → `/app/plataforma`.
+
+- Alta, prueba, prioridad, pausa y baja de conexiones de IA de la plataforma, sin tocar
+  `.env` ni reiniciar.
+- **Límites de consumo** por conexión (ventana móvil de 24 h, solo requests exitosos,
+  sin contar health checks):
+  - *Límite total 24 h*: tope de la conexión para todos los usuarios.
+  - *Límite por usuario 24 h*: tope por cuenta.
+  - Vacío = sin límite. Al alcanzarlo, la conexión se saltea (no se marca como caída) y el
+    router sigue con la siguiente; si no queda ninguna, la clase queda pendiente como siempre.
+- **Consumo**: requests de las últimas 24 h, requests por día (14 días), consumo por conexión
+  (24 h y 30 días) y cuentas que más usan la IA de plataforma.
+- Se registra cada llamada a un proveedor en `ai_usage_events` (solo metadatos: conexión,
+  cuenta, operación, éxito/error). Nunca se guardan prompts ni respuestas.
+- Los límites solo se aceptan en conexiones de plataforma; en conexiones propias la API
+  responde 422.
+- Qué conexiones usa cada usuario (propias, de plataforma o ambas según el plan) queda para
+  T-003/T-004.
+
+Migración: `0003_platform_ai_usage`.
+
+# 7. Flujo técnico
 
 ```text
 POST /classes
@@ -139,7 +164,7 @@ incorrect = 0); las sugerencias de estilo no descuentan.
 
 ---
 
-# 7. Endpoints nuevos
+# 8. Endpoints nuevos
 
 ```text
 GET  /api/v1/auth/config
@@ -166,11 +191,13 @@ POST /api/v1/classes/{id}/retake
 POST /api/v1/classes/{id}/exercises/{exercise_id}/appeal
 
 GET  /api/v1/progress
+
+GET  /api/v1/platform/overview      (solo PLATFORM_OWNER)
 ```
 
 ---
 
-# 8. Cambios de modelo (migración `0002_learning_flow`)
+# 9. Cambios de modelo (migración `0002_learning_flow`)
 
 - `study_profiles`: `selected_level`, `estimated_level`, `operational_level`.
 - `accounts`: `display_name`.
@@ -187,7 +214,7 @@ GET  /api/v1/progress
 
 ---
 
-# 9. Tests
+# 10. Tests
 
 ```powershell
 cd backend

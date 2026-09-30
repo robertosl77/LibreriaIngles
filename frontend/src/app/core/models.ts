@@ -54,6 +54,9 @@ export interface AiConnection {
   lastCheckAt: string | null;
   lastUsedAt: string | null;
   lastErrorCode: string | null;
+  dailyRequestLimit: number | null;
+  perAccountDailyLimit: number | null;
+  usage24h: number | null;
   test?: { ok: boolean; error: string | null };
 }
 
@@ -146,4 +149,34 @@ export interface Dashboard {
     attemptCount: number;
     topics: { key: string; name: string; score: number | null; skills: SkillProgress[] }[];
   }[];
+}
+
+export interface UsageCounts {
+  requests: number;
+  successful: number;
+  errors: number;
+}
+
+export interface PlatformOverview {
+  last24h: {
+    all: UsageCounts;
+    platform: UsageCounts;
+    activeAccounts: number;
+    classesCreated: number;
+  };
+  accounts: number;
+  daily: { date: string; requests: number; platform: number; errors: number }[];
+  connections: { id: number; name: string; last24h: UsageCounts; last30d: UsageCounts }[];
+  topAccounts24h: { email: string; requests: number }[];
+}
+
+export interface ConnectionDraft {
+  provider: string;
+  name: string;
+  model: string | null;
+  apiKey: string | null;
+  priority: number;
+  scope: ConnectionScope;
+  dailyRequestLimit?: number | null;
+  perAccountDailyLimit?: number | null;
 }

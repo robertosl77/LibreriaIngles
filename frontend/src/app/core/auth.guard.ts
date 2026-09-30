@@ -3,7 +3,11 @@ import { CanActivateFn, Router } from '@angular/router';
 
 import { AuthService } from './auth.service';
 
-export const authGuard: CanActivateFn = async (_route, state) => {
+/**
+ * Solo exige sesión. No bloquea la navegación por pasos pendientes (nivel, IA):
+ * esos se muestran como "Primeros pasos" en el inicio.
+ */
+export const authGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
@@ -12,10 +16,8 @@ export const authGuard: CanActivateFn = async (_route, state) => {
   }
 
   try {
-    const me = auth.me() ?? (await auth.refreshMe());
-    const needsLevel = !me.studyProfile.operationalLevel;
-    if (needsLevel && !state.url.startsWith('/app/nivel')) {
-      return router.createUrlTree(['/app/nivel']);
+    if (!auth.me()) {
+      await auth.refreshMe();
     }
     return true;
   } catch {
@@ -27,4 +29,15 @@ export const authGuard: CanActivateFn = async (_route, state) => {
 export const guestGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   return auth.isLoggedIn() ? inject(Router).createUrlTree(['/app']) : true;
+};
+
+export const platformOwnerGuard: CanActivateFn = async () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  try {
+    const me = auth.me() ?? (await auth.refreshMe());
+    return me.account.isPlatformOwner ? true : router.createUrlTree(['/app']);
+  } catch {
+    return router.createUrlTree(['/login']);
+  }
 };

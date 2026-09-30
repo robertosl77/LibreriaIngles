@@ -12,13 +12,22 @@ Reglas (documento funcional §24–§29):
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.accounts.models import Account
-from app.ai.models import AIConnection, AIConnectionOwnerType, AIConnectionStatus, utcnow
+from app.ai.models import (
+    AIConnection,
+    AIConnectionOwnerType,
+    AIConnectionStatus,
+    AIUsageEvent,
+    utcnow,
+)
 from app.ai.providers import ProviderError, build_provider
 from app.core.security import decrypt_secret
+
+LIMIT_WINDOW = timedelta(hours=24)
+HEALTH_CHECK = "health_check"
 
 BACKOFF = {
     AIConnectionStatus.QUOTA_EXCEEDED: timedelta(minutes=60),
@@ -97,34 +106,108 @@ def _mark_success(connection: AIConnection, *, used: bool = True) -> None:
         connection.last_used_at = now
 
 
+# ------------------------------------------------------------------ consumo
+
+
+def record_usage(
+    db: Session,
+    connection: AIConnection,
+    *,
+    account: Account | None,
+    operation: str,
+    error: ProviderError | None = None,
+) -> None:
+    db.add(
+        AIUsageEvent(
+            connection_id=connection.id,
+            owner_type=connection.owner_type,
+            provider=connection.provider,
+            account_id=account.id if account else None,
+            operation=operation,
+            success=error is None,
+            error_code=error.code.value if error else None,
+        )
+    )
+
+
+def successful_requests(
+    db: Session,
+    connection_id: int,
+    *,
+    since,
+    account_id: int | None = None,
+) -> int:
+    """Requests exitosos (los que consumen cuota), sin contar health checks."""
+    query = select(func.count(AIUsageEvent.id)).where(
+        AIUsageEvent.connection_id == connection_id,
+        AIUsageEvent.success.is_(True),
+        AIUsageEvent.operation != HEALTH_CHECK,
+        AIUsageEvent.created_at >= since,
+    )
+    if account_id is not None:
+        query = query.where(AIUsageEvent.account_id == account_id)
+    return db.scalar(query) or 0
+
+
+def limit_reason(db: Session, connection: AIConnection, account: Account) -> str | None:
+    """Motivo por el que la conexión no puede usarse ahora por límites, o None."""
+    if connection.daily_request_limit is None and connection.per_account_daily_limit is None:
+        return None
+    since = utcnow() - LIMIT_WINDOW
+    if connection.daily_request_limit is not None:
+        used = successful_requests(db, connection.id, since=since)
+        if used >= connection.daily_request_limit:
+            return "alcanzó su límite total de 24 h"
+    if connection.per_account_daily_limit is not None:
+        used = successful_requests(db, connection.id, since=since, account_id=account.id)
+        if used >= connection.per_account_daily_limit:
+            return "alcanzaste tu límite de uso de 24 h"
+    return None
+
+
+# ------------------------------------------------------------------ router
+
+
 def run_json_task(
     db: Session, account: Account, *, system: str, user: str, task: dict
 ) -> AIResult:
     errors: list[str] = []
     failed: list[str] = []
+    operation = str(task.get("kind") or "unknown")[:40]
     for connection in candidate_connections(db, account):
+        reason = limit_reason(db, connection, account)
+        if reason:
+            # Límite de consumo: se saltea sin marcarla como caída.
+            errors.append(f"{connection.name}: {reason}")
+            continue
         try:
             data = provider_for(connection).complete_json(system, user, task)
         except ProviderError as exc:
             _mark_failure(connection, exc)
+            record_usage(db, connection, account=account, operation=operation, error=exc)
             failed.append(connection.name)
             errors.append(f"{connection.name}: {exc.message}")
             db.commit()
             continue
         _mark_success(connection)
+        record_usage(db, connection, account=account, operation=operation)
         db.commit()
         return AIResult(data=data, connection=connection, failed_connections=failed)
     raise NoAIAvailable(errors)
 
 
-def check_connection(db: Session, connection: AIConnection) -> tuple[bool, str | None]:
+def check_connection(
+    db: Session, connection: AIConnection, account: Account | None = None
+) -> tuple[bool, str | None]:
     """Health check liviano. Resetea el backoff si la conexión responde."""
     try:
         provider_for(connection).health_check()
     except ProviderError as exc:
         _mark_failure(connection, exc)
+        record_usage(db, connection, account=account, operation=HEALTH_CHECK, error=exc)
         db.commit()
         return False, exc.message
     _mark_success(connection, used=False)
+    record_usage(db, connection, account=account, operation=HEALTH_CHECK)
     db.commit()
     return True, None

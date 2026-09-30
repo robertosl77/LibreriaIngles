@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Index, Integer, String
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,6 +61,10 @@ class AIConnection(Base):
     credential_hint: Mapped[str | None] = mapped_column(String(32), nullable=True)
     priority: Mapped[int] = mapped_column(Integer, default=100)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Límites de consumo (ventana móvil de 24 h). NULL = sin límite.
+    # Pensados para conexiones PLATFORM, donde el costo lo asume la plataforma.
+    daily_request_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    per_account_daily_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[AIConnectionStatus] = mapped_column(
         SqlEnum(AIConnectionStatus, native_enum=False),
         default=AIConnectionStatus.AVAILABLE,
@@ -93,3 +97,40 @@ class AIConnection(Base):
             return False
         backoff = as_utc(self.backoff_until)
         return backoff is None or backoff <= utcnow()
+
+
+class AIUsageEvent(Base):
+    """Una llamada a un proveedor de IA (exitosa o fallida).
+
+    Sirve para aplicar límites de consumo y para el portal de plataforma.
+    No guarda prompts ni respuestas: solo metadatos.
+    """
+
+    __tablename__ = "ai_usage_events"
+    __table_args__ = (
+        Index("ix_ai_usage_events_connection_created", "connection_id", "created_at"),
+        Index("ix_ai_usage_events_account_created", "account_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    connection_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "ai_connections.id",
+            name="fk_ai_usage_events_connection_id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+    owner_type: Mapped[AIConnectionOwnerType] = mapped_column(
+        SqlEnum(AIConnectionOwnerType, native_enum=False)
+    )
+    provider: Mapped[str] = mapped_column(String(80))
+    account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id", name="fk_ai_usage_events_account_id"), nullable=True
+    )
+    operation: Mapped[str] = mapped_column(String(40))
+    success: Mapped[bool] = mapped_column(Boolean)
+    error_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )

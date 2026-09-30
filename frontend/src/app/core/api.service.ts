@@ -8,9 +8,11 @@ import {
   AuthConfig,
   ClassDetail,
   ClassSummary,
+  ConnectionDraft,
   ConnectionScope,
   Dashboard,
   Me,
+  PlatformOverview,
   ProviderInfo,
   TokenResponse
 } from './models';
@@ -66,20 +68,21 @@ export class ApiService {
     return this.http.get<AiConnection[]>(`${this.base}/ai/connections`, { params: { scope } });
   }
 
-  createConnection(body: {
-    provider: string;
-    name: string;
-    model: string | null;
-    apiKey: string | null;
-    priority: number;
-    scope: ConnectionScope;
-  }): Observable<AiConnection> {
+  createConnection(body: ConnectionDraft): Observable<AiConnection> {
     return this.http.post<AiConnection>(`${this.base}/ai/connections`, body);
   }
 
   updateConnection(
     id: number,
-    body: Partial<{ name: string; model: string; apiKey: string; priority: number; active: boolean }>
+    body: Partial<{
+      name: string;
+      model: string;
+      apiKey: string;
+      priority: number;
+      active: boolean;
+      dailyRequestLimit: number | null;
+      perAccountDailyLimit: number | null;
+    }>
   ): Observable<AiConnection> {
     return this.http.patch<AiConnection>(`${this.base}/ai/connections/${id}`, body);
   }
@@ -141,5 +144,10 @@ export class ApiService {
   // Progreso
   progress(): Observable<Dashboard> {
     return this.http.get<Dashboard>(`${this.base}/progress`);
+  }
+
+  // Plataforma (PLATFORM_OWNER)
+  platformOverview(): Observable<PlatformOverview> {
+    return this.http.get<PlatformOverview>(`${this.base}/platform/overview`);
   }
 }
