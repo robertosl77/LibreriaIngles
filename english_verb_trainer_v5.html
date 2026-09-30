@@ -1,0 +1,34 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>English Verb Trainer v5</title>
+<style>body{font-family:system-ui;background:#f4f6fb;color:#172033;margin:0;padding:28px}.wrap{max-width:900px;margin:auto}.card{background:#fff;padding:24px;border-radius:18px;margin-bottom:18px;box-shadow:0 8px 30px #0001}.row{display:flex;gap:12px;flex-wrap:wrap}.field{flex:1;min-width:190px}label{display:block;font-weight:700;margin-bottom:6px}input,select,button{font:inherit;padding:11px;border:1px solid #ccd3df;border-radius:10px}input,select{width:100%;box-sizing:border-box}button{background:#172033;color:white;font-weight:700;cursor:pointer}.secondary{background:white;color:#172033}.q{font-size:1.35rem;margin:20px 0}.muted{color:#667085}.ok{color:#087443;font-weight:700}.bad{color:#b42318;font-weight:700}.explain{background:#f7f8fa;padding:12px;border-radius:10px;margin-top:12px;display:none}</style></head>
+<body><div class="wrap"><div class="card"><h1>English Verb Trainer</h1>
+<p class="muted">Practicá presente simple, presente continuo, pasado simple y futuro simple. Arriba se indica tiempo, tipo y sujeto; vos reconstruís toda la estructura.</p>
+<div class="row"><div class="field"><label>Verbo base</label><input id="verb" value="go" placeholder="go o to go"></div>
+<div class="field"><label>Pasado (solo si es irregular)</label><input id="past" value="went" placeholder="went, wrote, ate..."></div>
+<div class="field"><label>Modo</label><select id="tense"><option value="mixed">Mezclar los 4 tiempos</option><option value="presentSimple">Presente simple</option><option value="presentContinuous">Presente continuo</option><option value="pastSimple">Pasado simple</option><option value="futureSimple">Futuro simple (will)</option></select></div></div>
+<p class="muted">Podés escribir <b>write</b> o <b>to write</b>. Para verbos regulares dejá el pasado vacío; para irregulares escribilo.</p><button id="start">Empezar / reiniciar</button></div>
+<div class="card"><div class="row" style="justify-content:space-between"><div id="meta"></div><b id="score">0 / 0</b></div><div class="q" id="question"></div>
+<div class="row"><input id="answer" placeholder="Escribí la estructura completa que falta" style="min-width:320px"><button id="check">Comprobar</button><button class="secondary" id="next">Siguiente</button></div>
+<div id="feedback" style="margin-top:14px"></div><div id="explain" class="explain"></div></div></div>
+<script>
+const subjects=["I","you","he","she","it","we","they"], names={presentSimple:"Presente simple",presentContinuous:"Presente continuo",pastSimple:"Pasado simple",futureSimple:"Futuro simple"};
+let current,right=0,total=0;
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+function regularPast(v){if(v.endsWith("e"))return v+"d";if(/[^aeiou]y$/.test(v))return v.slice(0,-1)+"ied";return v+"ed"}
+function third(v){if(/(s|sh|ch|x|z|o)$/.test(v))return v+"es";if(/[^aeiou]y$/.test(v))return v.slice(0,-1)+"ies";return v+"s"}
+function ing(v){if(v.endsWith("ie"))return v.slice(0,-2)+"ying";if(v.endsWith("e")&&!v.endsWith("ee"))return v.slice(0,-1)+"ing";return v+"ing"}
+const be=s=>s==="I"?"am":(["he","she","it"].includes(s)?"is":"are"), aux=s=>["he","she","it"].includes(s)?"does":"do";
+function getTense(){let t=document.getElementById("tense").value;return t==="mixed"?pick(Object.keys(names)):t}
+function make(){
+ let v=(document.getElementById("verb").value.trim().toLowerCase()||"go").replace(/^to\s+/,"").trim();
+ let rp=document.getElementById("past").value.trim().toLowerCase(),p=rp?rp.replace(/^to\s+/,"").trim():regularPast(v);
+ let s=pick(subjects),t=getTense(),type=pick(["affirmative","question","negative"]),expected,shown,why;
+ if(t==="presentSimple"){shown=`_____ every day${type==="question"?"?":"."}`;if(type==="affirmative"){expected=`${s} ${["he","she","it"].includes(s)?third(v):v}`;why="Rutina: he/she/it agrega -s/-es; los demás usan verbo base."}else if(type==="question"){expected=`${aux(s)} ${s.toLowerCase()} ${v}`;why="Pregunta: do/does + sujeto + verbo base."}else{expected=`${s} ${aux(s)} not ${v}`;why="Negación: sujeto + do/does not + verbo base."}}
+ else if(t==="presentContinuous"){shown=`_____ right now${type==="question"?"?":"."}`;if(type==="affirmative")expected=`${s} ${be(s)} ${ing(v)}`;else if(type==="question")expected=`${be(s)} ${s.toLowerCase()} ${ing(v)}`;else expected=`${s} ${be(s)} not ${ing(v)}`;why="Presente continuo: am/is/are + verbo-ing."}
+ else if(t==="pastSimple"){shown=`_____ yesterday${type==="question"?"?":"."}`;if(type==="affirmative"){expected=`${s} ${p}`;why=`Afirmación: usamos el pasado (${v} → ${p}).`}else if(type==="question"){expected=`did ${s.toLowerCase()} ${v}`;why="Pregunta: did + sujeto + verbo base."}else{expected=`${s} did not ${v}`;why="Negación: sujeto + did not + verbo base."}}
+ else{shown=`_____ tomorrow${type==="question"?"?":"."}`;if(type==="affirmative"){expected=`${s} will ${v}`;why="Futuro simple: sujeto + will + verbo base."}else if(type==="question"){expected=`will ${s.toLowerCase()} ${v}`;why="Pregunta: will + sujeto + verbo base."}else{expected=`${s} will not ${v}`;why="Negación: sujeto + will not + verbo base. También: won't."}}
+ current={expected,why};document.getElementById("meta").innerHTML=`<b>${names[t]}</b> · <b>${type==="affirmative"?"Afirmación":type==="question"?"Pregunta":"Negación"}</b> · Sujeto: <b>${s}</b>`;document.getElementById("question").textContent=shown;document.getElementById("answer").value="";document.getElementById("feedback").textContent="";document.getElementById("explain").style.display="none";document.getElementById("answer").focus()}
+function norm(x){return x.toLowerCase().trim().replace(/[?.!]/g,"").replace(/’/g,"'").replace(/\s+/g," ")}
+function variants(x){let a=[x,x.replace("do not","don't").replace("does not","doesn't").replace("did not","didn't").replace("is not","isn't").replace("are not","aren't").replace("will not","won't")];return a.map(norm)}
+function check(){let a=norm(document.getElementById("answer").value);if(!a)return;total++;let ok=variants(current.expected).includes(a);if(ok){right++;document.getElementById("feedback").innerHTML='<span class="ok">Correcto.</span>'}else document.getElementById("feedback").innerHTML=`<span class="bad">No.</span> Respuesta: <b>${current.expected}</b>`;document.getElementById("score").textContent=`${right} / ${total}`;let e=document.getElementById("explain");e.textContent=current.why;e.style.display="block"}
+document.getElementById("start").onclick=()=>{right=total=0;document.getElementById("score").textContent="0 / 0";make()};document.getElementById("next").onclick=make;document.getElementById("check").onclick=check;document.getElementById("answer").onkeydown=e=>{if(e.key==="Enter")check()};make();
+</script></body></html>
