@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Librería Inglés - Backend",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "cwd": "${workspaceFolder}/backend",
+      "args": [
+        "app.main:app",
+        "--reload"
+      ],
+      "subProcess": true,
+      "preLaunchTask": "Backend - Alembic upgrade"
+    }
+  ]
+}
