@@ -450,3 +450,18 @@ Por lo tanto, la base inicial del backend queda operativa con:
 - SQLite;
 - Alembic;
 - launch de VS Code.
+
+
+---
+
+# 13. Launch de VS Code y compatibilidad
+
+La configuración actual de `.vscode/launch.json` y `.vscode/tasks.json` utiliza explícitamente:
+
+```text
+backend/.venv/Scripts/python.exe
+```
+
+Por lo tanto, el launch actual está preparado para **Windows**.
+
+Esto es aceptado para la etapa local actual. Si se necesita Linux/macOS, deberá usarse una resolución portable del intérprete o una configuración específica por plataforma.
