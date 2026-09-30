@@ -8,6 +8,11 @@ from sqlalchemy.engine import make_url
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
+def escape_configparser_value(value: str) -> str:
+    """Escape percent signs before passing values through ConfigParser."""
+    return value.replace("%", "%%")
+
+
 class Settings(BaseSettings):
     app_name: str = "Libreria Ingles API"
     app_env: str = "local"

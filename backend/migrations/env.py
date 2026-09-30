@@ -3,7 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.core.config import settings
+from app.core.config import escape_configparser_value, settings
 from app.db import Base, ensure_database_directory
 import app.models  # noqa: F401
 
@@ -13,7 +13,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.resolved_database_url)
+# SQLAlchemy puede renderizar una ruta de Windows como E%3A/...
+# Alembic usa ConfigParser internamente, donde "%" activa interpolación.
+# Se escapa como "%%"; al leerla, ConfigParser devuelve nuevamente "%".
+config.set_main_option(
+    "sqlalchemy.url",
+    escape_configparser_value(settings.resolved_database_url),
+)
 target_metadata = Base.metadata
 
 
