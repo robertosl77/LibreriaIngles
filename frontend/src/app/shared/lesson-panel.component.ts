@@ -10,7 +10,7 @@ import { Lesson } from '../core/models';
     <section class="lesson" aria-label="Lección del tema">
       <header class="lesson-head">
         <div>
-          <p class="muted small">📘 Lección · {{ l.topic }}</p>
+          <p class="eyebrow">Lección · {{ l.topic }}</p>
           <h3>{{ l.title }}</h3>
         </div>
       </header>
@@ -75,6 +75,7 @@ import { Lesson } from '../core/models';
       background: #f3f6ff; border: 1px solid #c9d6ff; border-radius: 0.6rem; padding: 0.9rem 1rem;
     }
     .lesson p, .lesson h3 { margin: 0; }
+    .eyebrow { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #2f4ab3; }
     .lesson h3 { font-size: 1.05rem; }
     .rules { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.2rem; }
     .block { display: flex; flex-direction: column; gap: 0.3rem; }

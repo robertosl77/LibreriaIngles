@@ -132,7 +132,7 @@ const RESULT_LABELS: Record<string, string> = {
                 }
                 <span class="head-chips">
                   @if (exercise.assistance === 'LESSON') {
-                    <span class="chip" title="Respondido después de consultar la lección">📘 Con lección</span>
+                    <span class="chip chip-lesson" title="Respondido después de consultar la lección">Con lección</span>
                   }
                   @if (exercise.result; as r) {
                     <span [class]="scoreChip(r.score)">{{ resultLabels[r.result || 'incorrect'] }} · {{ r.score }}%</span>
@@ -158,13 +158,17 @@ const RESULT_LABELS: Record<string, string> = {
                   />
                 } @else {
                   <button
-                    class="btn-link small lesson-btn"
+                    class="lesson-btn"
                     type="button"
                     (click)="toggleLesson(exercise)"
                     [disabled]="lessonLoading() === exercise.id"
                   >
-                    @if (lessonLoading() === exercise.id) { <span class="spinner"></span> }
-                    📘 {{ editable() ? 'Necesito lección' : 'Ver lección del tema' }}
+                    @if (lessonLoading() === exercise.id) {
+                      <span class="spinner"></span>
+                    } @else {
+                      <svg class="book" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5A2.5 2.5 0 0 1 4 20.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                    }
+                    <span>{{ editable() ? 'Necesito lección' : 'Ver lección del tema' }}</span>
                   </button>
                 }
               }
@@ -285,7 +289,21 @@ const RESULT_LABELS: Record<string, string> = {
     .options { display: flex; flex-direction: column; gap: 0.4rem; }
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
-    .lesson-btn { align-self: flex-start; }
+    .lesson-btn {
+      align-self: flex-start;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.8rem;
+      font: inherit; font-size: 0.85rem; font-weight: 600;
+      color: #2f4ab3; background: #f3f6ff;
+      border: 1px solid #c9d6ff; border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .lesson-btn:hover:not(:disabled) { background: #e6ecff; border-color: #9fb4f5; }
+    .lesson-btn:focus-visible { outline: 2px solid #2f4ab3; outline-offset: 2px; }
+    .lesson-btn:disabled { opacity: 0.6; cursor: wait; }
+    .lesson-btn .book { flex: none; }
+    .chip-lesson { background: #f3f6ff; color: #2f4ab3; border: 1px solid #c9d6ff; }
     .head-chips { display: flex; gap: 0.4rem; margin-left: auto; flex-wrap: wrap; }
     .your-answer { margin: 0; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
     .feedback { gap: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.6rem; }
