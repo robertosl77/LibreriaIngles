@@ -11,6 +11,7 @@ import {
   ConnectionDraft,
   ConnectionScope,
   Dashboard,
+  LessonResponse,
   Me,
   ModelOption,
   PlatformOverview,
@@ -134,6 +135,14 @@ export class ApiService {
 
   retakeClass(classId: number): Observable<ClassDetail> {
     return this.http.post<ClassDetail>(`${this.base}/classes/${classId}/retake`, {});
+  }
+
+  /** "Necesito lección" (T-020): devuelve la lección y registra la ayuda si la clase está abierta. */
+  lesson(classId: number, exerciseId: number): Observable<LessonResponse> {
+    return this.http.post<LessonResponse>(
+      `${this.base}/classes/${classId}/exercises/${exerciseId}/lesson`,
+      {}
+    );
   }
 
   appeal(classId: number, exerciseId: number): Observable<ClassDetail> {

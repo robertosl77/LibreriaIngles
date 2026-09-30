@@ -88,6 +88,7 @@ const TREND: Record<string, string> = { up: '↑', down: '↓', stable: '→' };
                         <span class="muted small">
                           {{ skill.attemptCount }} intento(s) · confianza {{ confidence[skill.confidence] || skill.confidence }}
                           @if (skill.trend) { · {{ trend[skill.trend] }} }
+                          @if (skill.assistedRecent) { · {{ skill.assistedRecent }} reciente(s) con lección }
                         </span>
                       </div>
                       <div class="skill-score">

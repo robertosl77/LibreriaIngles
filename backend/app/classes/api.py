@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from app.ai.models import AIConnection
 from app.classes import generation, service
 from app.core.deps import CurrentStudy, DbSession
+from app.curriculum.lessons import get_lesson
 from app.learning.models import (
     Attempt,
     ClassSession,
@@ -86,6 +87,12 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 "passage": (exercise.content or {}).get("passage"),
                 "options": (exercise.content or {}).get("options"),
                 "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else ""),
+                "assistance": (
+                    attempt.assistance.value
+                    if attempt
+                    else (draft.assistance.value if draft else "NONE")
+                ),
+                "hasLesson": get_lesson(exercise.skill_key) is not None,
                 "result": _result_payload(attempt, exercise) if attempt else None,
             }
         )
@@ -227,6 +234,16 @@ def retake_class(class_id: int, study: CurrentStudy, db: DbSession) -> dict:
     except service.ClassStateError as exc:
         raise _conflict(exc)
     return _detail(db, session)
+
+
+@router.post("/{class_id}/exercises/{exercise_id}/lesson")
+def open_lesson(class_id: int, exercise_id: int, study: CurrentStudy, db: DbSession) -> dict:
+    """"Necesito lección": devuelve la lección del tema y registra la ayuda (T-020)."""
+    session = _get_class(db, study, class_id)
+    try:
+        return service.open_lesson(db, study, session, exercise_id)
+    except service.ClassStateError as exc:
+        raise _conflict(exc)
 
 
 @router.post("/{class_id}/exercises/{exercise_id}/appeal")

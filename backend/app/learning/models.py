@@ -53,6 +53,25 @@ class EvaluationSource(str, Enum):
     AI = "AI"
 
 
+class Assistance(str, Enum):
+    """Ayuda usada para responder un ejercicio (T-020; HINT queda para T-018).
+
+    Orden de "fuerza": una lección pesa más que una pista.
+    """
+
+    NONE = "NONE"
+    HINT = "HINT"
+    LESSON = "LESSON"
+
+
+ASSISTANCE_RANK = {Assistance.NONE: 0, Assistance.HINT: 1, Assistance.LESSON: 2}
+
+
+def stronger_assistance(current: "Assistance | str | None", new: Assistance) -> Assistance:
+    current = Assistance(current or Assistance.NONE)
+    return new if ASSISTANCE_RANK[new] > ASSISTANCE_RANK[current] else current
+
+
 class ClassSession(Base):
     __tablename__ = "class_sessions"
 
@@ -152,6 +171,11 @@ class DraftAnswer(Base):
         ForeignKey("accounts.id"), nullable=True
     )
     answer_text: Mapped[str] = mapped_column(Text, default="")
+    assistance: Mapped[Assistance] = mapped_column(
+        SqlEnum(Assistance, native_enum=False, length=20),
+        default=Assistance.NONE,
+        server_default=Assistance.NONE.value,
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
@@ -183,6 +207,12 @@ class Attempt(Base):
     attempt_number: Mapped[int] = mapped_column(Integer, default=1)
     raw_answer: Mapped[str] = mapped_column(Text)
     normalized_answer: Mapped[str] = mapped_column(Text)
+    # Si respondió después de consultar la lección (o una pista): no vale igual como evidencia.
+    assistance: Mapped[Assistance] = mapped_column(
+        SqlEnum(Assistance, native_enum=False, length=20),
+        default=Assistance.NONE,
+        server_default=Assistance.NONE.value,
+    )
     evaluation_source: Mapped[EvaluationSource | None] = mapped_column(
         SqlEnum(EvaluationSource, native_enum=False), nullable=True
     )
@@ -243,6 +273,9 @@ class StudySkillProgress(Base):
     confidence: Mapped[str] = mapped_column(String(32), default="low")
     status: Mapped[str] = mapped_column(String(20), default="LEARNING")
     trend: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Cuántos de los últimos intentos se respondieron con ayuda (lección/pista):
+    # el generador refuerza esas skills (T-020).
+    assisted_recent: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_practiced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -105,7 +105,29 @@ export interface Exercise {
   passage: string | null;
   options: string[] | null;
   answer: string;
+  assistance: Assistance;
+  hasLesson: boolean;
   result: ExerciseResult | null;
+}
+
+export type Assistance = 'NONE' | 'HINT' | 'LESSON';
+
+export interface Lesson {
+  skillKey: string;
+  topic: string | null;
+  skill: string | null;
+  title: string;
+  explanation: string;
+  rules: string[];
+  examples: { en: string; es: string }[];
+  commonMistakes: { wrong: string; right: string; why: string }[];
+  tip: string | null;
+}
+
+export interface LessonResponse {
+  exerciseId: number;
+  registered: boolean;
+  lesson: Lesson;
 }
 
 export interface ClassDetail {
@@ -134,6 +156,7 @@ export interface SkillProgress {
   confidence: string;
   status: 'NOT_STARTED' | 'LEARNING' | 'MASTERED' | 'NEEDS_REVIEW';
   trend: string | null;
+  assistedRecent: number;
 }
 
 export interface Dashboard {

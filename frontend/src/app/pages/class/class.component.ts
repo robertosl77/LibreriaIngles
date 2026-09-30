@@ -19,8 +19,9 @@ import {
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { ClassDetail, Exercise } from '../../core/models';
+import { ClassDetail, Exercise, Lesson } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { LessonPanelComponent } from '../../shared/lesson-panel.component';
 import { STATUS_LABELS, scoreChip, statusChip } from '../../shared/status';
 
 type SaveState = 'saving' | 'saved' | 'error';
@@ -41,7 +42,7 @@ const RESULT_LABELS: Record<string, string> = {
 
 @Component({
   selector: 'app-class',
-  imports: [FormsModule, RouterLink, DatePipe, NgTemplateOutlet],
+  imports: [FormsModule, RouterLink, DatePipe, NgTemplateOutlet, LessonPanelComponent],
   template: `
     <main class="page stack">
       @if (loading()) {
@@ -129,9 +130,14 @@ const RESULT_LABELS: Record<string, string> = {
                     }
                   </span>
                 }
-                @if (exercise.result; as r) {
-                  <span [class]="scoreChip(r.score)">{{ resultLabels[r.result || 'incorrect'] }} · {{ r.score }}%</span>
-                }
+                <span class="head-chips">
+                  @if (exercise.assistance === 'LESSON') {
+                    <span class="chip" title="Respondido después de consultar la lección">📘 Con lección</span>
+                  }
+                  @if (exercise.result; as r) {
+                    <span [class]="scoreChip(r.score)">{{ resultLabels[r.result || 'incorrect'] }} · {{ r.score }}%</span>
+                  }
+                </span>
               </header>
 
               @if (exercise.instruction) {
@@ -141,6 +147,27 @@ const RESULT_LABELS: Record<string, string> = {
                 <blockquote class="passage">{{ exercise.passage }}</blockquote>
               }
               <p class="question">{{ exercise.question }}</p>
+
+              @if (exercise.hasLesson) {
+                @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
+                  <app-lesson-panel
+                    [lesson]="lesson"
+                    [registered]="editable() && exercise.assistance === 'LESSON'"
+                    [editable]="editable()"
+                    (closed)="closeLesson()"
+                  />
+                } @else {
+                  <button
+                    class="btn-link small lesson-btn"
+                    type="button"
+                    (click)="toggleLesson(exercise)"
+                    [disabled]="lessonLoading() === exercise.id"
+                  >
+                    @if (lessonLoading() === exercise.id) { <span class="spinner"></span> }
+                    📘 {{ editable() ? 'Necesito lección' : 'Ver lección del tema' }}
+                  </button>
+                }
+              }
 
               @if (editable()) {
                 @switch (exercise.type) {
@@ -258,6 +285,8 @@ const RESULT_LABELS: Record<string, string> = {
     .options { display: flex; flex-direction: column; gap: 0.4rem; }
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
+    .lesson-btn { align-self: flex-start; }
+    .head-chips { display: flex; gap: 0.4rem; margin-left: auto; flex-wrap: wrap; }
     .your-answer { margin: 0; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
     .feedback { gap: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.6rem; }
     .feedback p { margin: 0; }
@@ -293,6 +322,10 @@ export class ClassComponent implements OnDestroy {
   readonly busy = signal(false);
   readonly answers = signal<Record<number, string>>({});
   readonly saveState = signal<Record<number, SaveState>>({});
+  /** Lecciones ya cargadas, por skill: una sola llamada por tema. */
+  readonly lessons = signal<Record<string, Lesson>>({});
+  readonly openLesson = signal<number | null>(null);
+  readonly lessonLoading = signal<number | null>(null);
 
   readonly editable = computed(() => {
     const status = this.klass()?.status;
@@ -357,6 +390,7 @@ export class ClassComponent implements OnDestroy {
     }
     this.answers.set(answers);
     this.saveState.set({});
+    this.openLesson.set(null);
     if (detail.notice) {
       this.toast.show(detail.notice);
     }
@@ -379,6 +413,50 @@ export class ClassComponent implements OnDestroy {
     this.answers.update((current) => ({ ...current, [exerciseId]: answer }));
     this.markSave(exerciseId, 'saving');
     this.edits.next({ exerciseId, answer, immediate });
+  }
+
+  lessonFor(exercise: Exercise): Lesson | null {
+    return exercise.skillKey ? (this.lessons()[exercise.skillKey] ?? null) : null;
+  }
+
+  closeLesson(): void {
+    this.openLesson.set(null);
+  }
+
+  /** "Necesito lección": se abre dentro del ejercicio; al cerrarla sigue respondiendo ahí. */
+  async toggleLesson(exercise: Exercise): Promise<void> {
+    const c = this.klass();
+    if (!c) {
+      return;
+    }
+    const alreadyRegistered = !this.editable() || exercise.assistance === 'LESSON';
+    if (this.lessonFor(exercise) && alreadyRegistered) {
+      this.openLesson.set(exercise.id);
+      return;
+    }
+    this.lessonLoading.set(exercise.id);
+    try {
+      const response = await firstValueFrom(this.api.lesson(c.id, exercise.id));
+      this.lessons.update((current) => ({ ...current, [response.lesson.skillKey]: response.lesson }));
+      if (response.registered) {
+        this.klass.update((detail) =>
+          detail
+            ? {
+                ...detail,
+                status: detail.status === 'READY' ? 'IN_PROGRESS' : detail.status,
+                exercises: detail.exercises.map((e) =>
+                  e.id === exercise.id ? { ...e, assistance: 'LESSON' } : e
+                )
+              }
+            : detail
+        );
+      }
+      this.openLesson.set(exercise.id);
+    } catch (err) {
+      this.toast.error(errorMessage(err, 'No se pudo cargar la lección.'));
+    } finally {
+      this.lessonLoading.set(null);
+    }
   }
 
   async submit(): Promise<void> {
