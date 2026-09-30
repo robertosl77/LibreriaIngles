@@ -99,13 +99,23 @@ export interface ExerciseResult {
 export interface Exercise {
   id: number;
   position: number;
-  type: 'fill_blank' | 'multiple_choice' | 'reading_multiple_choice' | 'rewrite' | 'short_writing';
+  type:
+    | 'fill_blank'
+    | 'multiple_choice'
+    | 'reading_multiple_choice'
+    | 'rewrite'
+    | 'short_writing';
   area: string | null;
   skillKey: string | null;
   skillName: string | null;
   instruction: string | null;
   question: string;
   passage: string | null;
+  /** Modalidades (T-025): el tipo no cambia; cambia cómo se presenta y cómo se responde. */
+  presentation: 'READ' | 'LISTEN';
+  response: 'WRITE' | 'SELECT' | 'SPEAK';
+  /** LISTEN: se sintetiza con voz y el texto se muestra recién tras la corrección. */
+  stimulus: { mode: 'READ' | 'LISTEN'; text: string; lang: string; rate: number } | null;
   options: string[] | null;
   answer: string;
   assistance: Assistance;
@@ -178,6 +188,8 @@ export interface Dashboard {
     attemptCount: number;
     topics: { key: string; name: string; score: number | null; skills: SkillProgress[] }[];
   }[];
+  /** Dimensión transversal: todo lo practicado escuchando (y hablando, cuando exista). */
+  modalities: { key: 'LISTEN' | 'SPEAK'; name: string; score: number | null; attemptCount: number }[];
 }
 
 export interface UsageCounts {
@@ -229,6 +241,7 @@ export interface ExamResult {
   passScore: number;
   areaMinScore: number;
   areas: ExamArea[];
+  modalities?: ExamArea[];
 }
 
 export interface ExamCheck {

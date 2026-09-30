@@ -16,6 +16,9 @@ EXERCISE_TYPES = {
     "short_writing",
 }
 
+# Modalidades de presentación (T-025): cualquier tipo puede leerse o escucharse.
+PRESENTATIONS = ("READ", "LISTEN")
+
 
 @dataclass(frozen=True)
 class Skill:
@@ -30,6 +33,8 @@ class Skill:
     objectives: tuple[str, ...]
     exercise_types: tuple[str, ...]
     examples: tuple[dict, ...] = field(default_factory=tuple)
+    # Cómo se puede presentar: por defecto leído o escuchado; ["LISTEN"] = solo escucha.
+    presentations: tuple[str, ...] = PRESENTATIONS
 
 
 @dataclass(frozen=True)
@@ -54,6 +59,9 @@ def _load_level(path: Path) -> LevelCurriculum:
                 unknown = set(types) - EXERCISE_TYPES
                 if unknown:
                     raise ValueError(f"Tipos de ejercicio desconocidos en {path.name}: {unknown}")
+                presentations = tuple(skill.get("presentations") or PRESENTATIONS)
+                if set(presentations) - set(PRESENTATIONS):
+                    raise ValueError(f"Presentación desconocida en {path.name}: {presentations}")
                 skills.append(
                     Skill(
                         key=".".join(
@@ -69,6 +77,7 @@ def _load_level(path: Path) -> LevelCurriculum:
                         objectives=tuple(skill["objectives"]),
                         exercise_types=types,
                         examples=tuple(skill.get("examples", [])),
+                        presentations=presentations,
                     )
                 )
     return LevelCurriculum(

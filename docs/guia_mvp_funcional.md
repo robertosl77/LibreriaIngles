@@ -171,8 +171,8 @@ Migración: `0005_assistance`.
 - **Cuándo se habilita** (tarjeta "Examen de nivel" en Inicio): haber practicado al menos el
   70 % de los temas del nivel y tener 70 % o más de promedio en lo practicado. Si no se cumple,
   la tarjeta muestra qué falta.
-- **El examen** es una sesión aparte (`class_sessions.kind = EXAM`): 12 ejercicios repartidos
-  por área (gramática 5, vocabulario 3, lectura 2, escritura 2), temas al azar del nivel,
+- **El examen** es una sesión aparte (`class_sessions.kind = EXAM`): 14 ejercicios repartidos
+  por área (gramática 5, vocabulario 3, listening 2, lectura 2, escritura 2), temas al azar del nivel,
   sin lecciones y sin "rehacer". Usa la misma generación, autoguardado y corrección que las
   clases (también la apelación). **No modifica el progreso** de las clases.
 - **Aprobación:** 70 % global **y** al menos 60 % en cada área (una debilidad no se compensa
@@ -189,6 +189,45 @@ Migración: `0005_assistance`.
   "próximamente".
 
 Migración: `0006_level_exams`.
+
+## 6.3 Listening como modalidad (T-025)
+
+Listening y Speaking **no son tipos de ejercicio**. Los tipos siguen siendo los mismos
+(`fill_blank`, `multiple_choice`, `rewrite`, `short_writing`, `reading_multiple_choice`); cambia
+**cómo se presenta** y **cómo se responde**:
+
+```text
+Exercise.presentation_mode : READ | LISTEN
+Exercise.response_mode     : WRITE | SELECT | SPEAK   (SPEAK: T-026)
+Attempt.response_mode      : modalidad con la que respondió efectivamente
+```
+
+- **Estímulo unificado:** con LISTEN, `content.stimulus` (+ `stimulusLang`, `stimulusRate`) es lo que
+  el alumno escucha; con READ se muestra escrito (pasaje) o no hay estímulo. La API expone
+  `presentation`, `response` y `stimulus {mode, text, lang, rate}`.
+- **Corrección igual:** la evaluación no mira la modalidad; a la IA se le informa `presentation` y
+  el `stimulus` como contexto.
+- **Motor:** cada ejercicio de una clase se presenta LISTEN con 30 % de probabilidad (si la skill lo
+  admite) y cada clase trae **al menos 1** escuchado. Ejemplos: completar la oración que se escucha,
+  elegir la opción sobre lo que se escuchó, reescribir la oración escuchada, responder por escrito
+  una pregunta oída.
+- **Currícula:** cada skill declara `presentations` (por defecto `["READ","LISTEN"]`). Los 4 temas de
+  comprensión auditiva de A1 (números/horas, datos personales, diálogos, instrucciones) son
+  `["LISTEN"]`.
+- **Validación:** con LISTEN el estímulo es obligatorio y no puede aparecer escrito en la consigna
+  (salvo `fill_blank`, donde la consigna es la misma oración con el hueco).
+- **Voz del navegador** (Web Speech API), sin costo ni API key; no se guarda audio (§15). Reproducir,
+  Lento/Normal. El texto se muestra recién en la corrección ("El audio decía: …").
+- **Transversal:**
+  - dashboard: sección **Por modalidad** (Escucha = todo lo practicado escuchando, con el mismo
+    cálculo que una skill); Habla aparece cuando exista práctica (T-026);
+  - examen: 14 ejercicios (incluye el área Listening) y **al menos 3 escuchados**; aprueba solo si
+    lo escuchado llega al 60 %; cada audio se escucha **2 veces**.
+- Limitación: el navegador necesita el texto para generar la voz (visible con herramientas de
+  desarrollo) y el límite de reproducciones se reinicia al recargar. Para el examen, a futuro,
+  generar el audio en el backend.
+
+Migración: `0007_modalities`.
 
 # 7. Flujo técnico
 

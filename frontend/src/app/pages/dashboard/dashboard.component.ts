@@ -48,6 +48,25 @@ const TREND: Record<string, string> = { up: '↑', down: '↓', stable: '→' };
           </div>
         </section>
 
+        @if (d.modalities.length) {
+          <section class="card">
+            <h2>Por modalidad</h2>
+            <p class="muted small">Todo lo que practicaste escuchando, sin importar el tema.</p>
+            <ul class="modalities">
+              @for (m of d.modalities; track m.key) {
+                <li>
+                  <span class="m-name">{{ m.name }}</span>
+                  <span class="m-bar"><span class="m-fill" [style.width.%]="m.score ?? 0"></span></span>
+                  <span class="m-score">
+                    @if (m.score === null) { — } @else { <strong>{{ m.score }}%</strong> }
+                    <span class="muted small"> · {{ m.attemptCount }} ejercicio(s)</span>
+                  </span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
         @if (d.weakest.length) {
           <section class="card">
             <h2>Para reforzar</h2>
@@ -106,6 +125,11 @@ const TREND: Record<string, string> = { up: '↑', down: '↓', stable: '→' };
     </main>
   `,
   styles: `
+    .modalities { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    .modalities li { display: grid; grid-template-columns: 7rem 1fr auto; gap: 0.8rem; align-items: center; }
+    .m-bar { height: 0.6rem; border-radius: 999px; background: var(--info-bg); position: relative; overflow: hidden; }
+    .m-fill { position: absolute; inset: 0 auto 0 0; background: #2f4ab3; border-radius: 999px; }
+
     .area-head, .topic-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
     .area-head h2 { margin: 0 0 0.5rem; }
     .topic { margin-top: 1.1rem; }

@@ -408,6 +408,126 @@
         {"wrong": "I am live in Rosario.", "right": "I live in Rosario.", "why": "No se mezcla 'am' con otro verbo en presente simple."}
       ],
       "tip": "Mejor oraciones cortas y correctas que una larga con errores."
+    },
+    "a1.listening.everyday_audio.numbers_times": {
+      "title": "Escuchar números, precios y horas",
+      "explanation": "En los audios los números suelen ser el dato clave. Antes de escuchar, mirá la pregunta para saber qué número buscás (hora, precio, edad).",
+      "rules": [
+        "Horas: eight o'clock (8:00), half past eight (8:30), a quarter past eight (8:15), a quarter to nine (8:45)",
+        "-teen vs -ty: thirteen (13) tiene acento al final; thirty (30) al principio",
+        "Precios: three dollars fifty = $3.50; 'pounds' = libras",
+        "Podés escribir el número con cifras o con letras: 26 o twenty-six"
+      ],
+      "examples": [
+        {
+          "en": "The shop opens at half past nine.",
+          "es": "El negocio abre a las 9:30."
+        },
+        {
+          "en": "It's fifteen dollars.",
+          "es": "Son 15 dólares."
+        },
+        {
+          "en": "The bus leaves at a quarter to seven.",
+          "es": "El colectivo sale a las 6:45."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "half past eight = 8:50",
+          "right": "half past eight = 8:30",
+          "why": "'half past' es y media."
+        },
+        {
+          "wrong": "fifty = 15",
+          "right": "fifteen = 15, fifty = 50",
+          "why": "Prestá atención a dónde cae el acento."
+        }
+      ],
+      "tip": "Si no llegaste a escuchar el número, volvé a reproducir el audio: en la práctica podés escucharlo las veces que quieras."
+    },
+    "a1.listening.everyday_audio.personal_info": {
+      "title": "Escuchar datos personales",
+      "explanation": "En una presentación la información aparece casi siempre en el mismo orden: nombre, edad, país o ciudad, trabajo.",
+      "rules": [
+        "Nombre: I'm... / My name is...",
+        "Edad: I'm twenty years old.",
+        "Origen: I'm from... / I live in...",
+        "Deletreo: B-A-K-E-R (repasá cómo suenan las letras en inglés: A /ei/, E /i:/, I /ai/)"
+      ],
+      "examples": [
+        {
+          "en": "Hi, I'm Tom. I'm from Ireland.",
+          "es": "Hola, soy Tom. Soy de Irlanda."
+        },
+        {
+          "en": "My surname is Smith, S-M-I-T-H.",
+          "es": "Mi apellido es Smith, S-M-I-T-H."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "Confundir 'I'm from' (origen) con 'I live in' (donde vive)",
+          "right": "from = de dónde es; live in = dónde vive",
+          "why": "Pueden ser lugares distintos."
+        }
+      ],
+      "tip": "Leé la pregunta antes de escuchar y esperá la palabra clave (years, from, name)."
+    },
+    "a1.listening.everyday_audio.short_dialogues": {
+      "title": "Entender diálogos cortos",
+      "explanation": "No hace falta entender cada palabra: buscá la idea principal (qué piden, adónde van, cómo están).",
+      "rules": [
+        "Pedir: Can I have...? / I'd like..., please.",
+        "Ofrecer: Anything else? / Would you like...?",
+        "Proponer: Let's go to... / Are you free on...?",
+        "Aceptar / rechazar: Great idea! / Sure. / No, thank you."
+      ],
+      "examples": [
+        {
+          "en": "Can I have a coffee, please? — Sure.",
+          "es": "¿Me das un café? — Claro."
+        },
+        {
+          "en": "Let's go to the park. — Great idea!",
+          "es": "Vamos al parque. — ¡Buena idea!"
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "Elegir la opción que menciona una palabra que escuchaste",
+          "right": "Elegir la opción que coincide con todo lo que se dijo",
+          "why": "Las opciones incorrectas suelen repetir palabras del audio para confundir."
+        }
+      ],
+      "tip": "Escuchá hasta el final: a veces la respuesta cambia (No, thank you / Actually...)."
+    },
+    "a1.listening.everyday_audio.instructions": {
+      "title": "Entender instrucciones simples",
+      "explanation": "Las instrucciones empiezan con el verbo (imperativo). Identificá el verbo y el objeto.",
+      "rules": [
+        "Verbos frecuentes: open / close, read / write, listen / look, sit down / stand up",
+        "Please al principio o al final: Please close the door. / Close the door, please.",
+        "Negativo: Don't + verbo: Don't open the window."
+      ],
+      "examples": [
+        {
+          "en": "Open your books at page ten.",
+          "es": "Abran los libros en la página 10."
+        },
+        {
+          "en": "Don't use your phone.",
+          "es": "No usen el teléfono."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "open ↔ close",
+          "right": "open = abrir; close = cerrar",
+          "why": "Son opuestos y suenan distinto: /oupen/ vs /klouz/."
+        }
+      ],
+      "tip": "Prestá atención a 'don't': cambia todo el sentido de la instrucción."
     }
   }
 }

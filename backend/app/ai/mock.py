@@ -18,6 +18,23 @@ _FAILURES = {
 }
 
 
+def _listen_version(example: dict) -> dict:
+    """Adapta un ejemplo escrito a presentación LISTEN (solo para el simulado)."""
+    question = example.get("question", "")
+    answers = example.get("acceptedAnswers") or []
+    kind = example.get("type")
+    if kind == "fill_blank" and answers:
+        return {"stimulus": question.replace("___", answers[0], 1).split(" (")[0]}
+    if kind in ("multiple_choice", "reading_multiple_choice"):
+        if example.get("passage"):
+            return {"stimulus": example["passage"], "passage": None}
+        if answers and "___" in question:
+            return {"stimulus": question.replace("___", answers[0], 1)}
+        return {"stimulus": question, "question": "Choose the correct option for what you hear."}
+    # rewrite / short_writing: se escucha la oración o la pregunta y no se muestra escrita.
+    return {"stimulus": question, "question": "Listen and do the task with what you hear."}
+
+
 class MockProvider:
     def __init__(self, model: str = "mock"):
         self.model = model
@@ -54,6 +71,8 @@ class MockProvider:
                 continue
             example = dict(rng.choice(examples))
             example["skillKey"] = slot["skillKey"]
+            if slot.get("presentation") == "LISTEN" and not example.get("stimulus"):
+                example.update(_listen_version(example))
             exercises.append(example)
         return {"title": f"Clase {task['level']} · práctica mixta", "exercises": exercises}
 

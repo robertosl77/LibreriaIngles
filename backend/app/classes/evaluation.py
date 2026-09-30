@@ -180,6 +180,10 @@ def _ai_payload(exercise: Exercise, answer: str) -> dict:
         "instruction": exercise.instruction,
         "question": exercise.prompt,
         "passage": (exercise.content or {}).get("passage"),
+        # Modalidades (T-025): con LISTEN, el estímulo lo escuchó (no lo vio escrito).
+        "presentation": exercise.presentation_mode.value if exercise.presentation_mode else "READ",
+        "response": exercise.response_mode.value if exercise.response_mode else "WRITE",
+        "stimulus": (exercise.content or {}).get("stimulus"),
         "options": (exercise.content or {}).get("options"),
         "referenceAnswers": exercise.answer_key.get("acceptedAnswers") or [],
         "expectedConcepts": exercise.expected_concepts or [],

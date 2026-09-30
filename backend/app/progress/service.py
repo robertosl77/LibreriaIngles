@@ -216,7 +216,52 @@ def dashboard(db: Session, study_profile_id: int, level: str) -> dict:
         "skillsTotal": len(curriculum.skills),
         "weakest": weakest,
         "areas": result_areas,
+        "modalities": modality_progress(db, study_profile_id, level),
     }
+
+
+MODALITY_NAMES = {"LISTEN": "Escucha", "SPEAK": "Habla"}
+
+
+def modality_progress(db: Session, study_profile_id: int, level: str) -> list[dict]:
+    """Dimensión transversal (T-025): todo lo practicado escuchando (y, más adelante, hablando),
+    sin importar la habilidad. Mismo cálculo que una skill (EMA con peso por ayuda)."""
+    rows = db.execute(
+        select(Attempt.score, Attempt.assistance, Attempt.response_mode, Exercise.presentation_mode)
+        .join(Exercise, Exercise.id == Attempt.exercise_id)
+        .join(ClassSession, ClassSession.id == Exercise.class_session_id)
+        .where(
+            Attempt.study_profile_id == study_profile_id,
+            Attempt.score.is_not(None),
+            Exercise.level == level,
+            ClassSession.kind == SessionKind.CLASS,
+        )
+        .order_by(Attempt.evaluated_at, Attempt.id)
+    ).all()
+    buckets: dict[str, tuple[list[float], list[float]]] = {"LISTEN": ([], []), "SPEAK": ([], [])}
+    for row in rows:
+        weight = 1.0 if (row.assistance or Assistance.NONE) == Assistance.NONE else ASSISTED_WEIGHT
+        keys = []
+        if row.presentation_mode and row.presentation_mode.value == "LISTEN":
+            keys.append("LISTEN")
+        if row.response_mode and row.response_mode.value == "SPEAK":
+            keys.append("SPEAK")
+        for key in keys:
+            buckets[key][0].append(float(row.score))
+            buckets[key][1].append(weight)
+    result = []
+    for key, (scores, weights) in buckets.items():
+        if key == "SPEAK" and not scores:
+            continue  # Habla aparece cuando exista práctica (T-026).
+        result.append(
+            {
+                "key": key,
+                "name": MODALITY_NAMES[key],
+                "score": round(_ema(scores, weights), 1) if scores else None,
+                "attemptCount": len(scores),
+            }
+        )
+    return result
 
 
 def skill_name(skill_key: str | None) -> str | None:

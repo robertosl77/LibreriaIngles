@@ -411,6 +411,229 @@
       ]
     },
     {
+      "key": "listening",
+      "name": "Listening",
+      "topics": [
+        {
+          "key": "everyday_audio",
+          "name": "Audios cotidianos",
+          "skills": [
+            {
+              "key": "numbers_times",
+              "name": "Números, precios y horas",
+              "objectives": [
+                "entender números, precios y horas en frases cortas"
+              ],
+              "exerciseTypes": [
+                "fill_blank",
+                "multiple_choice"
+              ],
+              "presentations": ["LISTEN"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Listen and complete with the time.",
+                  "question": "The train to London leaves at ___.",
+                  "stimulus": "Good morning. The next train to London leaves at half past eight.",
+                  "acceptedAnswers": [
+                    "half past eight",
+                    "8:30",
+                    "8.30",
+                    "eight thirty"
+                  ],
+                  "commonErrors": [
+                    {
+                      "answer": "half past nine",
+                      "feedback": "Escuchá de nuevo: dice 'half past eight' (8:30).",
+                      "conceptResults": [
+                        {
+                          "concept": "listening_numbers",
+                          "status": "incorrect"
+                        }
+                      ]
+                    }
+                  ],
+                  "expectedConcepts": [
+                    "listening_numbers"
+                  ]
+                },
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Listen and choose the correct answer.",
+                  "question": "How much is the coffee?",
+                  "stimulus": "The coffee is three dollars and the cake is five dollars.",
+                  "options": [
+                    "$3",
+                    "$5",
+                    "$8"
+                  ],
+                  "acceptedAnswers": [
+                    "$3"
+                  ],
+                  "commonErrors": [],
+                  "expectedConcepts": [
+                    "listening_numbers"
+                  ]
+                }
+              ]
+            },
+            {
+              "key": "personal_info",
+              "name": "Datos personales",
+              "objectives": [
+                "entender nombre, edad, país y deletreo en una presentación"
+              ],
+              "exerciseTypes": [
+                "fill_blank",
+                "multiple_choice"
+              ],
+              "presentations": ["LISTEN"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Listen and complete with a number.",
+                  "question": "Laura is ___ years old.",
+                  "stimulus": "Hi, I'm Laura. I'm twenty-six years old and I'm from Canada.",
+                  "acceptedAnswers": [
+                    "26",
+                    "twenty-six",
+                    "twenty six"
+                  ],
+                  "commonErrors": [],
+                  "expectedConcepts": [
+                    "listening_personal_info"
+                  ]
+                },
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Listen and choose the correct answer.",
+                  "question": "Where is Laura from?",
+                  "stimulus": "Hi, I'm Laura. I'm twenty-six years old and I'm from Canada.",
+                  "options": [
+                    "Canada",
+                    "Australia",
+                    "England"
+                  ],
+                  "acceptedAnswers": [
+                    "Canada"
+                  ],
+                  "commonErrors": [],
+                  "expectedConcepts": [
+                    "listening_personal_info"
+                  ]
+                }
+              ]
+            },
+            {
+              "key": "short_dialogues",
+              "name": "Diálogos cortos",
+              "objectives": [
+                "entender la idea principal de un diálogo cotidiano breve (saludar, comprar, pedir comida)"
+              ],
+              "exerciseTypes": [
+                "multiple_choice"
+              ],
+              "presentations": ["LISTEN"],
+              "examples": [
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Listen to the conversation and choose the correct answer.",
+                  "question": "What does the customer order?",
+                  "stimulus": "Can I have a cheese sandwich and an orange juice, please? Sure. Anything else? No, thank you.",
+                  "options": [
+                    "A cheese sandwich and an orange juice",
+                    "A cheese sandwich and a coffee",
+                    "A ham sandwich and an orange juice"
+                  ],
+                  "acceptedAnswers": [
+                    "A cheese sandwich and an orange juice"
+                  ],
+                  "commonErrors": [],
+                  "expectedConcepts": [
+                    "listening_main_idea"
+                  ]
+                },
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Listen to the conversation and choose the correct answer.",
+                  "question": "Where are they going on Saturday?",
+                  "stimulus": "Are you free on Saturday? Yes, why? Let's go to the cinema. Great idea!",
+                  "options": [
+                    "To the cinema",
+                    "To the park",
+                    "To the beach"
+                  ],
+                  "acceptedAnswers": [
+                    "To the cinema"
+                  ],
+                  "commonErrors": [],
+                  "expectedConcepts": [
+                    "listening_main_idea"
+                  ]
+                }
+              ]
+            },
+            {
+              "key": "instructions",
+              "name": "Instrucciones simples",
+              "objectives": [
+                "entender instrucciones simples de clase o de la vida diaria"
+              ],
+              "exerciseTypes": [
+                "fill_blank",
+                "multiple_choice"
+              ],
+              "presentations": ["LISTEN"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Listen and complete the instruction.",
+                  "question": "Please ___ the window.",
+                  "stimulus": "Please close the window. It's cold in here.",
+                  "acceptedAnswers": [
+                    "close"
+                  ],
+                  "commonErrors": [
+                    {
+                      "answer": "open",
+                      "feedback": "Dice 'close' (cerrar): hace frío.",
+                      "conceptResults": [
+                        {
+                          "concept": "listening_instructions",
+                          "status": "incorrect"
+                        }
+                      ]
+                    }
+                  ],
+                  "expectedConcepts": [
+                    "listening_instructions"
+                  ]
+                },
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Listen and choose the correct answer.",
+                  "question": "Which page do the students open?",
+                  "stimulus": "Open your books at page twelve and read the text.",
+                  "options": [
+                    "Page 12",
+                    "Page 20",
+                    "Page 2"
+                  ],
+                  "acceptedAnswers": [
+                    "Page 12"
+                  ],
+                  "commonErrors": [],
+                  "expectedConcepts": [
+                    "listening_instructions"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
       "key": "reading",
       "name": "Reading",
       "topics": [

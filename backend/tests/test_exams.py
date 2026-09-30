@@ -25,7 +25,7 @@ def _setup(client, email: str = "roberto@example.com") -> dict:
     return headers
 
 
-def _make_eligible(client, headers, *, skills: int = 15, score: float = 80) -> None:
+def _make_eligible(client, headers, *, skills: int = 18, score: float = 80) -> None:
     profile_id = client.get(f"{API}/me", headers=headers).json()["studyProfile"]["id"]
     with SessionLocal() as db:
         for skill in get_level("A1").skills[:skills]:
@@ -81,8 +81,11 @@ def test_pass_exam_issues_verifiable_certificate(client) -> None:
     assert exam["kind"] == "EXAM"
     assert exam["status"] == "READY"
     assert exam["title"] == "Examen de nivel A1"
-    assert len(exam["exercises"]) == 12
-    assert {e["area"] for e in exam["exercises"]} == {"grammar", "vocabulary", "reading", "writing"}
+    assert len(exam["exercises"]) == sum(service.EXAM_BLUEPRINT.values())
+    assert {e["area"] for e in exam["exercises"]} == set(service.EXAM_BLUEPRINT)
+    listened = [e for e in exam["exercises"] if e["presentation"] == "LISTEN"]
+    assert len(listened) >= service.EXAM_MIN_LISTEN
+    assert all(e["stimulus"]["text"] for e in listened)
     assert all(e["hasLesson"] is False for e in exam["exercises"])
 
     # Un solo examen abierto a la vez; sin lecciones.
@@ -103,7 +106,9 @@ def test_pass_exam_issues_verifiable_certificate(client) -> None:
     result = submitted["examResult"]
     assert result["passed"] is True
     assert result["score"] >= service.PASS_SCORE
-    assert {a["key"] for a in result["areas"]} == {"grammar", "vocabulary", "reading", "writing"}
+    assert {a["key"] for a in result["areas"]} == set(service.EXAM_BLUEPRINT)
+    assert [m["key"] for m in result["modalities"]] == ["LISTEN"]
+    assert result["modalities"][0]["items"] >= service.EXAM_MIN_LISTEN
     code = submitted["certificateCode"]
     assert code and code.startswith("LI-A1-")
 
@@ -177,9 +182,12 @@ def test_area_minimum_is_required_even_with_good_average(client) -> None:
         for attempt, exercise in rows:
             attempt.score = 40 if exercise.area == "writing" else 100
         db.commit()
-        # Promedio (10×100 + 2×40)/12 = 90, pero escritura queda en 40 < mínimo por área.
+        # Promedio alto (≈91 %), pero escritura queda en 40 < mínimo por área.
         result = service.finalize_exam(db, session)
-    assert result["score"] == 90
+    total = sum(service.EXAM_BLUEPRINT.values())
+    writing_items = service.EXAM_BLUEPRINT["writing"]
+    assert result["score"] == round(((total - writing_items) * 100 + writing_items * 40) / total, 1)
+    assert result["score"] >= service.PASS_SCORE
     assert result["passed"] is False
     writing = next(a for a in result["areas"] if a["key"] == "writing")
     assert writing["passed"] is False
@@ -191,3 +199,42 @@ def test_exam_of_other_account_is_not_accessible(client) -> None:
     exam = client.post(f"{API}/exams", headers=headers).json()
     other = login(client, "otra@example.com")
     assert client.get(f"{API}/classes/{exam['id']}", headers=other).status_code == 404
+
+
+def test_listening_modality_minimum_is_required(client) -> None:
+    """Todas las áreas aprueban, pero lo escuchado queda debajo del mínimo → no aprueba."""
+    from app.learning.models import PresentationMode
+
+    headers = _setup(client)
+    _make_eligible(client, headers)
+    exam = client.post(f"{API}/exams", headers=headers).json()
+    client.post(
+        f"{API}/classes/{exam['id']}/submit",
+        json={"answers": _answers(exam, correct=True)},
+        headers=headers,
+    )
+    with SessionLocal() as db:
+        session = db.get(ClassSession, exam["id"])
+        rows = db.execute(
+            select(Attempt, Exercise)
+            .join(Exercise, Exercise.id == Attempt.exercise_id)
+            .where(Exercise.class_session_id == session.id)
+        ).all()
+        flipped = set()
+        for attempt, exercise in rows:
+            attempt.score = 100
+            if exercise.area == "listening":
+                continue  # 2 ítems escuchados al 100 %
+            exercise.presentation_mode = PresentationMode.READ
+            # Un ejercicio de gramática y uno de vocabulario escuchados, ambos mal.
+            if exercise.area in ("grammar", "vocabulary") and exercise.area not in flipped:
+                exercise.presentation_mode = PresentationMode.LISTEN
+                attempt.score = 0
+                flipped.add(exercise.area)
+        db.commit()
+        result = service.finalize_exam(db, session)
+    assert all(a["passed"] for a in result["areas"])
+    assert result["score"] >= service.PASS_SCORE
+    listen = next(m for m in result["modalities"] if m["key"] == "LISTEN")
+    assert listen["score"] == 50 and listen["passed"] is False
+    assert result["passed"] is False

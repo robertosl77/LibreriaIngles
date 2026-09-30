@@ -21,7 +21,9 @@ from app.learning.models import (
     ClassSessionStatus,
     EvaluationMode,
     Exercise,
+    PresentationMode,
     SessionKind,
+    default_response_mode,
 )
 from app.progress.service import progress_by_skill
 
@@ -34,6 +36,12 @@ EVALUATION_MODE_BY_TYPE = {
     "rewrite": EvaluationMode.HYBRID,
     "short_writing": EvaluationMode.AI,
 }
+
+# Velocidad sugerida de la voz por nivel (1.0 = normal del navegador).
+AUDIO_RATE_BY_LEVEL = {"A1": 0.85, "A2": 0.9, "B1": 0.95}
+STIMULUS_MAX = 600
+# Porción de ejercicios que se presentan escuchando (si la skill lo admite).
+LISTEN_SHARE = 0.3
 
 
 class GenerationFailed(Exception):
@@ -78,10 +86,33 @@ def select_slots(
         chosen[-1] = rng.choices(others, weights=[_weight(s, progress) for s in others])[0]
 
     # Orden pedagógico: gramática y vocabulario primero, escritura al final.
-    area_order = {"grammar": 0, "vocabulary": 1, "reading": 2, "writing": 3}
+    area_order = {"grammar": 0, "vocabulary": 1, "listening": 2, "reading": 3, "writing": 4}
     chosen.sort(key=lambda s: area_order.get(s.area_key, 9))
 
-    return [slot_for(skill, rng) for skill in chosen]
+    slots = [slot_for(skill, rng) for skill in chosen]
+    ensure_listening(slots, skills, 1, rng)
+    return slots
+
+
+def _presentation_for(skill: Skill, rng) -> str:
+    if "READ" not in skill.presentations:
+        return "LISTEN"
+    if "LISTEN" in skill.presentations and rng.random() < LISTEN_SHARE:
+        return "LISTEN"
+    return "READ"
+
+
+def ensure_listening(slots: list[dict], skills: list[Skill], minimum: int, rng) -> None:
+    """Garantiza al menos `minimum` ejercicios escuchados, pasando a LISTEN slots que lo admitan."""
+    by_key = {s.key: s for s in skills}
+    missing = minimum - sum(1 for s in slots if s["presentation"] == "LISTEN")
+    candidates = [
+        s for s in slots
+        if s["presentation"] == "READ" and "LISTEN" in by_key[s["skillKey"]].presentations
+    ]
+    rng.shuffle(candidates)
+    for slot in candidates[: max(0, missing)]:
+        slot["presentation"] = "LISTEN"
 
 
 def slot_for(skill: Skill, rng) -> dict:
@@ -100,6 +131,9 @@ def slot_for(skill: Skill, rng) -> dict:
         "skill": skill.name,
         "objectives": list(skill.objectives),
         "allowedTypes": [exercise_type],
+        # Modalidades (T-025): el tipo no cambia; cambia cómo se presenta y se responde.
+        "presentation": _presentation_for(skill, rng),
+        "response": default_response_mode(exercise_type).value,
         "example": example,
         # Solo para el proveedor simulado.
         "examples": [e for e in skill.examples if e.get("type") == exercise_type]
@@ -122,6 +156,7 @@ class ExerciseOut(BaseModel):
     instruction: str = ""
     question: str
     passage: str | None = None
+    stimulus: str | None = None
     options: list[str] | None = None
     acceptedAnswers: list[str] = []
     commonErrors: list[CommonErrorOut] = []
@@ -144,6 +179,18 @@ def _validate_exercise(raw: dict, slot: dict) -> ExerciseOut | None:
     if item.skillKey != slot["skillKey"] or item.type not in slot["allowedTypes"]:
         return None
     item.acceptedAnswers = [a.strip() for a in item.acceptedAnswers if a and a.strip()]
+    if slot.get("presentation") == "LISTEN":
+        # El estímulo se escucha: es obligatorio y no puede aparecer escrito en la consigna.
+        stimulus = (item.stimulus or item.passage or "").strip()
+        if not stimulus or len(stimulus) > STIMULUS_MAX:
+            return None
+        if item.type != "fill_blank" and normalize_answer(stimulus) in normalize_answer(
+            f"{item.instruction} {item.question} {' '.join(item.options or [])}"
+        ):
+            return None
+        item.stimulus, item.passage = stimulus, None
+    else:
+        item.stimulus = None
     if item.type in ("multiple_choice", "reading_multiple_choice"):
         options = [o.strip() for o in item.options or [] if o and o.strip()]
         if len(options) < 2:
@@ -154,7 +201,11 @@ def _validate_exercise(raw: dict, slot: dict) -> ExerciseOut | None:
         if len(correct) != 1:
             return None
         item.options, item.acceptedAnswers = options, correct
-        if item.type == "reading_multiple_choice" and not (item.passage or "").strip():
+        if (
+            item.type == "reading_multiple_choice"
+            and slot.get("presentation") != "LISTEN"
+            and not (item.passage or "").strip()
+        ):
             return None
     elif item.type == "fill_blank":
         if item.question.count(BLANK) != 1 or not item.acceptedAnswers:
@@ -184,6 +235,18 @@ def _match_slots(exercises: list, slots: list[dict]) -> list[tuple[dict, Exercis
 
 
 # ---------------------------------------------------------------- flujo
+
+
+def _content(item: ExerciseOut, level: str | None) -> dict:
+    content = {"options": item.options, "passage": item.passage}
+    if item.stimulus:
+        # LISTEN: se guarda el texto y la reproducción; el audio se regenera (documento funcional §15).
+        content.update(
+            stimulus=item.stimulus,
+            stimulusLang="en-US",
+            stimulusRate=AUDIO_RATE_BY_LEVEL.get(level or "", 1.0),
+        )
+    return {k: v for k, v in content.items() if v}
 
 
 def _enough(session: ClassSession, slots: list[dict], matched: list) -> bool:
@@ -268,11 +331,9 @@ def generate_content(
                 exercise_type=item.type,
                 instruction=item.instruction,
                 prompt=item.question,
-                content={
-                    k: v
-                    for k, v in {"options": item.options, "passage": item.passage}.items()
-                    if v
-                },
+                content=_content(item, request.get("level")),
+                presentation_mode=PresentationMode(slot.get("presentation", "READ")),
+                response_mode=default_response_mode(item.type),
                 expected_concepts=item.expectedConcepts,
                 answer_key={
                     "acceptedAnswers": item.acceptedAnswers,

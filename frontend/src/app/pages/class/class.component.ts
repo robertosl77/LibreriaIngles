@@ -21,6 +21,7 @@ import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ClassDetail, Exercise, Lesson } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { AudioPlayerComponent } from '../../shared/audio-player.component';
 import { LessonPanelComponent } from '../../shared/lesson-panel.component';
 import { STATUS_LABELS, scoreChip, statusChip } from '../../shared/status';
 
@@ -34,6 +35,9 @@ const TYPE_LABELS: Record<Exercise['type'], string> = {
   short_writing: 'Escritura'
 };
 
+/** En el examen cada audio se puede escuchar dos veces (en la práctica, sin límite). */
+const EXAM_MAX_PLAYS = 2;
+
 const RESULT_LABELS: Record<string, string> = {
   correct: 'Correcto',
   partially_correct: 'Parcial',
@@ -42,7 +46,7 @@ const RESULT_LABELS: Record<string, string> = {
 
 @Component({
   selector: 'app-class',
-  imports: [FormsModule, RouterLink, DatePipe, NgTemplateOutlet, LessonPanelComponent],
+  imports: [FormsModule, RouterLink, DatePipe, NgTemplateOutlet, LessonPanelComponent, AudioPlayerComponent],
   template: `
     <main class="page stack">
       @if (loading()) {
@@ -113,7 +117,7 @@ const RESULT_LABELS: Record<string, string> = {
                 </div>
               </div>
               <ul class="area-bars">
-                @for (area of r.areas; track area.key) {
+                @for (area of examRows(r); track area.key) {
                   <li>
                     <span class="area-name">{{ area.name }}</span>
                     <span class="bar" [attr.aria-label]="area.name + ' ' + area.score + '%'">
@@ -162,7 +166,7 @@ const RESULT_LABELS: Record<string, string> = {
           @for (exercise of c.exercises; track exercise.id; let i = $index) {
             <article class="card exercise" [class]="resultClass(exercise)">
               <header class="exercise-head">
-                <span class="muted small">{{ i + 1 }}. {{ typeLabels[exercise.type] }} · {{ exercise.skillName }}</span>
+                <span class="muted small">{{ i + 1 }}. {{ typeLabels[exercise.type] }}@if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> } · {{ exercise.skillName }}</span>
                 @if (editable() && saveState()[exercise.id]; as state) {
                   <span class="small muted">
                     @switch (state) {
@@ -187,6 +191,14 @@ const RESULT_LABELS: Record<string, string> = {
               }
               @if (exercise.passage) {
                 <blockquote class="passage">{{ exercise.passage }}</blockquote>
+              }
+              @if (exercise.presentation === 'LISTEN' && exercise.stimulus; as stimulus) {
+                <app-audio-player
+                  [text]="stimulus.text"
+                  [lang]="stimulus.lang"
+                  [rate]="stimulus.rate"
+                  [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
+                />
               }
               <p class="question">{{ exercise.question }}</p>
 
@@ -223,6 +235,7 @@ const RESULT_LABELS: Record<string, string> = {
                   @case ('reading_multiple_choice') {
                     <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
                   }
+
                   @case ('short_writing') {
                     <textarea
                       class="input"
@@ -241,7 +254,7 @@ const RESULT_LABELS: Record<string, string> = {
                       spellcheck="false"
                       [ngModel]="answers()[exercise.id]"
                       (ngModelChange)="onAnswer(exercise.id, $event)"
-                      [placeholder]="exercise.type === 'fill_blank' ? 'Palabra(s) que completan el espacio' : 'Escribí la oración completa'"
+                      [placeholder]="exercise.type === 'rewrite' ? 'Escribí la oración completa' : 'Palabra(s) que completan el espacio'"
                     />
                   }
                 }
@@ -255,6 +268,9 @@ const RESULT_LABELS: Record<string, string> = {
               @if (exercise.result; as r) {
                 <div class="feedback stack">
                   @if (r.feedback) { <p>{{ r.feedback }}</p> }
+                  @if (exercise.presentation === 'LISTEN' && exercise.stimulus) {
+                    <p class="small transcript"><span class="muted">El audio decía: </span><em lang="en">“{{ exercise.stimulus.text }}”</em></p>
+                  }
                   @if (r.correctAnswer && r.result !== 'correct') {
                     <p class="small"><span class="muted">Respuesta correcta: </span><strong>{{ r.correctAnswer }}</strong></p>
                   }
@@ -331,6 +347,7 @@ const RESULT_LABELS: Record<string, string> = {
     .options { display: flex; flex-direction: column; gap: 0.4rem; }
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
+    .transcript em { font-style: normal; }
     .lesson-btn {
       align-self: flex-start;
       display: inline-flex; align-items: center; gap: 0.4rem;
@@ -360,7 +377,8 @@ const RESULT_LABELS: Record<string, string> = {
     .verdict { font-weight: 700; }
     .exam-result.ok .verdict { color: var(--ok); }
     .area-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-    .area-bars li { display: grid; grid-template-columns: 7rem 1fr 3.5rem; align-items: center; gap: 0.8rem; }
+    .modality { color: #2f4ab3; font-weight: 600; }
+    .area-bars li { display: grid; grid-template-columns: minmax(7rem, 14rem) 1fr 3.5rem; align-items: center; gap: 0.8rem; }
     .area-bars strong { text-align: right; }
     .bar { position: relative; height: 0.6rem; border-radius: 999px; background: var(--info-bg); }
     .bar .fill { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: var(--ok); }
@@ -386,6 +404,7 @@ export class ClassComponent implements OnDestroy {
 
   readonly labels = STATUS_LABELS;
   readonly typeLabels = TYPE_LABELS;
+  readonly examMaxPlays = EXAM_MAX_PLAYS;
   readonly resultLabels = RESULT_LABELS;
   readonly statusChip = statusChip;
   readonly scoreChip = scoreChip;
@@ -486,6 +505,14 @@ export class ClassComponent implements OnDestroy {
     this.answers.update((current) => ({ ...current, [exerciseId]: answer }));
     this.markSave(exerciseId, 'saving');
     this.edits.next({ exerciseId, answer, immediate });
+  }
+
+  /** Áreas + modalidades transversales (Escucha) en las barras del resultado del examen. */
+  examRows(result: NonNullable<ClassDetail['examResult']>) {
+    return [
+      ...result.areas,
+      ...(result.modalities ?? []).map((m) => ({ ...m, key: 'modality-' + m.key, name: m.name + ' (todo lo escuchado)' }))
+    ];
   }
 
   lessonFor(exercise: Exercise): Lesson | null {
