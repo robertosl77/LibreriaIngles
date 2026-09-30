@@ -22,7 +22,7 @@ button.secondary{background:white;color:#172033}.question{font-size:1.35rem;marg
 <div class="wrap">
   <div class="card">
     <h1>English Verb Trainer</h1>
-    <p class="muted">Escribí un verbo y practicá presente simple, presente continuo y pasado simple. El ejercicio mezcla afirmaciones, preguntas y negaciones. El sujeto siempre queda visible; vos completás únicamente el verbo o la estructura verbal.</p>
+    <p class="muted">Escribí un verbo y practicá presente simple, presente continuo y pasado simple. El ejercicio mezcla afirmaciones, preguntas y negaciones. Arriba se indica el tiempo, el tipo de oración y el sujeto. La frase no muestra la posición del sujeto ni de los auxiliares: vos reconstruís toda la estructura.</p>
     <div class="row">
       <div class="field">
         <label>Verbo base</label>
@@ -53,7 +53,7 @@ button.secondary{background:white;color:#172033}.question{font-size:1.35rem;marg
     </div>
     <div class="question" id="question"></div>
     <div class="row">
-      <input class="answer" id="answer" autocomplete="off" placeholder="Completá únicamente el espacio">
+      <input class="answer" id="answer" autocomplete="off" placeholder="Escribí la estructura completa que falta">
       <button id="check">Comprobar</button>
       <button class="secondary" id="next">Siguiente</button>
     </div>
@@ -99,43 +99,53 @@ function make(){
  const p=(rawP ? rawP.replace(/^to\s+/, "").trim() : regularPast(v));
  const s=pick(subjects), t=getTense(), type=pick(["affirmative","question","negative"]);
  let expected, shown, why;
+
  if(t==="presentSimple"){
    if(type==="affirmative"){
-     expected=["he","she","it"].includes(s)?third(v):v;
-     shown=`${s} _____ every day.`;
+     const form=["he","she","it"].includes(s)?third(v):v;
+     expected=`${s} ${form}`;
+     shown=`_____ every day.`;
      why=`Es rutina. En presente simple, he/she/it agrega -s/-es; los demás usan el verbo base.`;
    } else if(type==="question"){
-     expected=`${aux(s)} ${v}`;
-     shown=`${s} _____ every day?`;
+     expected=`${aux(s)} ${s.toLowerCase()} ${v}`;
+     shown=`_____ every day?`;
      why=`Pregunta en presente simple: do/does + sujeto + verbo base. Después de does NO usamos -s.`;
    } else {
-     expected=`${aux(s)} not ${v}`;
-     shown=`${s} _____ every day.`;
+     expected=`${s} ${aux(s)} not ${v}`;
+     shown=`_____ every day.`;
      why=`Negación en presente simple: sujeto + do/does + not + verbo base.`;
    }
  } else if(t==="presentContinuous"){
    if(type==="affirmative"){
-     expected=`${be(s)} ${ing(v)}`; shown=`${s} _____ right now.`;
+     expected=`${s} ${be(s)} ${ing(v)}`;
+     shown=`_____ right now.`;
    } else if(type==="question"){
-     expected=`${be(s)} ${ing(v)}`; shown=`${s} _____ right now?`;
+     expected=`${be(s)} ${s.toLowerCase()} ${ing(v)}`;
+     shown=`_____ right now?`;
    } else {
-     expected=`${be(s)} not ${ing(v)}`; shown=`${s} _____ right now.`;
+     expected=`${s} ${be(s)} not ${ing(v)}`;
+     shown=`_____ right now.`;
    }
    why=`Está ocurriendo ahora: to be (am/is/are) + verbo-ing. En preguntas, am/is/are va antes del sujeto.`;
  } else {
    if(type==="affirmative"){
-     expected=p; shown=`${s} _____ yesterday.`;
+     expected=`${s} ${p}`;
+     shown=`_____ yesterday.`;
      why=`Acción terminada: pasado simple. En afirmativo usamos el pasado del verbo (${v} → ${p}).`;
    } else if(type==="question"){
-     expected=`did ${v}`; shown=`${s} _____ yesterday?`;
+     expected=`did ${s.toLowerCase()} ${v}`;
+     shown=`_____ yesterday?`;
      why=`Pregunta en pasado: did + sujeto + verbo BASE. El pasado ya está marcado por did.`;
    } else {
-     expected=`did not ${v}`; shown=`${s} _____ yesterday.`;
+     expected=`${s} did not ${v}`;
+     shown=`_____ yesterday.`;
      why=`Negación en pasado: sujeto + did not + verbo BASE. No usamos el pasado después de did.`;
    }
  }
- current={expected,why,t,type,v,p};
- document.getElementById("meta").textContent=`${names[t]} · ${type==="affirmative"?"Afirmación":type==="question"?"Pregunta":"Negación"}`;
+
+ current={expected,why,t,type,v,p,s};
+ const typeName=type==="affirmative"?"Afirmación":type==="question"?"Pregunta":"Negación";
+ document.getElementById("meta").innerHTML=`<b>${names[t]}</b> · <b>${typeName}</b> · Sujeto: <b>${s}</b>`;
  document.getElementById("question").textContent=shown;
  document.getElementById("answer").value="";
  document.getElementById("feedback").textContent="";
