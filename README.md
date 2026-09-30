@@ -6,7 +6,7 @@ La implementación se guía por los documentos funcionales y técnicos incluidos
 
 ## Rama de desarrollo actual
 
-`feat/mvp-foundation-v0.1`
+`fix/mvp-funcional` (sobre `feat/mvp-foundation-v0.1`)
 
 La rama `main` no se modifica directamente durante el desarrollo.
 
@@ -44,9 +44,11 @@ uvicorn app.main:app --reload
 API: http://localhost:8000  
 Swagger: http://localhost:8000/docs
 
-La guía completa está en:
+Guías:
 
-`docs/guia_desarrollo_local.md`
+- `docs/guia_desarrollo_backend.md` — preparar y levantar el backend.
+- `docs/guia_desarrollo_frontend.md` — preparar y levantar el frontend.
+- `docs/guia_mvp_funcional.md` — configurar login, IA y probar el flujo completo.
 
 ## Estado v0.1
 
@@ -65,4 +67,16 @@ La base actual incluye:
 - endpoints de health/meta;
 - landing inicial.
 
-Todavía no implementa autenticación real, pagos ni proveedores de IA.
+## Estado MVP funcional
+
+Sobre esa base, la app ya se puede usar de punta a punta con una cuenta personal:
+
+- login con Google (y login de desarrollo en local);
+- elección de nivel y currícula A1 como datos;
+- conexiones de IA propias (OpenAI, Gemini, Anthropic) con failover y backoff;
+- clases generadas por IA, autoguardado, evaluación híbrida, apelación y rehacer;
+- progreso por skill, dashboard e historial.
+
+Detalle, configuración y pendientes: `docs/guia_mvp_funcional.md`.
+
+Todavía no implementa organizaciones/ADMIN, pagos, audio ni niveles A2–C2.
