@@ -9,7 +9,7 @@ os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
 os.environ["DEV_LOGIN_ENABLED"] = "true"
 os.environ["MOCK_AI_ENABLED"] = "true"
 os.environ["JWT_SECRET"] = "test-secret-with-at-least-32-bytes!!"
-os.environ["PLATFORM_OWNER_EMAILS"] = "sr.macros@gmail.com"
+os.environ["PLATFORM_OWNER_EMAILS"] = "owner@example.com"
 
 
 @pytest.fixture()

@@ -1,5 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
@@ -17,6 +17,7 @@ const DESCRIPTIONS: Record<string, string> = {
 
 @Component({
   selector: 'app-level',
+  imports: [RouterLink],
   template: `
     <main class="page">
       <div class="page-header">
@@ -52,6 +53,7 @@ const DESCRIPTIONS: Record<string, string> = {
       <p class="muted small diag">
         El diagnóstico adaptativo llega en una próxima etapa. Por ahora la currícula disponible es A1.
       </p>
+      <a class="btn" routerLink="/app">{{ current() ? 'Volver al inicio' : 'Ahora no, ir al inicio' }}</a>
     </main>
   `,
   styles: `
