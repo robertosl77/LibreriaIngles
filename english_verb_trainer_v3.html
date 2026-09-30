@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>English Verb Trainer</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#172033;background:#f4f6fb}
+*{box-sizing:border-box} body{margin:0;padding:28px}
+.wrap{max-width:900px;margin:auto}.card{background:white;border-radius:18px;padding:24px;box-shadow:0 8px 30px #00000012;margin-bottom:18px}
+h1{margin:0 0 8px} h2{margin-top:0}.muted{color:#667085}.row{display:flex;gap:12px;flex-wrap:wrap}
+label{font-weight:650;display:block;margin-bottom:6px}.field{flex:1;min-width:180px}
+input,select,button{font:inherit;border:1px solid #cfd5e1;border-radius:10px;padding:11px 12px}
+input,select{width:100%}button{cursor:pointer;font-weight:700;background:#172033;color:white}
+button.secondary{background:white;color:#172033}.question{font-size:1.35rem;margin:18px 0}
+.answer{max-width:280px}.ok{color:#087443;font-weight:700}.bad{color:#b42318;font-weight:700}
+.explain{background:#f7f8fa;border-radius:10px;padding:12px;margin-top:12px;display:none}
+.score{font-weight:700}.tiny{font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>English Verb Trainer</h1>
+    <p class="muted">Escribí un verbo y practicá presente simple, presente continuo y pasado simple. El ejercicio mezcla afirmaciones, preguntas y negaciones. El sujeto siempre queda visible; vos completás únicamente el verbo o la estructura verbal.</p>
+    <div class="row">
+      <div class="field">
+        <label>Verbo base</label>
+        <input id="verb" value="go" placeholder="go o to go; write o to write...">
+      </div>
+      <div class="field">
+        <label>Pasado (solo si es irregular)</label>
+        <input id="past" value="went" placeholder="went, drove, drank...">
+      </div>
+      <div class="field">
+        <label>Modo</label>
+        <select id="tense">
+          <option value="mixed">Mezclar los 3 tiempos</option>
+          <option value="presentSimple">Presente simple</option>
+          <option value="presentContinuous">Presente continuo</option>
+          <option value="pastSimple">Pasado simple</option>
+        </select>
+      </div>
+    </div>
+    <p class="tiny muted">Podés escribir el verbo como <b>write</b> o <b>to write</b>: el entrenador elimina “to” automáticamente. Para verbos regulares dejá “Pasado” vacío: work → worked. Para irregulares escribilo: write → wrote, go → went.</p>
+    <button id="start">Empezar / reiniciar</button>
+  </div>
+
+  <div class="card" id="game">
+    <div class="row" style="justify-content:space-between">
+      <div id="meta" class="muted"></div>
+      <div class="score" id="score">0 / 0</div>
+    </div>
+    <div class="question" id="question"></div>
+    <div class="row">
+      <input class="answer" id="answer" autocomplete="off" placeholder="Completá únicamente el espacio">
+      <button id="check">Comprobar</button>
+      <button class="secondary" id="next">Siguiente</button>
+    </div>
+    <div id="feedback" style="margin-top:14px"></div>
+    <div class="explain" id="explain"></div>
+  </div>
+</div>
+
+<script>
+const subjects=["I","you","he","she","it","we","they"];
+const names={presentSimple:"Presente simple",presentContinuous:"Presente continuo",pastSimple:"Pasado simple"};
+let current=null, right=0,total=0;
+
+function regularPast(v){
+ if(v.endsWith("e")) return v+"d";
+ if(/[^aeiou]y$/.test(v)) return v.slice(0,-1)+"ied";
+ return v+"ed";
+}
+function third(v){
+ if(/(s|sh|ch|x|z|o)$/.test(v)) return v+"es";
+ if(/[^aeiou]y$/.test(v)) return v.slice(0,-1)+"ies";
+ return v+"s";
+}
+function ing(v){
+ if(v.endsWith("ie")) return v.slice(0,-2)+"ying";
+ if(v.endsWith("e") && !v.endsWith("ee")) return v.slice(0,-1)+"ing";
+ return v+"ing";
+}
+function be(s){return s==="I"?"am":(["he","she","it"].includes(s)?"is":"are")}
+function aux(s){return ["he","she","it"].includes(s)?"does":"do"}
+function contractionBe(s){
+ let b=be(s); return b==="am"?"am not":b==="is"?"isn't":"aren't";
+}
+function pick(a){return a[Math.floor(Math.random()*a.length)]}
+function getTense(){
+ const t=document.getElementById("tense").value;
+ return t==="mixed"?pick(["presentSimple","presentContinuous","pastSimple"]):t;
+}
+function make(){
+ const rawV=document.getElementById("verb").value.trim().toLowerCase()||"go";
+ const v=rawV.replace(/^to\s+/, "").trim();
+ const rawP=document.getElementById("past").value.trim().toLowerCase();
+ const p=(rawP ? rawP.replace(/^to\s+/, "").trim() : regularPast(v));
+ const s=pick(subjects), t=getTense(), type=pick(["affirmative","question","negative"]);
+ let expected, shown, why;
+ if(t==="presentSimple"){
+   if(type==="affirmative"){
+     expected=["he","she","it"].includes(s)?third(v):v;
+     shown=`${s} _____ every day.`;
+     why=`Es rutina. En presente simple, he/she/it agrega -s/-es; los demás usan el verbo base.`;
+   } else if(type==="question"){
+     expected=`${aux(s)} ${v}`;
+     shown=`${s} _____ every day?`;
+     why=`Pregunta en presente simple: do/does + sujeto + verbo base. Después de does NO usamos -s.`;
+   } else {
+     expected=`${aux(s)} not ${v}`;
+     shown=`${s} _____ every day.`;
+     why=`Negación en presente simple: sujeto + do/does + not + verbo base.`;
+   }
+ } else if(t==="presentContinuous"){
+   if(type==="affirmative"){
+     expected=`${be(s)} ${ing(v)}`; shown=`${s} _____ right now.`;
+   } else if(type==="question"){
+     expected=`${be(s)} ${ing(v)}`; shown=`${s} _____ right now?`;
+   } else {
+     expected=`${be(s)} not ${ing(v)}`; shown=`${s} _____ right now.`;
+   }
+   why=`Está ocurriendo ahora: to be (am/is/are) + verbo-ing. En preguntas, am/is/are va antes del sujeto.`;
+ } else {
+   if(type==="affirmative"){
+     expected=p; shown=`${s} _____ yesterday.`;
+     why=`Acción terminada: pasado simple. En afirmativo usamos el pasado del verbo (${v} → ${p}).`;
+   } else if(type==="question"){
+     expected=`did ${v}`; shown=`${s} _____ yesterday?`;
+     why=`Pregunta en pasado: did + sujeto + verbo BASE. El pasado ya está marcado por did.`;
+   } else {
+     expected=`did not ${v}`; shown=`${s} _____ yesterday.`;
+     why=`Negación en pasado: sujeto + did not + verbo BASE. No usamos el pasado después de did.`;
+   }
+ }
+ current={expected,why,t,type,v,p};
+ document.getElementById("meta").textContent=`${names[t]} · ${type==="affirmative"?"Afirmación":type==="question"?"Pregunta":"Negación"}`;
+ document.getElementById("question").textContent=shown;
+ document.getElementById("answer").value="";
+ document.getElementById("feedback").textContent="";
+ document.getElementById("explain").style.display="none";
+ document.getElementById("answer").focus();
+}
+function normalize(x){return x.toLowerCase().trim().replace(/[?.!]/g,"").replace(/\s+/g," ").replace(/’/g,"'")}
+function alternatives(x){
+ let a=[x];
+ a.push(x.replace("do not","don't").replace("does not","doesn't").replace("did not","didn't").replace("is not","isn't").replace("are not","aren't"));
+ return a.map(normalize);
+}
+function check(){
+ if(!current)return;
+ const ans=normalize(document.getElementById("answer").value);
+ if(!ans)return;
+ total++;
+ const ok=alternatives(current.expected).includes(ans);
+ if(ok){right++;document.getElementById("feedback").innerHTML='<span class="ok">Correcto.</span>'}
+ else document.getElementById("feedback").innerHTML=`<span class="bad">No.</span> Respuesta: <b>${current.expected}</b>`;
+ document.getElementById("score").textContent=`${right} / ${total}`;
+ const e=document.getElementById("explain"); e.textContent=current.why; e.style.display="block";
+}
+document.getElementById("start").onclick=()=>{right=0;total=0;document.getElementById("score").textContent="0 / 0";make()};
+document.getElementById("check").onclick=check;
+document.getElementById("next").onclick=make;
+document.getElementById("answer").addEventListener("keydown",e=>{if(e.key==="Enter")check()});
+make();
+</script>
+</body>
+</html>
