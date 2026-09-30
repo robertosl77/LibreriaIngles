@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 from app.accounts.models import Account, PlatformRole
 from app.ai.models import AIConnection, AIConnectionOwnerType, AIConnectionStatus
 from app.ai.providers import PROVIDERS
-from app.ai.service import check_connection
+from app.ai.models import utcnow
+from app.ai.service import LIMIT_WINDOW, check_connection, successful_requests
 from app.core.config import settings
 from app.core.deps import CurrentAccount, DbSession
 from app.core.security import encrypt_secret, mask_secret
@@ -24,6 +25,9 @@ class ConnectionCreate(BaseModel):
     apiKey: str | None = Field(default=None, max_length=2000)
     priority: int = Field(default=100, ge=1, le=10_000)
     scope: Scope = "account"
+    # Límites de 24 h: solo para conexiones de plataforma.
+    dailyRequestLimit: int | None = Field(default=None, ge=1, le=1_000_000)
+    perAccountDailyLimit: int | None = Field(default=None, ge=1, le=1_000_000)
 
 
 class ConnectionUpdate(BaseModel):
@@ -32,6 +36,9 @@ class ConnectionUpdate(BaseModel):
     apiKey: str | None = Field(default=None, max_length=2000)
     priority: int | None = Field(default=None, ge=1, le=10_000)
     active: bool | None = None
+    # Enviar null explícito borra el límite.
+    dailyRequestLimit: int | None = Field(default=None, ge=1, le=1_000_000)
+    perAccountDailyLimit: int | None = Field(default=None, ge=1, le=1_000_000)
 
 
 def _is_platform_owner(account: Account) -> bool:
@@ -46,7 +53,25 @@ def _owner_filter(account: Account, scope: Scope):
     return AIConnectionOwnerType.ACCOUNT, account.id
 
 
-def _serialize(connection: AIConnection) -> dict:
+LIMIT_FIELDS = {
+    "dailyRequestLimit": "daily_request_limit",
+    "perAccountDailyLimit": "per_account_daily_limit",
+}
+
+
+def _reject_limits_outside_platform(owner_type: AIConnectionOwnerType, payload: BaseModel) -> None:
+    if owner_type == AIConnectionOwnerType.PLATFORM:
+        return
+    if any(getattr(payload, f) is not None for f in LIMIT_FIELDS):
+        raise HTTPException(422, "Los límites de consumo solo aplican a conexiones de plataforma.")
+
+
+def _serialize(connection: AIConnection, db=None) -> dict:
+    usage = (
+        successful_requests(db, connection.id, since=utcnow() - LIMIT_WINDOW)
+        if db is not None
+        else None
+    )
     return {
         "id": connection.id,
         "scope": "platform"
@@ -64,6 +89,9 @@ def _serialize(connection: AIConnection) -> dict:
         "lastCheckAt": connection.last_check_at,
         "lastUsedAt": connection.last_used_at,
         "lastErrorCode": connection.last_error_code,
+        "dailyRequestLimit": connection.daily_request_limit,
+        "perAccountDailyLimit": connection.per_account_daily_limit,
+        "usage24h": usage,
     }
 
 
@@ -108,7 +136,7 @@ def list_connections(
         else AIConnection.owner_id == owner_id
     )
     rows = db.scalars(query.order_by(AIConnection.priority, AIConnection.id)).all()
-    return [_serialize(c) for c in rows]
+    return [_serialize(c, db) for c in rows]
 
 
 @router.post("/connections", status_code=status.HTTP_201_CREATED)
@@ -123,6 +151,7 @@ def create_connection(
         raise HTTPException(422, "Falta la API key.")
 
     owner_type, owner_id = _owner_filter(account, payload.scope)
+    _reject_limits_outside_platform(owner_type, payload)
     connection = AIConnection(
         owner_type=owner_type,
         owner_id=owner_id,
@@ -132,6 +161,8 @@ def create_connection(
         priority=payload.priority,
         active=True,
         status=AIConnectionStatus.AVAILABLE,
+        daily_request_limit=payload.dailyRequestLimit,
+        per_account_daily_limit=payload.perAccountDailyLimit,
     )
     if payload.apiKey:
         key = payload.apiKey.strip()
@@ -141,8 +172,8 @@ def create_connection(
     db.commit()
 
     # Documento funcional §26.3: al agregar una conexión, probarla de inmediato.
-    ok, error = check_connection(db, connection)
-    return {**_serialize(connection), "test": {"ok": ok, "error": error}}
+    ok, error = check_connection(db, connection, account)
+    return {**_serialize(connection, db), "test": {"ok": ok, "error": error}}
 
 
 @router.patch("/connections/{connection_id}")
@@ -153,6 +184,10 @@ def update_connection(
     db: DbSession,
 ) -> dict:
     connection = _get_owned(db, account, connection_id)
+    _reject_limits_outside_platform(connection.owner_type, payload)
+    for field_name, column in LIMIT_FIELDS.items():
+        if field_name in payload.model_fields_set:
+            setattr(connection, column, getattr(payload, field_name))
     if payload.name is not None:
         connection.name = payload.name.strip()
     if payload.model is not None:
@@ -170,9 +205,9 @@ def update_connection(
     db.commit()
 
     if credentials_changed or payload.model is not None:
-        ok, error = check_connection(db, connection)
-        return {**_serialize(connection), "test": {"ok": ok, "error": error}}
-    return _serialize(connection)
+        ok, error = check_connection(db, connection, account)
+        return {**_serialize(connection, db), "test": {"ok": ok, "error": error}}
+    return _serialize(connection, db)
 
 
 @router.delete("/connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -185,5 +220,5 @@ def delete_connection(connection_id: int, account: CurrentAccount, db: DbSession
 @router.post("/connections/{connection_id}/test")
 def test_connection(connection_id: int, account: CurrentAccount, db: DbSession) -> dict:
     connection = _get_owned(db, account, connection_id)
-    ok, error = check_connection(db, connection)
-    return {**_serialize(connection), "test": {"ok": ok, "error": error}}
+    ok, error = check_connection(db, connection, account)
+    return {**_serialize(connection, db), "test": {"ok": ok, "error": error}}

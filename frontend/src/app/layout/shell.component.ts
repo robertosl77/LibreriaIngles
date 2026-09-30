@@ -15,6 +15,9 @@ import { AuthService } from '../core/auth.service';
           <a routerLink="/app/progreso" routerLinkActive="active">Progreso</a>
           <a routerLink="/app/historial" routerLinkActive="active">Historial</a>
           <a routerLink="/app/ia" routerLinkActive="active">IA</a>
+          @if (auth.me()?.account?.isPlatformOwner) {
+            <a routerLink="/app/plataforma" routerLinkActive="active">Plataforma</a>
+          }
         </nav>
         <div class="user">
           @if (auth.me(); as me) {

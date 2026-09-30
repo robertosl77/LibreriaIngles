@@ -28,3 +28,14 @@ export const guestGuard: CanActivateFn = () => {
   const auth = inject(AuthService);
   return auth.isLoggedIn() ? inject(Router).createUrlTree(['/app']) : true;
 };
+
+export const platformOwnerGuard: CanActivateFn = async () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  try {
+    const me = auth.me() ?? (await auth.refreshMe());
+    return me.account.isPlatformOwner ? true : router.createUrlTree(['/app']);
+  } catch {
+    return router.createUrlTree(['/login']);
+  }
+};
