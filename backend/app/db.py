@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 
@@ -10,28 +12,31 @@ class Base(DeclarativeBase):
     pass
 
 
-def _connect_args() -> dict[str, object]:
-    if settings.database_url.startswith("sqlite"):
-        return {"check_same_thread": False}
-    return {}
+def ensure_database_directory() -> None:
+    url = make_url(settings.resolved_database_url)
+
+    if url.get_backend_name() != "sqlite":
+        return
+
+    if not url.database or url.database == ":memory:":
+        return
+
+    Path(url.database).parent.mkdir(parents=True, exist_ok=True)
 
 
-if settings.database_url.startswith("sqlite"):
-    Path("data").mkdir(parents=True, exist_ok=True)
+def _engine_options() -> dict[str, object]:
+    url = make_url(settings.resolved_database_url)
+    options: dict[str, object] = {"pool_pre_ping": True}
 
-engine = create_engine(
-    settings.database_url,
-    connect_args=_connect_args(),
-    pool_pre_ping=True,
-)
+    if url.get_backend_name() == "sqlite":
+        options["connect_args"] = {"check_same_thread": False}
+
+        if url.database == ":memory:":
+            options["poolclass"] = StaticPool
+
+    return options
+
+
+engine = create_engine(settings.resolved_database_url, **_engine_options())
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-
-
-def init_db() -> None:
-    # Importa modelos antes de crear el esquema.
-    # En producción AUTO_CREATE_SCHEMA se desactivará y Alembic
-    # será la única vía de migración.
-    import app.models  # noqa: F401
-
-    Base.metadata.create_all(bind=engine)

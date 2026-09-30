@@ -1,7 +1,15 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -56,6 +64,9 @@ class Account(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    google_subject: Mapped[str | None] = mapped_column(
+        String(255), unique=True, nullable=True, index=True
+    )
     account_type: Mapped[AccountType] = mapped_column(
         SqlEnum(AccountType, native_enum=False), index=True
     )
@@ -68,8 +79,12 @@ class Account(Base):
     )
     document_country: Mapped[str | None] = mapped_column(String(2), nullable=True)
     document_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    document_number: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    document_number: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
 
 class Organization(Base):
@@ -85,18 +100,28 @@ class Organization(Base):
     phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
     logo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
 
 class Membership(Base):
     __tablename__ = "memberships"
     __table_args__ = (
-        UniqueConstraint("account_id", "organization_id", name="uq_membership_account_org"),
+        UniqueConstraint(
+            "account_id",
+            "organization_id",
+            name="uq_membership_account_org",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
-    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), index=True
+    )
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
     role: Mapped[MembershipRole] = mapped_column(
         SqlEnum(MembershipRole, native_enum=False),
         default=MembershipRole.STUDENT,
@@ -105,14 +130,28 @@ class Membership(Base):
         SqlEnum(MembershipStatus, native_enum=False),
         default=MembershipStatus.ACTIVE,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
 
 class Invitation(Base):
     __tablename__ = "invitations"
+    __table_args__ = (
+        Index(
+            "uq_pending_invitation_org_email",
+            "organization_id",
+            "email",
+            unique=True,
+            sqlite_where=text("status = 'PENDING'"),
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    organization_id: Mapped[int] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
     email: Mapped[str] = mapped_column(String(320), index=True)
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -120,11 +159,18 @@ class Invitation(Base):
         SqlEnum(MembershipRole, native_enum=False),
         default=MembershipRole.STUDENT,
     )
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     status: Mapped[InvitationStatus] = mapped_column(
         SqlEnum(InvitationStatus, native_enum=False),
         default=InvitationStatus.PENDING,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
 
 class StudyProfile(Base):
@@ -135,15 +181,21 @@ class StudyProfile(Base):
         SqlEnum(StudyProfileStatus, native_enum=False),
         default=StudyProfileStatus.ACTIVE,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
 
 class AccountStudyProfile(Base):
     __tablename__ = "account_study_profiles"
 
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id"), primary_key=True
+    )
     study_profile_id: Mapped[int] = mapped_column(
         ForeignKey("study_profiles.id"), primary_key=True
     )
-    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    linked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
     link_method: Mapped[str] = mapped_column(String(40), default="INITIAL")
