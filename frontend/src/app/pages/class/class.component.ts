@@ -21,6 +21,7 @@ import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ClassDetail, Exercise, Lesson } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { AudioPlayerComponent } from '../../shared/audio-player.component';
 import { LessonPanelComponent } from '../../shared/lesson-panel.component';
 import { STATUS_LABELS, scoreChip, statusChip } from '../../shared/status';
 
@@ -31,8 +32,13 @@ const TYPE_LABELS: Record<Exercise['type'], string> = {
   multiple_choice: 'Opción múltiple',
   reading_multiple_choice: 'Lectura',
   rewrite: 'Reescribir',
-  short_writing: 'Escritura'
+  short_writing: 'Escritura',
+  listening_multiple_choice: 'Escucha',
+  listening_fill_blank: 'Escucha · completar'
 };
+
+/** En el examen cada audio se puede escuchar dos veces (en la práctica, sin límite). */
+const EXAM_MAX_PLAYS = 2;
 
 const RESULT_LABELS: Record<string, string> = {
   correct: 'Correcto',
@@ -42,7 +48,7 @@ const RESULT_LABELS: Record<string, string> = {
 
 @Component({
   selector: 'app-class',
-  imports: [FormsModule, RouterLink, DatePipe, NgTemplateOutlet, LessonPanelComponent],
+  imports: [FormsModule, RouterLink, DatePipe, NgTemplateOutlet, LessonPanelComponent, AudioPlayerComponent],
   template: `
     <main class="page stack">
       @if (loading()) {
@@ -188,6 +194,14 @@ const RESULT_LABELS: Record<string, string> = {
               @if (exercise.passage) {
                 <blockquote class="passage">{{ exercise.passage }}</blockquote>
               }
+              @if (exercise.audio; as audio) {
+                <app-audio-player
+                  [text]="audio.text"
+                  [lang]="audio.lang"
+                  [rate]="audio.rate"
+                  [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
+                />
+              }
               <p class="question">{{ exercise.question }}</p>
 
               @if (exercise.hasLesson) {
@@ -223,6 +237,9 @@ const RESULT_LABELS: Record<string, string> = {
                   @case ('reading_multiple_choice') {
                     <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
                   }
+                  @case ('listening_multiple_choice') {
+                    <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
+                  }
                   @case ('short_writing') {
                     <textarea
                       class="input"
@@ -241,7 +258,7 @@ const RESULT_LABELS: Record<string, string> = {
                       spellcheck="false"
                       [ngModel]="answers()[exercise.id]"
                       (ngModelChange)="onAnswer(exercise.id, $event)"
-                      [placeholder]="exercise.type === 'fill_blank' ? 'Palabra(s) que completan el espacio' : 'Escribí la oración completa'"
+                      [placeholder]="exercise.type === 'rewrite' ? 'Escribí la oración completa' : 'Palabra(s) que completan el espacio'"
                     />
                   }
                 }
@@ -255,6 +272,9 @@ const RESULT_LABELS: Record<string, string> = {
               @if (exercise.result; as r) {
                 <div class="feedback stack">
                   @if (r.feedback) { <p>{{ r.feedback }}</p> }
+                  @if (exercise.audio) {
+                    <p class="small transcript"><span class="muted">El audio decía: </span><em lang="en">“{{ exercise.audio.text }}”</em></p>
+                  }
                   @if (r.correctAnswer && r.result !== 'correct') {
                     <p class="small"><span class="muted">Respuesta correcta: </span><strong>{{ r.correctAnswer }}</strong></p>
                   }
@@ -331,6 +351,7 @@ const RESULT_LABELS: Record<string, string> = {
     .options { display: flex; flex-direction: column; gap: 0.4rem; }
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
+    .transcript em { font-style: normal; }
     .lesson-btn {
       align-self: flex-start;
       display: inline-flex; align-items: center; gap: 0.4rem;
@@ -386,6 +407,7 @@ export class ClassComponent implements OnDestroy {
 
   readonly labels = STATUS_LABELS;
   readonly typeLabels = TYPE_LABELS;
+  readonly examMaxPlays = EXAM_MAX_PLAYS;
   readonly resultLabels = RESULT_LABELS;
   readonly statusChip = statusChip;
   readonly scoreChip = scoreChip;

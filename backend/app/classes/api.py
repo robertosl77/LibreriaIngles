@@ -60,6 +60,19 @@ def _result_payload(attempt: Attempt, exercise: Exercise) -> dict | None:
     }
 
 
+def _audio(exercise: Exercise) -> dict | None:
+    """Listening (T-025): el frontend sintetiza la voz con este texto y lo muestra recién
+    después de la corrección."""
+    content = exercise.content or {}
+    if not content.get("audioText"):
+        return None
+    return {
+        "text": content["audioText"],
+        "lang": content.get("audioLang", "en-US"),
+        "rate": content.get("audioRate", 1.0),
+    }
+
+
 def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
     exercises = service.exercises_of(db, session)
     drafts = service.drafts_of(db, session)
@@ -86,6 +99,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 "instruction": exercise.instruction,
                 "question": exercise.prompt,
                 "passage": (exercise.content or {}).get("passage"),
+                "audio": _audio(exercise),
                 "options": (exercise.content or {}).get("options"),
                 "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else ""),
                 "assistance": (

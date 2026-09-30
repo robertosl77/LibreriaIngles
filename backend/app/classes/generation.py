@@ -15,7 +15,7 @@ from app.ai.service import AIResult, NoAIAvailable, run_json_task
 from app.classes.normalize import BLANK, normalize_answer, normalize_blank
 from app.classes.prompts import GENERATION_SYSTEM, generation_user_prompt
 from app.core.deps import StudyContext
-from app.curriculum.service import Skill, get_level
+from app.curriculum.service import LISTENING_TYPES, Skill, get_level
 from app.learning.models import (
     ClassSession,
     ClassSessionStatus,
@@ -33,7 +33,13 @@ EVALUATION_MODE_BY_TYPE = {
     "fill_blank": EvaluationMode.HYBRID,
     "rewrite": EvaluationMode.HYBRID,
     "short_writing": EvaluationMode.AI,
+    "listening_multiple_choice": EvaluationMode.DETERMINISTIC,
+    "listening_fill_blank": EvaluationMode.HYBRID,
 }
+
+# Velocidad sugerida de la voz por nivel (1.0 = normal del navegador).
+AUDIO_RATE_BY_LEVEL = {"A1": 0.85, "A2": 0.9, "B1": 0.95}
+AUDIO_TEXT_MAX = 600
 
 
 class GenerationFailed(Exception):
@@ -78,7 +84,7 @@ def select_slots(
         chosen[-1] = rng.choices(others, weights=[_weight(s, progress) for s in others])[0]
 
     # Orden pedagógico: gramática y vocabulario primero, escritura al final.
-    area_order = {"grammar": 0, "vocabulary": 1, "reading": 2, "writing": 3}
+    area_order = {"grammar": 0, "vocabulary": 1, "listening": 2, "reading": 3, "writing": 4}
     chosen.sort(key=lambda s: area_order.get(s.area_key, 9))
 
     return [slot_for(skill, rng) for skill in chosen]
@@ -122,6 +128,7 @@ class ExerciseOut(BaseModel):
     instruction: str = ""
     question: str
     passage: str | None = None
+    audioText: str | None = None
     options: list[str] | None = None
     acceptedAnswers: list[str] = []
     commonErrors: list[CommonErrorOut] = []
@@ -144,7 +151,13 @@ def _validate_exercise(raw: dict, slot: dict) -> ExerciseOut | None:
     if item.skillKey != slot["skillKey"] or item.type not in slot["allowedTypes"]:
         return None
     item.acceptedAnswers = [a.strip() for a in item.acceptedAnswers if a and a.strip()]
-    if item.type in ("multiple_choice", "reading_multiple_choice"):
+    if item.type in LISTENING_TYPES:
+        item.audioText = (item.audioText or "").strip()
+        if not item.audioText or len(item.audioText) > AUDIO_TEXT_MAX:
+            return None
+    else:
+        item.audioText = None
+    if item.type in ("multiple_choice", "reading_multiple_choice", "listening_multiple_choice"):
         options = [o.strip() for o in item.options or [] if o and o.strip()]
         if len(options) < 2:
             return None
@@ -156,7 +169,7 @@ def _validate_exercise(raw: dict, slot: dict) -> ExerciseOut | None:
         item.options, item.acceptedAnswers = options, correct
         if item.type == "reading_multiple_choice" and not (item.passage or "").strip():
             return None
-    elif item.type == "fill_blank":
+    elif item.type in ("fill_blank", "listening_fill_blank"):
         if item.question.count(BLANK) != 1 or not item.acceptedAnswers:
             return None
     elif item.type == "rewrite":
@@ -184,6 +197,18 @@ def _match_slots(exercises: list, slots: list[dict]) -> list[tuple[dict, Exercis
 
 
 # ---------------------------------------------------------------- flujo
+
+
+def _content(item: ExerciseOut, level: str | None) -> dict:
+    content = {"options": item.options, "passage": item.passage}
+    if item.audioText:
+        # Se guarda el texto y la reproducción; el audio se regenera (documento funcional §15).
+        content.update(
+            audioText=item.audioText,
+            audioLang="en-US",
+            audioRate=AUDIO_RATE_BY_LEVEL.get(level or "", 1.0),
+        )
+    return {k: v for k, v in content.items() if v}
 
 
 def _enough(session: ClassSession, slots: list[dict], matched: list) -> bool:
@@ -268,11 +293,7 @@ def generate_content(
                 exercise_type=item.type,
                 instruction=item.instruction,
                 prompt=item.question,
-                content={
-                    k: v
-                    for k, v in {"options": item.options, "passage": item.passage}.items()
-                    if v
-                },
+                content=_content(item, request.get("level")),
                 expected_concepts=item.expectedConcepts,
                 answer_key={
                     "acceptedAnswers": item.acceptedAnswers,

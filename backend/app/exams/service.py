@@ -34,7 +34,7 @@ from app.learning.models import (
 from app.progress.service import progress_by_skill
 
 # Estructura del examen: ejercicios por área (se omiten áreas sin skills en el nivel).
-EXAM_BLUEPRINT = {"grammar": 5, "vocabulary": 3, "reading": 2, "writing": 2}
+EXAM_BLUEPRINT = {"grammar": 5, "vocabulary": 3, "listening": 2, "reading": 2, "writing": 2}
 PASS_SCORE = 70  # promedio global mínimo
 AREA_MIN_SCORE = 60  # mínimo en cada área
 ELIGIBLE_COVERAGE = 0.7  # porción de skills del nivel practicadas

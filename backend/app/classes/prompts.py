@@ -16,10 +16,11 @@ Return ONLY a JSON object with this shape:
   "exercises": [
     {
       "skillKey": "<one of the requested skill keys>",
-      "type": "fill_blank | multiple_choice | reading_multiple_choice | rewrite | short_writing",
+      "type": "fill_blank | multiple_choice | reading_multiple_choice | rewrite | short_writing | listening_multiple_choice | listening_fill_blank",
       "instruction": "short instruction in simple English",
       "question": "the item shown to the student",
       "passage": "only for reading_multiple_choice: 40-80 word text",
+      "audioText": "only for listening_*: the text the student will HEAR (read by a text-to-speech voice)",
       "options": ["only for multiple_choice and reading_multiple_choice: 3 or 4 options"],
       "acceptedAnswers": ["EVERY correct answer variant"],
       "commonErrors": [
@@ -41,6 +42,12 @@ Rules:
 - rewrite: acceptedAnswers are full sentences; include contracted and full forms
   (e.g. "doesn't" and "does not").
 - short_writing: acceptedAnswers is []; the question is an open prompt for 2-3 sentences.
+- listening_multiple_choice / listening_fill_blank: the student only HEARS audioText (1-4 short
+  sentences at the level, natural spoken English, no stage directions or speaker labels).
+  The question must NOT be answerable without listening and must not quote the answer.
+  listening_multiple_choice: 3 options, exactly one correct. listening_fill_blank: the question
+  contains "___" once and the answer is a word or number heard in the audio; list digit and
+  word forms (e.g. "26", "twenty-six") and time formats (e.g. "8:30", "half past eight").
 - acceptedAnswers must be exhaustive for closed items: list every grammatically correct variant.
 - commonErrors: 0-3 realistic learner mistakes, each with feedback in Spanish.
 - Use varied, everyday contexts and names; vocabulary appropriate for the level.

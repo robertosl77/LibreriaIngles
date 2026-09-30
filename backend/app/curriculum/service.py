@@ -14,7 +14,12 @@ EXERCISE_TYPES = {
     "reading_multiple_choice",
     "rewrite",
     "short_writing",
+    # Listening (T-025): el alumno escucha `audioText` con voz sintética.
+    "listening_multiple_choice",
+    "listening_fill_blank",
 }
+
+LISTENING_TYPES = {"listening_multiple_choice", "listening_fill_blank"}
 
 
 @dataclass(frozen=True)

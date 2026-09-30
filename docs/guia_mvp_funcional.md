@@ -171,8 +171,8 @@ Migración: `0005_assistance`.
 - **Cuándo se habilita** (tarjeta "Examen de nivel" en Inicio): haber practicado al menos el
   70 % de los temas del nivel y tener 70 % o más de promedio en lo practicado. Si no se cumple,
   la tarjeta muestra qué falta.
-- **El examen** es una sesión aparte (`class_sessions.kind = EXAM`): 12 ejercicios repartidos
-  por área (gramática 5, vocabulario 3, lectura 2, escritura 2), temas al azar del nivel,
+- **El examen** es una sesión aparte (`class_sessions.kind = EXAM`): 14 ejercicios repartidos
+  por área (gramática 5, vocabulario 3, listening 2, lectura 2, escritura 2), temas al azar del nivel,
   sin lecciones y sin "rehacer". Usa la misma generación, autoguardado y corrección que las
   clases (también la apelación). **No modifica el progreso** de las clases.
 - **Aprobación:** 70 % global **y** al menos 60 % en cada área (una debilidad no se compensa
@@ -189,6 +189,27 @@ Migración: `0005_assistance`.
   "próximamente".
 
 Migración: `0006_level_exams`.
+
+## 6.3 Listening (T-025)
+
+- Área nueva **Listening** en A1 (4 temas: números/precios/horas, datos personales, diálogos
+  cortos, instrucciones), con ejemplos y lección por tema.
+- Tipos de ejercicio: `listening_multiple_choice` (determinístico) y `listening_fill_blank`
+  (híbrido, misma normalización que completar).
+- **Voz del navegador** (Web Speech API): sin costo ni API key. No se guarda audio: se guarda
+  `content.audioText`, `audioLang` y `audioRate` (A1 = 0.85) y se regenera en cada reproducción.
+  Botones Reproducir/Detener y velocidad Lento/Normal.
+- El texto del audio **no se muestra** hasta la corrección ("El audio decía: …").
+- **Examen:** 2 ejercicios de listening; cada audio se puede escuchar **2 veces** (en la práctica,
+  sin límite). El mínimo por área incluye Listening.
+- **Dashboard y clases:** Listening aparece como área con sus temas; el generador la incluye como
+  cualquier otra.
+- Limitación conocida: el navegador necesita el texto para generar la voz, así que alguien con
+  conocimientos técnicos podría verlo en las herramientas del navegador, y el límite de 2
+  reproducciones se reinicia al recargar la página. Aceptable en práctica; para el examen, la
+  alternativa futura es generar el audio en el backend con un proveedor TTS.
+- Sin voces en inglés instaladas se avisa cómo agregarlas (Windows: Configuración → Hora e
+  idioma → Voz).
 
 # 7. Flujo técnico
 

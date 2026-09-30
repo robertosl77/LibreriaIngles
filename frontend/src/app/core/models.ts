@@ -99,13 +99,22 @@ export interface ExerciseResult {
 export interface Exercise {
   id: number;
   position: number;
-  type: 'fill_blank' | 'multiple_choice' | 'reading_multiple_choice' | 'rewrite' | 'short_writing';
+  type:
+    | 'fill_blank'
+    | 'multiple_choice'
+    | 'reading_multiple_choice'
+    | 'rewrite'
+    | 'short_writing'
+    | 'listening_multiple_choice'
+    | 'listening_fill_blank';
   area: string | null;
   skillKey: string | null;
   skillName: string | null;
   instruction: string | null;
   question: string;
   passage: string | null;
+  /** Listening (T-025): texto que se sintetiza con voz; se muestra recién tras la corrección. */
+  audio: { text: string; lang: string; rate: number } | null;
   options: string[] | null;
   answer: string;
   assistance: Assistance;
