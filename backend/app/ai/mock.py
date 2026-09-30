@@ -62,6 +62,15 @@ class MockProvider:
             return self._evaluate(task)
         raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Tarea desconocida para el mock.")
 
+    def transcribe_audio(self, audio: bytes, mime_type: str) -> str:
+        """Para tests, bytes UTF-8 representan la transcripción simulada."""
+        self._maybe_fail()
+        try:
+            text = audio.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            text = ""
+        return text or "This is a simulated spoken answer."
+
     def _generate(self, task: dict) -> dict:
         rng = random.Random()
         exercises = []

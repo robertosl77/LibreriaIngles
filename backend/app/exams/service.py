@@ -19,8 +19,14 @@ from sqlalchemy.orm import Session
 
 from app.accounts.models import Account
 from app.ai.models import utcnow
-from app.ai.service import AIResult
-from app.classes.generation import GenerationFailed, ensure_listening, generate_content, slot_for
+from app.ai.service import AIResult, has_audio_connection
+from app.classes.generation import (
+    GenerationFailed,
+    ensure_listening,
+    ensure_speaking,
+    generate_content,
+    slot_for,
+)
 from app.core.deps import StudyContext
 from app.curriculum.service import CEFR_LEVELS, available_levels, get_level
 from app.exams.models import LevelCertificate
@@ -42,6 +48,7 @@ ELIGIBLE_SCORE = 70  # promedio de las skills practicadas
 RETRY_COOLDOWN = timedelta(hours=24)
 # Modalidades (T-025): mínimo de ejercicios escuchados y mínimo de puntaje en esa modalidad.
 EXAM_MIN_LISTEN = 3
+EXAM_MIN_SPEAK = 1
 MODALITY_NAMES = {"LISTEN": "Escucha", "SPEAK": "Habla"}
 
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sin 0/O ni 1/I
@@ -162,7 +169,7 @@ def exam_status(db: Session, study: StudyContext) -> dict:
     }
 
 
-def exam_slots(level: str, rng=None) -> list[dict]:
+def exam_slots(level: str, rng=None, *, allow_speaking: bool = False) -> list[dict]:
     """Ejercicios repartidos por área, con skills al azar (independiente del progreso)."""
     rng = rng or random.Random()
     curriculum = get_level(level)
@@ -174,8 +181,12 @@ def exam_slots(level: str, rng=None) -> list[dict]:
         pool = list(skills)
         rng.shuffle(pool)
         for index in range(count):
-            slots.append(slot_for(pool[index % len(pool)], rng))
+            slots.append(
+                slot_for(pool[index % len(pool)], rng, allow_speaking=allow_speaking)
+            )
     ensure_listening(slots, list(curriculum.skills), EXAM_MIN_LISTEN, rng)
+    if allow_speaking:
+        ensure_speaking(slots, EXAM_MIN_SPEAK, rng)
     return slots
 
 
@@ -202,7 +213,13 @@ def create_exam(db: Session, study: StudyContext) -> tuple[ClassSession, AIResul
         status=ClassSessionStatus.GENERATING,
         target_level=level,
         title=f"Examen de nivel {level}",
-        generation_request={"level": level, "purpose": "exam", "slots": exam_slots(level)},
+        generation_request={
+            "level": level,
+            "purpose": "exam",
+            "slots": exam_slots(
+                level, allow_speaking=has_audio_connection(db, study.account)
+            ),
+        },
     )
     db.add(session)
     db.commit()  # persistir la solicitud antes de llamar a la IA
@@ -264,7 +281,10 @@ def finalize_exam(db: Session, session: ClassSession) -> dict:
         if attempt.response_mode and attempt.response_mode.value == "SPEAK":
             by_modality.setdefault("SPEAK", []).append(attempt.score or 0)
     modalities = []
-    for key, scores in by_modality.items():
+    for key in ("LISTEN", "SPEAK"):
+        scores = by_modality.get(key)
+        if not scores:
+            continue
         value = round(sum(scores) / len(scores), 1)
         modalities.append(
             {

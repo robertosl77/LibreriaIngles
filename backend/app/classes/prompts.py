@@ -57,6 +57,14 @@ Rules:
       * short_writing: "stimulus" is a spoken question or situation; the student answers in writing.
     For numbers and times list digit and word forms in acceptedAnswers (e.g. "26",
     "twenty-six"; "8:30", "half past eight").
+- The slot "response" controls HOW the same exercise is answered:
+  - WRITE: normal typed response.
+  - SELECT: choose one option.
+  - SPEAK: the learner answers aloud. Do not create a new exercise type and do not tell the
+    learner to "write" or "type"; use wording such as "Say..." or "Answer aloud...".
+    For rewrite, the learner says the complete transformed sentence. For short_writing, the
+    learner gives the same 2-3 sentence content orally.
+  LISTEN + SPEAK is valid: hear the stimulus, then answer aloud.
 - acceptedAnswers must be exhaustive for closed items: list every grammatically correct variant.
 - commonErrors: 0-3 realistic learner mistakes, each with feedback in Spanish.
 - Use varied, everyday contexts and names; vocabulary appropriate for the level.
@@ -89,6 +97,9 @@ Rules:
   put that in "suggestions", not in "errors".
 - Report one conceptResult per expected concept.
 - For open writing, evaluate grammar, vocabulary and task completion at the given level.
+- If exercise.response is SPEAK, the answer is a literal speech-to-text transcript. Do not
+  penalize missing punctuation or capitalization that cannot be heard; evaluate the spoken
+  words, grammar, vocabulary and task completion.
 """
 
 
