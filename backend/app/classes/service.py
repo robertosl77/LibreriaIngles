@@ -15,13 +15,16 @@ from app.classes.evaluation import (
 )
 from app.classes.normalize import normalize_answer
 from app.core.deps import StudyContext
+from app.curriculum.lessons import lesson_payload
 from app.learning.models import (
+    Assistance,
     Attempt,
     ClassSession,
     ClassSessionStatus,
     DraftAnswer,
     EvaluationSource,
     Exercise,
+    stronger_assistance,
 )
 from app.progress.service import recompute_skill
 
@@ -77,6 +80,38 @@ def save_draft(
     return draft
 
 
+def open_lesson(
+    db: Session, study: StudyContext, session: ClassSession, exercise_id: int
+) -> dict:
+    """Lección del tema del ejercicio, sin salir de la clase (T-020).
+
+    Mientras la clase está abierta, queda registrado que el ejercicio se responde
+    con lección. Consultarla después de la corrección no cambia nada.
+    """
+    exercise = db.get(Exercise, exercise_id)
+    if exercise is None or exercise.class_session_id != session.id:
+        raise ClassStateError("El ejercicio no pertenece a la clase.")
+    lesson = lesson_payload(exercise.skill_key) if exercise.skill_key else None
+    if lesson is None:
+        raise ClassStateError("Todavía no hay lección para este tema.")
+
+    registered = False
+    if session.status in (ClassSessionStatus.READY, ClassSessionStatus.IN_PROGRESS):
+        draft = db.scalar(select(DraftAnswer).where(DraftAnswer.exercise_id == exercise_id))
+        if draft is None:
+            draft = DraftAnswer(
+                class_session_id=session.id, exercise_id=exercise_id, answer_text=""
+            )
+            db.add(draft)
+        draft.assistance = stronger_assistance(draft.assistance, Assistance.LESSON)
+        draft.account_id = study.account.id
+        draft.updated_at = utcnow()
+        session.status = ClassSessionStatus.IN_PROGRESS
+        db.commit()
+        registered = True
+    return {"exerciseId": exercise_id, "registered": registered, "lesson": lesson}
+
+
 def submit(
     db: Session, study: StudyContext, session: ClassSession, answers: dict[int, str]
 ) -> None:
@@ -104,6 +139,9 @@ def submit(
                 attempt_number=session.current_attempt,
                 raw_answer=text,
                 normalized_answer=normalize_answer(text),
+                assistance=(
+                    drafts[exercise.id].assistance if exercise.id in drafts else Assistance.NONE
+                ),
             )
         )
     for draft in drafts.values():

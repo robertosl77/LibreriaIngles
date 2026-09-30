@@ -9,15 +9,18 @@ from sqlalchemy.orm import Session
 
 from app.ai.models import utcnow
 from app.curriculum.service import find_skill, get_level
-from app.learning.models import Attempt, Exercise, StudySkillProgress
+from app.learning.models import Assistance, Attempt, Exercise, StudySkillProgress
 
 MASTERED_SCORE = 85
 MASTERED_MIN_ATTEMPTS = 5
 REVIEW_SCORE = 60
 REVIEW_MIN_ATTEMPTS = 3
+# Un intento respondido con ayuda (lección/pista) cuenta como media evidencia (T-020).
+ASSISTED_WEIGHT = 0.5
+RECENT_WINDOW = 5
 
 
-def _confidence(count: int) -> str:
+def _confidence(count: float) -> str:
     if count >= 12:
         return "high"
     if count >= 5:
@@ -25,7 +28,7 @@ def _confidence(count: int) -> str:
     return "low"
 
 
-def _status(score: float, count: int) -> str:
+def _status(score: float, count: float) -> str:
     if score >= MASTERED_SCORE and count >= MASTERED_MIN_ATTEMPTS:
         return "MASTERED"
     if score < REVIEW_SCORE and count >= REVIEW_MIN_ATTEMPTS:
@@ -33,12 +36,18 @@ def _status(score: float, count: int) -> str:
     return "LEARNING"
 
 
-def _ema(scores: list[float]) -> float:
-    """Promedio al principio; con más evidencia pesan más los intentos recientes."""
+def _ema(scores: list[float], weights: list[float] | None = None) -> float:
+    """Promedio al principio; con más evidencia pesan más los intentos recientes.
+
+    `weights` (0..1) reduce cuánto mueve el score un intento: con ayuda, la mitad.
+    """
+    weights = weights or [1.0] * len(scores)
     value = 0.0
-    for index, score in enumerate(scores, start=1):
-        alpha = max(0.25, 1 / index)
-        value = value + alpha * (score - value)
+    evidence = 0.0
+    for score, weight in zip(scores, weights):
+        evidence += weight
+        alpha = max(0.25, 1 / evidence) * weight if evidence else 0.0
+        value = value + min(1.0, alpha) * (score - value)
     return value
 
 
@@ -50,7 +59,7 @@ def recompute_skill(
     organization_id: int | None = None,
 ) -> StudySkillProgress:
     query = (
-        select(Attempt.score, Attempt.evaluated_at, Attempt.membership_id)
+        select(Attempt.score, Attempt.evaluated_at, Attempt.membership_id, Attempt.assistance)
         .join(Exercise, Exercise.id == Attempt.exercise_id)
         .where(
             Attempt.study_profile_id == study_profile_id,
@@ -63,6 +72,10 @@ def recompute_skill(
         query = query.where(Attempt.organization_id == organization_id)
     rows = db.execute(query).all()
     scores = [float(row.score) for row in rows]
+    weights = [
+        1.0 if (row.assistance or Assistance.NONE) == Assistance.NONE else ASSISTED_WEIGHT
+        for row in rows
+    ]
 
     progress = db.scalar(
         select(StudySkillProgress).where(
@@ -82,17 +95,19 @@ def recompute_skill(
         db.add(progress)
 
     count = len(scores)
-    score = round(_ema(scores), 1) if scores else 0.0
+    evidence = sum(weights)
+    score = round(_ema(scores, weights), 1) if scores else 0.0
     trend = None
     if count >= 4:
-        previous = _ema(scores[:-3])
+        previous = _ema(scores[:-3], weights[:-3])
         delta = score - previous
         trend = "up" if delta >= 5 else "down" if delta <= -5 else "stable"
 
     progress.score = score
     progress.attempt_count = count
-    progress.confidence = _confidence(count)
-    progress.status = _status(score, count)
+    progress.confidence = _confidence(evidence)
+    progress.status = _status(score, evidence)
+    progress.assisted_recent = sum(1 for w in weights[-RECENT_WINDOW:] if w < 1.0)
     progress.trend = trend
     progress.last_practiced_at = rows[-1].evaluated_at if rows else None
     progress.updated_at = utcnow()
@@ -142,6 +157,7 @@ def dashboard(db: Session, study_profile_id: int, level: str) -> dict:
                 "confidence": row.confidence if row else "low",
                 "status": row.status if row and row.attempt_count else "NOT_STARTED",
                 "trend": row.trend if row else None,
+                "assistedRecent": row.assisted_recent if row else 0,
             }
         )
 

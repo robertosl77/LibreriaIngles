@@ -146,6 +146,26 @@ Menú **Plataforma** → `/app/plataforma`.
 
 Migraciones: `0003_platform_ai_usage` y `0004_usage_model`.
 
+## 6.1 "Necesito lección" (T-020)
+
+Es una práctica, no un examen: si el alumno no conoce el tema, consulta la lección sin salir
+de la clase y después responde ese mismo ejercicio.
+
+- Cada ejercicio tiene el botón **📘 Necesito lección**. La lección se abre dentro del
+  ejercicio (regla, ejemplos, errores típicos, consejo) y al cerrarla sigue respondiendo ahí.
+- Mientras la clase está abierta, el ejercicio queda marcado como respondido **con lección**
+  (`assistance = LESSON`; `HINT` queda reservado para las pistas de T-018). Se ve el chip
+  "📘 Con lección" en el ejercicio y en la corrección.
+- Después de corregir, "Ver lección del tema" sigue disponible pero ya no marca nada.
+- Progreso: un intento con lección cuenta como **media evidencia** (mueve el score la mitad y
+  suma medio intento para confianza y dominio). El generador **refuerza** las skills que se
+  vienen resolviendo con lección (`assisted_recent`: cuántos de los últimos 5 intentos).
+- Contenido: una lección por skill y nivel, cargada como datos en
+  `backend/app/curriculum/data/lessons/<nivel>.json` (sin IA: sin costo ni demora, revisable).
+  Agregar un nivel = agregar su archivo. Un test verifica que toda skill del A1 tenga lección.
+
+Migración: `0005_assistance`.
+
 # 7. Flujo técnico
 
 ```text
@@ -201,6 +221,7 @@ POST /api/v1/classes/{id}/submit
 POST /api/v1/classes/{id}/retry-generation
 POST /api/v1/classes/{id}/retake
 POST /api/v1/classes/{id}/exercises/{exercise_id}/appeal
+POST /api/v1/classes/{id}/exercises/{exercise_id}/lesson   (lección del tema; registra la ayuda)
 
 GET  /api/v1/progress
 

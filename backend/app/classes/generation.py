@@ -48,9 +48,11 @@ def _weight(skill: Skill, progress) -> float:
         return 3.0
     if row.status == "MASTERED":
         return 0.4
+    # Skills que el alumno viene resolviendo con lección/pista: reforzar (T-020).
+    assisted_boost = min(1.5, 0.5 * (row.assisted_recent or 0))
     if row.status == "NEEDS_REVIEW":
-        return 3.5
-    return 0.5 + (100 - row.score) / 100 * 2.5
+        return 3.5 + assisted_boost
+    return 0.5 + (100 - row.score) / 100 * 2.5 + assisted_boost
 
 
 def select_slots(
