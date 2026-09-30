@@ -24,6 +24,7 @@ from app.learning.models import (
     DraftAnswer,
     EvaluationSource,
     Exercise,
+    SessionKind,
     stronger_assistance,
 )
 from app.progress.service import recompute_skill
@@ -91,6 +92,8 @@ def open_lesson(
     exercise = db.get(Exercise, exercise_id)
     if exercise is None or exercise.class_session_id != session.id:
         raise ClassStateError("El ejercicio no pertenece a la clase.")
+    if session.kind == SessionKind.EXAM:
+        raise ClassStateError("En el examen de nivel no hay lecciones.")
     lesson = lesson_payload(exercise.skill_key) if exercise.skill_key else None
     if lesson is None:
         raise ClassStateError("Todavía no hay lección para este tema.")
@@ -170,7 +173,8 @@ def evaluate_pending(db: Session, account: Account, session: ClassSession) -> bo
         if evaluation is None:
             continue
         apply_evaluation(attempt, evaluation)
-        if exercise.skill_key:
+        # El examen es independiente: no alimenta el progreso de las clases.
+        if exercise.skill_key and session.kind != SessionKind.EXAM:
             touched_skills.add(exercise.skill_key)
         db.commit()
 
@@ -191,6 +195,10 @@ def evaluate_pending(db: Session, account: Account, session: ClassSession) -> bo
         session.status = ClassSessionStatus.COMPLETED
         session.evaluated_at = utcnow()
     db.commit()
+    if complete and session.kind == SessionKind.EXAM:
+        from app.exams.service import finalize_exam
+
+        finalize_exam(db, session)
     return complete
 
 
@@ -210,6 +218,8 @@ def process_pending(db: Session, study: StudyContext) -> dict:
 
 
 def retake(db: Session, session: ClassSession) -> None:
+    if session.kind == SessionKind.EXAM:
+        raise ClassStateError("El examen de nivel no se rehace: se rinde uno nuevo.")
     if session.status != ClassSessionStatus.COMPLETED:
         raise ClassStateError("Solo se puede rehacer una clase completada.")
     session.current_attempt += 1
@@ -268,7 +278,11 @@ def appeal(db: Session, study: StudyContext, session: ClassSession, exercise_id:
     current = [a for a in attempts_of(db, session) if a.attempt_number == session.current_attempt]
     if current and all(a.score is not None for a in current):
         session.score = round(sum(a.score for a in current) / len(current), 1)
-    if exercise.skill_key:
+    if exercise.skill_key and session.kind != SessionKind.EXAM:
         recompute_skill(db, study_profile_id=session.study_profile_id, skill_key=exercise.skill_key)
     db.commit()
+    if session.kind == SessionKind.EXAM and session.status == ClassSessionStatus.COMPLETED:
+        from app.exams.service import finalize_exam
+
+        finalize_exam(db, session)
     return attempt

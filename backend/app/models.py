@@ -10,3 +10,4 @@ from app.memberships.models import *  # noqa: F401,F403
 from app.organizations.models import *  # noqa: F401,F403
 from app.study_profiles.models import *  # noqa: F401,F403
 from app.subscriptions.models import *  # noqa: F401,F403
+from app.exams.models import *  # noqa: F401,F403

@@ -6,11 +6,13 @@ import { environment } from '../../environments/environment';
 import {
   AiConnection,
   AuthConfig,
+  Certificate,
   ClassDetail,
   ClassSummary,
   ConnectionDraft,
   ConnectionScope,
   Dashboard,
+  ExamStatus,
   LessonResponse,
   Me,
   ModelOption,
@@ -135,6 +137,21 @@ export class ApiService {
 
   retakeClass(classId: number): Observable<ClassDetail> {
     return this.http.post<ClassDetail>(`${this.base}/classes/${classId}/retake`, {});
+  }
+
+  // ---------------------------------------------------------------- examen de nivel (T-024)
+
+  examStatus(): Observable<ExamStatus> {
+    return this.http.get<ExamStatus>(`${this.base}/exams/status`);
+  }
+
+  createExam(): Observable<ClassDetail> {
+    return this.http.post<ClassDetail>(`${this.base}/exams`, {});
+  }
+
+  /** Público: verificación del certificado por código. */
+  certificate(code: string): Observable<Certificate> {
+    return this.http.get<Certificate>(`${this.base}/certificates/${encodeURIComponent(code)}`);
   }
 
   /** "Necesito lección" (T-020): devuelve la lección y registra la ayuda si la clase está abierta. */

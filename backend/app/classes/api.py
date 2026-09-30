@@ -12,6 +12,7 @@ from app.learning.models import (
     ClassSessionStatus,
     DraftAnswer,
     Exercise,
+    SessionKind,
 )
 from app.progress.service import skill_name
 
@@ -92,7 +93,8 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                     if attempt
                     else (draft.assistance.value if draft else "NONE")
                 ),
-                "hasLesson": get_lesson(exercise.skill_key) is not None,
+                "hasLesson": session.kind == SessionKind.CLASS
+                and get_lesson(exercise.skill_key) is not None,
                 "result": _result_payload(attempt, exercise) if attempt else None,
             }
         )
@@ -104,6 +106,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
     )
     return {
         "id": session.id,
+        "kind": session.kind.value,
         "title": session.title,
         "status": session.status.value,
         "targetLevel": session.target_level,
@@ -121,8 +124,20 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
             for number, scores in sorted(rounds.items())
             if number != session.current_attempt or session.status == ClassSessionStatus.COMPLETED
         ],
+        "examResult": session.exam_result,
+        "certificateCode": _certificate_code(db, session),
         "notice": notice,
     }
+
+
+def _certificate_code(db, session: ClassSession) -> str | None:
+    if session.kind != SessionKind.EXAM or not (session.exam_result or {}).get("passed"):
+        return None
+    from app.exams.models import LevelCertificate
+
+    return db.scalar(
+        select(LevelCertificate.code).where(LevelCertificate.exam_session_id == session.id)
+    )
 
 
 @router.get("")
@@ -151,6 +166,7 @@ def list_classes(study: CurrentStudy, db: DbSession, limit: int = 50) -> list[di
     return [
         {
             "id": s.id,
+            "kind": s.kind.value,
             "title": s.title,
             "status": s.status.value,
             "targetLevel": s.target_level,

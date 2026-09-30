@@ -53,6 +53,13 @@ class EvaluationSource(str, Enum):
     AI = "AI"
 
 
+class SessionKind(str, Enum):
+    """Una sesión es una clase de práctica o un examen de nivel (T-024)."""
+
+    CLASS = "CLASS"
+    EXAM = "EXAM"
+
+
 class Assistance(str, Enum):
     """Ayuda usada para responder un ejercicio (T-020; HINT queda para T-018).
 
@@ -92,6 +99,13 @@ class ClassSession(Base):
         SqlEnum(ClassSessionStatus, native_enum=False),
         default=ClassSessionStatus.GENERATING,
     )
+    kind: Mapped[SessionKind] = mapped_column(
+        SqlEnum(SessionKind, native_enum=False, length=10),
+        default=SessionKind.CLASS,
+        server_default=SessionKind.CLASS.value,
+    )
+    # Solo exámenes: resultado por área y aprobación (T-024).
+    exam_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     target_level: Mapped[str | None] = mapped_column(String(2), nullable=True)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     current_attempt: Mapped[int] = mapped_column(Integer, default=1)

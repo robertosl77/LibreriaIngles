@@ -68,8 +68,11 @@ export type ClassStatus =
   | 'AWAITING_EVALUATION'
   | 'COMPLETED';
 
+export type SessionKind = 'CLASS' | 'EXAM';
+
 export interface ClassSummary {
   id: number;
+  kind: SessionKind;
   title: string | null;
   status: ClassStatus;
   targetLevel: string | null;
@@ -132,6 +135,9 @@ export interface LessonResponse {
 
 export interface ClassDetail {
   id: number;
+  kind: SessionKind;
+  examResult: ExamResult | null;
+  certificateCode: string | null;
   title: string | null;
   status: ClassStatus;
   targetLevel: string | null;
@@ -207,4 +213,55 @@ export interface ConnectionDraft {
 export interface ModelOption {
   id: string;
   label: string;
+}
+
+export interface ExamArea {
+  key: string;
+  name: string;
+  score: number;
+  items: number;
+  passed: boolean;
+}
+
+export interface ExamResult {
+  passed: boolean;
+  score: number;
+  passScore: number;
+  areaMinScore: number;
+  areas: ExamArea[];
+}
+
+export interface ExamCheck {
+  key: string;
+  label: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface ExamStatus {
+  level: string | null;
+  available: boolean;
+  eligible?: boolean;
+  checks?: ExamCheck[];
+  passed?: boolean;
+  certificateCode?: string | null;
+  openExamId?: number | null;
+  lastExam?: { id: number; score: number | null; result: ExamResult | null; evaluatedAt: string | null } | null;
+  attempts?: number;
+  cooldownUntil?: string | null;
+  canStart?: boolean;
+  nextLevel?: { level: string; available: boolean } | null;
+  rules?: { passScore: number; areaMinScore: number; exercises: number; retryHours: number };
+}
+
+export interface Certificate {
+  code: string;
+  holderName: string;
+  level: string;
+  levelName: string | null;
+  score: number;
+  areaScores: Record<string, number>;
+  issuedAt: string;
+  issuer: string;
+  notice: string;
 }

@@ -73,11 +73,16 @@ Rules:
 """
 
 
-def generation_user_prompt(level: str, slots: list[dict]) -> str:
-    return (
-        "Generate a class.\n"
-        + json.dumps({"level": level, "slots": slots}, ensure_ascii=False, indent=2)
-    )
+EXAM_NOTE = (
+    "This is a LEVEL EXAM, not a practice class. Every item must have exactly one defensible "
+    "answer, test the language (not general knowledge), be clearly worded for the level, and "
+    "all items must be different from each other and from the examples."
+)
+
+
+def generation_user_prompt(level: str, slots: list[dict], purpose: str = "class") -> str:
+    header = "Generate a class.\n" if purpose != "exam" else f"Generate a level exam.\n{EXAM_NOTE}\n"
+    return header + json.dumps({"level": level, "slots": slots}, ensure_ascii=False, indent=2)
 
 
 def evaluation_user_prompt(payload: dict) -> str:

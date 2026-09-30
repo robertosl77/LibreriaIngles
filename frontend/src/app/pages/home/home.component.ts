@@ -7,11 +7,12 @@ import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ClassSummary } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { ExamCardComponent } from '../../shared/exam-card.component';
 import { STATUS_LABELS, statusChip } from '../../shared/status';
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink, DatePipe],
+  imports: [RouterLink, DatePipe, ExamCardComponent],
   styles: `
     .new-class { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; }
     .setup h2 { margin-bottom: 0.8rem; }
@@ -28,6 +29,7 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
     .steps li.done .check { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
     .steps li.done strong { color: var(--muted); }
     @media (max-width: 640px) { .new-class { align-items: flex-start; } }
+    .chip-exam { margin-left: 0.4rem; background: #fbf3dc; color: #8a6a1f; }
   `,
   template: `
     <main class="page stack">
@@ -127,6 +129,10 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
         </div>
       </section>
 
+      @if (setupDone() && !loading()) {
+        <app-exam-card />
+      }
+
       @if (pending().length) {
         <section class="card">
           <h2>Pendientes</h2>
@@ -135,6 +141,7 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
               <li class="list-item">
                 <div>
                   <a [routerLink]="['/app/clase', item.id]"><strong>{{ item.title || 'Clase ' + item.id }}</strong></a>
+                  @if (item.kind === 'EXAM') { <span class="chip chip-exam">Examen</span> }
                   <div class="muted small">
                     {{ item.targetLevel }} · {{ item.createdAt | date: 'dd/MM HH:mm' }}
                     @if (item.status === 'IN_PROGRESS' && item.total) {
@@ -164,6 +171,7 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
               <li class="list-item">
                 <div>
                   <a [routerLink]="['/app/clase', item.id]"><strong>{{ item.title || 'Clase ' + item.id }}</strong></a>
+                  @if (item.kind === 'EXAM') { <span class="chip chip-exam">Examen</span> }
                   <div class="muted small">{{ item.targetLevel }} · {{ item.createdAt | date: 'dd/MM HH:mm' }}</div>
                 </div>
                 <strong>{{ item.score === null ? '' : item.score + '%' }}</strong>
