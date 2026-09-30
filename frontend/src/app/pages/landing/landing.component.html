@@ -1,9 +1,9 @@
 <main class="landing">
   <header class="topbar">
-    <a class="brand" href="#">Librería Inglés</a>
+    <a class="brand" routerLink="/">Librería Inglés</a>
     <div class="topbar-actions">
-      <span class="backend-status">{{ backendStatus }}</span>
-      <button class="link-button" type="button">Iniciar sesión</button>
+      <span class="backend-status">{{ backendStatus() }}</span>
+      <a class="link-button" routerLink="/login">Iniciar sesión</a>
     </div>
   </header>
 
@@ -16,8 +16,8 @@
     </p>
 
     <div class="actions">
-      <button class="primary" type="button">Crear cuenta personal</button>
-      <button class="secondary" type="button">Registrar organización</button>
+      <a class="primary" routerLink="/login">Crear cuenta personal</a>
+      <button class="secondary" type="button" disabled title="Disponible en una próxima versión">Registrar organización · próximamente</button>
     </div>
   </section>
 

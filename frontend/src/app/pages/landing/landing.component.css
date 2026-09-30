@@ -24,6 +24,8 @@
 .link-button,
 .primary,
 .secondary {
+  display: inline-block;
+  text-decoration: none;
   border-radius: 0.8rem;
   padding: 0.85rem 1.15rem;
   font: inherit;
@@ -123,4 +125,9 @@ h1 {
 .backend-status {
   font-size: 0.8rem;
   color: #666;
+}
+
+.secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
