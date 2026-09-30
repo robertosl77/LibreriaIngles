@@ -25,7 +25,12 @@ def _setup(client, email: str = "roberto@example.com") -> dict:
     return headers
 
 
-def _make_eligible(client, headers, *, skills: int = 18, score: float = 80) -> None:
+def _make_eligible(client, headers, *, skills: int | None = None, score: float = 80) -> None:
+    """Marca como practicadas las skills necesarias para cumplir la cobertura mínima."""
+    import math
+
+    if skills is None:
+        skills = math.ceil(service.ELIGIBLE_COVERAGE * len(get_level("A1").skills))
     profile_id = client.get(f"{API}/me", headers=headers).json()["studyProfile"]["id"]
     with SessionLocal() as db:
         for skill in get_level("A1").skills[:skills]:

@@ -229,6 +229,21 @@ Attempt.response_mode      : modalidad con la que respondió efectivamente
 
 Migración: `0007_modalities`.
 
+## 6.4 Currícula A1 completa (T-028) y primer incremento de contenido (T-032)
+
+- A1 pasa de 24 a **37 temas**, cubriendo la lista del documento funcional §4.1:
+  - gramática nueva: pronombres sujeto, singular y plural, *have got*, imperativos,
+    *this/that/these/those*, preposiciones de lugar, conectores (*and/but/or/because*);
+  - vocabulario nuevo: saludos y presentaciones, números, días/meses/fechas, colores, ropa, la casa.
+- Todos los temas nuevos tienen lección ("Necesito lección") y se pueden leer o escuchar.
+- **Primer incremento de contenido:** cada tema tiene al menos 2 ejemplos semilla y un ejemplo por
+  cada tipo de ejercicio que admite (antes muchos tenían 1).
+- Se reemplazó el "odd one out" de comida (ambiguo) por consignas con criterio explícito
+  (*Which one is a drink?*) y el prompt prohíbe ese formato.
+- `tests/test_curriculum_content.py` valida cada ejemplo semilla (formato, una sola respuesta,
+  opciones sin repetir, sin "odd one out") y que todo tema tenga lección.
+- Efecto en el examen: la habilitación pide practicar el 70 % de 37 temas (26).
+
 # 7. Flujo técnico
 
 ```text
