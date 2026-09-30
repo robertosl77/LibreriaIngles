@@ -60,6 +60,9 @@ Rules:
 - acceptedAnswers must be exhaustive for closed items: list every grammatically correct variant.
 - commonErrors: 0-3 realistic learner mistakes, each with feedback in Spanish.
 - Use varied, everyday contexts and names; vocabulary appropriate for the level.
+- Every closed item must have exactly one defensible answer and test the language, not general
+  knowledge or logic. Never use "odd one out" / "word that does not belong" items: state the
+  criterion explicitly instead (e.g. "Which one is a drink?").
 - Do not repeat the example items literally; create new ones.
 """
 

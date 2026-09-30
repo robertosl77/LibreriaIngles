@@ -528,6 +528,462 @@
         }
       ],
       "tip": "Prestá atención a 'don't': cambia todo el sentido de la instrucción."
+    },
+    "a1.grammar.pronouns.subject_pronouns": {
+      "title": "Pronombres personales (sujeto)",
+      "explanation": "En inglés el sujeto casi nunca se omite: si no decís el nombre, usás un pronombre.",
+      "rules": [
+        "I = yo · you = vos/ustedes · he = él · she = ella · it = cosa o animal",
+        "we = nosotros (incluye al que habla) · they = ellos/ellas (personas o cosas)",
+        "El verbo siempre necesita sujeto: 'Is raining' ✗ → 'It is raining' ✓"
+      ],
+      "examples": [
+        {
+          "en": "Maria is a nurse. She works at night.",
+          "es": "María es enfermera. Trabaja de noche."
+        },
+        {
+          "en": "My phone is old. It is very slow.",
+          "es": "Mi teléfono es viejo. Es muy lento."
+        },
+        {
+          "en": "Tom and I are friends. We play football.",
+          "es": "Tom y yo somos amigos. Jugamos al fútbol."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "Is my brother. Is a doctor.",
+          "right": "He is my brother. He is a doctor.",
+          "why": "No se puede omitir el sujeto."
+        },
+        {
+          "wrong": "The dog is hungry. He wants food.",
+          "right": "The dog is hungry. It wants food.",
+          "why": "Para animales y cosas se usa 'it' (salvo mascotas, donde a veces se usa he/she)."
+        }
+      ],
+      "tip": "Preguntate '¿quién?' y reemplazalo por el pronombre: Tom and I → we; my parents → they."
+    },
+    "a1.grammar.nouns.plurals": {
+      "title": "Singular y plural",
+      "explanation": "La mayoría de los sustantivos forma el plural con -s, pero hay reglas de ortografía y algunos irregulares.",
+      "rules": [
+        "Regla general: + s (book → books)",
+        "-s, -sh, -ch, -x → + es (bus → buses, box → boxes, watch → watches)",
+        "consonante + y → -ies (city → cities); vocal + y → + s (day → days)",
+        "Irregulares: man → men, woman → women, child → children, person → people, foot → feet, tooth → teeth"
+      ],
+      "examples": [
+        {
+          "en": "I have two brothers.",
+          "es": "Tengo dos hermanos."
+        },
+        {
+          "en": "There are three boxes.",
+          "es": "Hay tres cajas."
+        },
+        {
+          "en": "The children are in the park.",
+          "es": "Los chicos están en el parque."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "two boxs",
+          "right": "two boxes",
+          "why": "Después de -x va -es."
+        },
+        {
+          "wrong": "three childs",
+          "right": "three children",
+          "why": "'child' es irregular."
+        },
+        {
+          "wrong": "many peoples",
+          "right": "many people",
+          "why": "'people' ya es plural."
+        }
+      ],
+      "tip": "Si la palabra termina en sonido 's', 'sh', 'ch' o 'x', el plural agrega una sílaba: box → box-es."
+    },
+    "a1.grammar.have_got.basic": {
+      "title": "Have got",
+      "explanation": "'Have got' significa 'tener' (posesión, familia, características). Es muy común en inglés británico.",
+      "rules": [
+        "I / you / we / they + have got ('ve got)",
+        "he / she / it + has got ('s got)",
+        "Negativo: haven't got / hasn't got",
+        "Pregunta: Have you got...? / Has she got...?"
+      ],
+      "examples": [
+        {
+          "en": "I've got two sisters.",
+          "es": "Tengo dos hermanas."
+        },
+        {
+          "en": "She has got blue eyes.",
+          "es": "Ella tiene ojos azules."
+        },
+        {
+          "en": "Have you got a pen? — Yes, I have.",
+          "es": "¿Tenés una lapicera? — Sí."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "She have got a car.",
+          "right": "She has got a car.",
+          "why": "Con he/she/it se usa 'has got'."
+        },
+        {
+          "wrong": "They don't have got a car.",
+          "right": "They haven't got a car.",
+          "why": "Con 'have got' no se usa 'don't'."
+        }
+      ],
+      "tip": "Si la pregunta empieza con 'Have/Has', la respuesta corta es 'Yes, I have' / 'No, she hasn't'."
+    },
+    "a1.grammar.imperatives.basic": {
+      "title": "Imperativos",
+      "explanation": "Sirven para dar instrucciones, consejos o prohibiciones. Se usa el verbo base, sin sujeto.",
+      "rules": [
+        "Afirmativo: verbo base (Open the door.)",
+        "Negativo: Don't + verbo base (Don't run.)",
+        "'Please' suaviza la orden: Please sit down. / Sit down, please."
+      ],
+      "examples": [
+        {
+          "en": "Close the window, please.",
+          "es": "Cerrá la ventana, por favor."
+        },
+        {
+          "en": "Don't touch that!",
+          "es": "¡No toques eso!"
+        },
+        {
+          "en": "Turn left at the bank.",
+          "es": "Doblá a la izquierda en el banco."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "Doesn't run!",
+          "right": "Don't run!",
+          "why": "El imperativo negativo siempre es 'Don't'."
+        },
+        {
+          "wrong": "You open the door.",
+          "right": "Open the door.",
+          "why": "El imperativo no lleva sujeto."
+        }
+      ],
+      "tip": "Si empieza con el verbo (o con Don't), es una instrucción."
+    },
+    "a1.grammar.demonstratives.this_that": {
+      "title": "this / that / these / those",
+      "explanation": "Señalan cosas según la distancia y el número.",
+      "rules": [
+        "Cerca: this (singular) · these (plural)",
+        "Lejos: that (singular) · those (plural)"
+      ],
+      "examples": [
+        {
+          "en": "This is my car.",
+          "es": "Este es mi auto."
+        },
+        {
+          "en": "Look at those mountains!",
+          "es": "¡Mirá esas montañas!"
+        },
+        {
+          "en": "These shoes are new.",
+          "es": "Estos zapatos son nuevos."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "this shoes",
+          "right": "these shoes",
+          "why": "'shoes' es plural."
+        },
+        {
+          "wrong": "Look at these birds over there.",
+          "right": "Look at those birds over there.",
+          "why": "'over there' indica lejos."
+        }
+      ],
+      "tip": "Buscá pistas de distancia (here, over there) y fijate si el sustantivo es plural."
+    },
+    "a1.grammar.prepositions_place.basic": {
+      "title": "Preposiciones de lugar",
+      "explanation": "Indican dónde está algo.",
+      "rules": [
+        "in = dentro de (in the box, in the kitchen)",
+        "on = sobre una superficie (on the table, on the wall)",
+        "under = debajo de",
+        "next to = al lado de",
+        "behind = detrás de · in front of = delante de"
+      ],
+      "examples": [
+        {
+          "en": "The cat is under the bed.",
+          "es": "El gato está debajo de la cama."
+        },
+        {
+          "en": "The picture is on the wall.",
+          "es": "El cuadro está en la pared."
+        },
+        {
+          "en": "The bank is next to the supermarket.",
+          "es": "El banco está al lado del supermercado."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "The picture is in the wall.",
+          "right": "The picture is on the wall.",
+          "why": "Algo apoyado o colgado en una superficie va con 'on'."
+        },
+        {
+          "wrong": "The keys are on my bag (adentro).",
+          "right": "The keys are in my bag.",
+          "why": "Dentro de algo va 'in'."
+        }
+      ],
+      "tip": "Imaginá la escena: ¿está adentro (in), apoyado encima (on) o abajo (under)?"
+    },
+    "a1.grammar.connectors.basic": {
+      "title": "Conectores: and / but / or / because",
+      "explanation": "Unen dos ideas en una sola oración.",
+      "rules": [
+        "and = y (suma)",
+        "but = pero (contraste)",
+        "or = o (opción)",
+        "because = porque (razón)"
+      ],
+      "examples": [
+        {
+          "en": "I like pizza and pasta.",
+          "es": "Me gusta la pizza y la pasta."
+        },
+        {
+          "en": "She is tired, but she is happy.",
+          "es": "Está cansada, pero contenta."
+        },
+        {
+          "en": "Do you want tea or coffee?",
+          "es": "¿Querés té o café?"
+        },
+        {
+          "en": "I'm hungry because I didn't eat.",
+          "es": "Tengo hambre porque no comí."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "I like tea and I don't like coffee.",
+          "right": "I like tea, but I don't like coffee.",
+          "why": "Si las ideas se oponen, va 'but'."
+        }
+      ],
+      "tip": "Preguntate qué relación hay entre las dos ideas: ¿suma, contraste, opción o razón?"
+    },
+    "a1.vocabulary.greetings.introductions": {
+      "title": "Saludos y presentaciones",
+      "explanation": "Frases fijas para saludar, presentarse y despedirse. Cada saludo tiene una respuesta típica.",
+      "rules": [
+        "Hello / Hi → Hello / Hi",
+        "How are you? → I'm fine, thanks. And you?",
+        "Nice to meet you. → Nice to meet you too.",
+        "What's your name? → My name is... / I'm...",
+        "Goodbye / Bye / See you later."
+      ],
+      "examples": [
+        {
+          "en": "Hi, I'm Lucas. Nice to meet you.",
+          "es": "Hola, soy Lucas. Encantado."
+        },
+        {
+          "en": "Good morning! How are you?",
+          "es": "¡Buen día! ¿Cómo estás?"
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "How are you? — Nice to meet you.",
+          "right": "How are you? — I'm fine, thanks.",
+          "why": "Cada saludo tiene su respuesta."
+        },
+        {
+          "wrong": "How you are?",
+          "right": "How are you?",
+          "why": "En la pregunta, 'are' va antes de 'you'."
+        }
+      ],
+      "tip": "'Good night' es para despedirse a la noche, no para saludar: al llegar se dice 'Good evening'."
+    },
+    "a1.vocabulary.numbers_dates.numbers": {
+      "title": "Números",
+      "explanation": "Los números del 13 al 19 terminan en -teen; las decenas terminan en -ty.",
+      "rules": [
+        "1-12: one, two, three, four, five, six, seven, eight, nine, ten, eleven, twelve",
+        "13-19: thirteen, fourteen, fifteen, sixteen, seventeen, eighteen, nineteen",
+        "Decenas: twenty, thirty, forty (sin u), fifty, sixty, seventy, eighty, ninety, one hundred",
+        "Compuestos con guion: twenty-one, forty-five"
+      ],
+      "examples": [
+        {
+          "en": "I'm thirty-two years old.",
+          "es": "Tengo 32 años."
+        },
+        {
+          "en": "It costs fifteen dollars.",
+          "es": "Cuesta 15 dólares."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "fourty",
+          "right": "forty",
+          "why": "40 se escribe sin 'u' (aunque 4 es 'four')."
+        },
+        {
+          "wrong": "fiveteen",
+          "right": "fifteen",
+          "why": "15 y 50 cambian: fifteen, fifty."
+        }
+      ],
+      "tip": "-teen (13-19) se acentúa al final; -ty (20, 30...) al principio."
+    },
+    "a1.vocabulary.numbers_dates.days_months": {
+      "title": "Días, meses y fechas",
+      "explanation": "En inglés los días y los meses se escriben siempre con mayúscula.",
+      "rules": [
+        "Días: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday",
+        "Meses: January, February, March, April, May, June, July, August, September, October, November, December",
+        "on + día (on Monday) · in + mes (in May)"
+      ],
+      "examples": [
+        {
+          "en": "My birthday is in April.",
+          "es": "Mi cumpleaños es en abril."
+        },
+        {
+          "en": "We have English on Wednesday.",
+          "es": "Tenemos inglés el miércoles."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "monday",
+          "right": "Monday",
+          "why": "Días y meses van con mayúscula."
+        },
+        {
+          "wrong": "Wensday",
+          "right": "Wednesday",
+          "why": "Se escribe 'Wednesday' aunque suena 'uénsdei'."
+        }
+      ],
+      "tip": "Wednesday y February tienen letras que no se pronuncian: memorizá cómo se escriben."
+    },
+    "a1.vocabulary.colours_clothes.colours": {
+      "title": "Colores",
+      "explanation": "Los colores funcionan como adjetivos: van antes del sustantivo y no cambian en plural.",
+      "rules": [
+        "red, blue, green, yellow, black, white, brown, grey, orange, pink, purple",
+        "Van antes del sustantivo: a red car (no 'a car red')",
+        "No tienen plural: red cars (no 'reds cars')"
+      ],
+      "examples": [
+        {
+          "en": "I have a black cat.",
+          "es": "Tengo un gato negro."
+        },
+        {
+          "en": "Her eyes are green.",
+          "es": "Sus ojos son verdes."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "a car red",
+          "right": "a red car",
+          "why": "El adjetivo va antes del sustantivo."
+        },
+        {
+          "wrong": "two blues shirts",
+          "right": "two blue shirts",
+          "why": "Los adjetivos no llevan -s."
+        }
+      ],
+      "tip": "Relacioná cada color con algo conocido: sky → blue, grass → green, banana → yellow."
+    },
+    "a1.vocabulary.colours_clothes.clothes": {
+      "title": "Ropa",
+      "explanation": "Vocabulario de ropa y el verbo para ponerse o llevar puesto.",
+      "rules": [
+        "shirt, T-shirt, trousers (jeans), dress, skirt, jacket, coat, jumper, shoes, trainers, socks, hat",
+        "wear = llevar puesto (She's wearing a dress.)",
+        "put on = ponerse · take off = sacarse",
+        "Siempre plural: trousers, jeans, shorts, glasses"
+      ],
+      "examples": [
+        {
+          "en": "I'm wearing jeans and a T-shirt.",
+          "es": "Tengo puesto un jean y una remera."
+        },
+        {
+          "en": "Put on your coat. It's cold.",
+          "es": "Ponete el abrigo. Hace frío."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "a trouser",
+          "right": "trousers / a pair of trousers",
+          "why": "'trousers' es siempre plural."
+        },
+        {
+          "wrong": "I'm using a jacket.",
+          "right": "I'm wearing a jacket.",
+          "why": "Para ropa puesta se usa 'wear', no 'use'."
+        }
+      ],
+      "tip": "Pensá en qué parte del cuerpo va: feet → shoes, socks; head → hat."
+    },
+    "a1.vocabulary.home.rooms_furniture": {
+      "title": "La casa",
+      "explanation": "Ambientes de la casa y lo que hacemos en cada uno.",
+      "rules": [
+        "kitchen (cocinar) · bedroom (dormir) · bathroom (bañarse) · living room (estar) · dining room (comer)",
+        "Muebles: bed, sofa, table, chair, wardrobe, shelf, fridge, cooker",
+        "There is a sofa in the living room. / There are two chairs in the kitchen."
+      ],
+      "examples": [
+        {
+          "en": "I cook in the kitchen.",
+          "es": "Cocino en la cocina."
+        },
+        {
+          "en": "There is a big bed in my bedroom.",
+          "es": "Hay una cama grande en mi dormitorio."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "I sleep in the kitchen.",
+          "right": "I sleep in the bedroom.",
+          "why": "Cada ambiente tiene su uso."
+        },
+        {
+          "wrong": "There is two chairs.",
+          "right": "There are two chairs.",
+          "why": "Plural → there are."
+        }
+      ],
+      "tip": "Asociá cada verbo con su ambiente: cook → kitchen, sleep → bedroom, wash → bathroom."
     }
   }
 }
