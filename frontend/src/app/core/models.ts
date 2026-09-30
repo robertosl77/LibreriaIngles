@@ -180,3 +180,8 @@ export interface ConnectionDraft {
   dailyRequestLimit?: number | null;
   perAccountDailyLimit?: number | null;
 }
+
+export interface ModelOption {
+  id: string;
+  label: string;
+}

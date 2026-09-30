@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field
 
 from app.accounts.models import Account, PlatformRole
 from app.ai.models import AIConnection, AIConnectionOwnerType, AIConnectionStatus
-from app.ai.providers import PROVIDERS
+from app.ai.providers import PROVIDERS, ProviderError, build_provider
 from app.ai.models import utcnow
-from app.ai.service import LIMIT_WINDOW, check_connection, successful_requests
+from app.ai.service import LIMIT_WINDOW, check_connection, provider_for, successful_requests
 from app.core.config import settings
 from app.core.deps import CurrentAccount, DbSession
 from app.core.security import encrypt_secret, mask_secret
@@ -39,6 +39,19 @@ class ConnectionUpdate(BaseModel):
     # Enviar null explícito borra el límite.
     dailyRequestLimit: int | None = Field(default=None, ge=1, le=1_000_000)
     perAccountDailyLimit: int | None = Field(default=None, ge=1, le=1_000_000)
+
+
+class ModelsRequest(BaseModel):
+    provider: str
+    apiKey: str | None = Field(default=None, max_length=2000)
+
+
+def _models_payload(provider) -> list[dict]:
+    try:
+        models = provider.list_models()
+    except ProviderError as exc:
+        raise HTTPException(422, f"No se pudo obtener la lista de modelos: {exc.message}")
+    return [{"id": m.id, "label": m.label} for m in models]
 
 
 def _is_platform_owner(account: Account) -> bool:
@@ -122,6 +135,36 @@ def providers() -> list[dict]:
         for info in PROVIDERS.values()
         if info.key != "MOCK" or settings.mock_ai_allowed
     ]
+
+
+@router.post("/models")
+def list_models_for_key(payload: ModelsRequest, account: CurrentAccount) -> list[dict]:
+    """Modelos disponibles para una API key todavía no guardada (alta de conexión).
+
+    La key se usa solo para esta consulta: no se guarda ni se registra.
+    """
+    provider_key = payload.provider.upper()
+    info = PROVIDERS.get(provider_key)
+    if info is None or (provider_key == "MOCK" and not settings.mock_ai_allowed):
+        raise HTTPException(422, "Proveedor no soportado.")
+    if info.requires_key and not payload.apiKey:
+        raise HTTPException(422, "Ingresá la API key para consultar los modelos.")
+    try:
+        provider = build_provider(provider_key, (payload.apiKey or "").strip() or None, None)
+    except ProviderError as exc:
+        raise HTTPException(422, exc.message)
+    return _models_payload(provider)
+
+
+@router.get("/connections/{connection_id}/models")
+def list_models_for_connection(connection_id: int, account: CurrentAccount, db: DbSession) -> list[dict]:
+    """Modelos disponibles para una conexión existente, con su credencial guardada."""
+    connection = _get_owned(db, account, connection_id)
+    try:
+        provider = provider_for(connection)
+    except ProviderError as exc:
+        raise HTTPException(422, exc.message)
+    return _models_payload(provider)
 
 
 @router.get("/connections")

@@ -284,3 +284,9 @@ textarea.input {
     transform: rotate(360deg);
   }
 }
+
+/* Textos de ayuda dentro de un campo: sin la negrita de la etiqueta */
+.field .small,
+.field .btn-link {
+  font-weight: 400;
+}

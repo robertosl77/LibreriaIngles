@@ -39,10 +39,27 @@ PROVIDERS: dict[str, ProviderInfo] = {
 }
 
 
+@dataclass(frozen=True)
+class ModelInfo:
+    id: str
+    label: str
+
+
 class AIProvider(Protocol):
     def complete_json(self, system: str, user: str, task: dict) -> dict: ...
 
     def health_check(self) -> None: ...
+
+    def list_models(self) -> list[ModelInfo]: ...
+
+
+# OpenAI lista todos sus modelos (embeddings, audio, imágenes...): solo sirven los de chat.
+_OPENAI_CHAT_PREFIXES = ("gpt-", "o1", "o3", "o4", "o5", "chatgpt-")
+_OPENAI_EXCLUDE = (
+    "embedding", "tts", "whisper", "audio", "realtime", "transcribe", "image",
+    "dall-e", "search", "moderation", "instruct", "codex", "computer-use",
+)
+_GEMINI_EXCLUDE = ("embedding", "aqa", "imagen", "tts", "image", "veo", "live")
 
 
 def _classify_http_error(response: httpx.Response) -> ProviderError:
@@ -130,6 +147,21 @@ class OpenAIProvider(_HttpProvider):
     def health_check(self) -> None:
         self._request("GET", f"{self.base_url}/models/{self.model}", headers=self._headers())
 
+    def list_models(self) -> list[ModelInfo]:
+        response = self._request("GET", f"{self.base_url}/models", headers=self._headers())
+        try:
+            rows = response.json()["data"]
+        except (KeyError, ValueError) as exc:
+            raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de OpenAI.") from exc
+        chat = [
+            row
+            for row in rows
+            if str(row.get("id", "")).startswith(_OPENAI_CHAT_PREFIXES)
+            and not any(word in row["id"] for word in _OPENAI_EXCLUDE)
+        ]
+        chat.sort(key=lambda row: row.get("created", 0), reverse=True)
+        return [ModelInfo(row["id"], row["id"]) for row in chat]
+
 
 class GeminiProvider(_HttpProvider):
     base_url = "https://generativelanguage.googleapis.com/v1beta"
@@ -157,6 +189,33 @@ class GeminiProvider(_HttpProvider):
 
     def health_check(self) -> None:
         self._request("GET", f"{self.base_url}/models/{self.model}", headers=self._headers())
+
+    def list_models(self) -> list[ModelInfo]:
+        models: list[ModelInfo] = []
+        page_token = None
+        for _ in range(10):  # tope de páginas por seguridad
+            params = {"pageSize": 1000}
+            if page_token:
+                params["pageToken"] = page_token
+            response = self._request(
+                "GET", f"{self.base_url}/models", headers=self._headers(), params=params
+            )
+            try:
+                data = response.json()
+                rows = data.get("models", [])
+            except ValueError as exc:
+                raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de Gemini.") from exc
+            for row in rows:
+                model_id = str(row.get("name", "")).removeprefix("models/")
+                if "generateContent" not in row.get("supportedGenerationMethods", []):
+                    continue
+                if not model_id.startswith("gemini") or any(w in model_id for w in _GEMINI_EXCLUDE):
+                    continue
+                models.append(ModelInfo(model_id, row.get("displayName") or model_id))
+            page_token = data.get("nextPageToken")
+            if not page_token:
+                break
+        return models
 
 
 class AnthropicProvider(_HttpProvider):
@@ -186,6 +245,24 @@ class AnthropicProvider(_HttpProvider):
 
     def health_check(self) -> None:
         self._request("GET", f"{self.base_url}/models/{self.model}", headers=self._headers())
+
+    def list_models(self) -> list[ModelInfo]:
+        models: list[ModelInfo] = []
+        params: dict = {"limit": 1000}
+        for _ in range(10):
+            response = self._request(
+                "GET", f"{self.base_url}/models", headers=self._headers(), params=params
+            )
+            try:
+                data = response.json()
+                rows = data["data"]
+            except (KeyError, ValueError) as exc:
+                raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de Anthropic.") from exc
+            models += [ModelInfo(row["id"], row.get("display_name") or row["id"]) for row in rows]
+            if not data.get("has_more") or not data.get("last_id"):
+                break
+            params = {"limit": 1000, "after_id": data["last_id"]}
+        return models
 
 
 def build_provider(provider: str, api_key: str | None, model: str | None) -> AIProvider:
