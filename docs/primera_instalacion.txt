@@ -1,0 +1,24 @@
+git checkout feat/mvp-foundation-v0.1
+git pull
+
+cd backend
+
+python --version
+python -m venv .venv
+
+.\.venv\Scripts\Activate.ps1
+
+pip install -e ".[dev]"
+
+Copy-Item .env.example .env
+
+alembic upgrade head
+
+pytest
+
+uvicorn app.main:app --reload
+
+
+
+
+
