@@ -107,8 +107,10 @@ def test_pass_exam_issues_verifiable_certificate(client) -> None:
     assert result["passed"] is True
     assert result["score"] >= service.PASS_SCORE
     assert {a["key"] for a in result["areas"]} == set(service.EXAM_BLUEPRINT)
-    assert [m["key"] for m in result["modalities"]] == ["LISTEN"]
-    assert result["modalities"][0]["items"] >= service.EXAM_MIN_LISTEN
+    modalities = {m["key"]: m for m in result["modalities"]}
+    assert modalities["LISTEN"]["items"] >= service.EXAM_MIN_LISTEN
+    # Con conexión de audio disponible, el examen también incluye al menos una respuesta hablada.
+    assert modalities["SPEAK"]["items"] >= service.EXAM_MIN_SPEAK
     code = submitted["certificateCode"]
     assert code and code.startswith("LI-A1-")
 

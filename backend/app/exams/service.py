@@ -281,7 +281,10 @@ def finalize_exam(db: Session, session: ClassSession) -> dict:
         if attempt.response_mode and attempt.response_mode.value == "SPEAK":
             by_modality.setdefault("SPEAK", []).append(attempt.score or 0)
     modalities = []
-    for key, scores in by_modality.items():
+    for key in ("LISTEN", "SPEAK"):
+        scores = by_modality.get(key)
+        if not scores:
+            continue
         value = round(sum(scores) / len(scores), 1)
         modalities.append(
             {

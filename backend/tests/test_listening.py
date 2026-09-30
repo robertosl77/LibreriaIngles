@@ -114,7 +114,10 @@ def test_listening_class_flow_and_modality_progress(client) -> None:
     assert item["type"] in EXERCISE_TYPES
     assert item["stimulus"]["mode"] == "LISTEN" and item["stimulus"]["text"]
     assert item["stimulus"]["lang"] == "en-US" and item["stimulus"]["rate"] == 0.85
-    assert item["response"] == ("SELECT" if item["type"].endswith("multiple_choice") else "WRITE")
+    if item["type"].endswith("multiple_choice"):
+        assert item["response"] == "SELECT"
+    else:
+        assert item["response"] in ("WRITE", "SPEAK")
 
     with SessionLocal() as db:
         answers = {
@@ -136,5 +139,8 @@ def test_listening_class_flow_and_modality_progress(client) -> None:
     assert listen["name"] == "Escucha"
     assert listen["attemptCount"] == len(listened)
     assert listen["score"] == 100
-    # Habla todavía no tiene práctica: no se muestra.
-    assert all(m["key"] != "SPEAK" for m in progress["modalities"])
+    spoken = [e for e in klass["exercises"] if e["response"] == "SPEAK"]
+    if spoken:
+        speak = next(m for m in progress["modalities"] if m["key"] == "SPEAK")
+        assert speak["name"] == "Habla"
+        assert speak["attemptCount"] == len(spoken)
