@@ -43,7 +43,7 @@ JWT_SECRET=<secreto de 32+ caracteres>
 DEV_LOGIN_ENABLED=true          # login sin Google (solo local)
 MOCK_AI_ENABLED=true            # proveedor simulado (solo local)
 GOOGLE_CLIENT_ID=               # ver punto 3
-PLATFORM_OWNER_EMAILS=tu@email  # recibe el rol PLATFORM_OWNER al ingresar
+PLATFORM_OWNER_EMAILS=sr.macros@gmail.com  # recibe el rol PLATFORM_OWNER al ingresar
 ENCRYPTION_KEY=                 # opcional en local; obligatoria en production
 ```
 
