@@ -240,14 +240,10 @@ const RESULT_LABELS: Record<string, string> = {
                 @if (exercise.response === 'SPEAK') {
                   <app-audio-recorder
                     [busy]="transcribingId() === exercise.id"
+                    [confirmed]="confirmedSpeaking().has(exercise.id)"
+                    (recordingStarted)="beginSpeaking(exercise.id)"
                     (accepted)="transcribe(exercise, $event)"
                   />
-                  @if (answers()[exercise.id]) {
-                    <p class="your-answer transcript-answer">
-                      <span class="muted small">Transcripción:</span>
-                      <strong>{{ answers()[exercise.id] }}</strong>
-                    </p>
-                  }
                 } @else {
                 @switch (exercise.type) {
                   @case ('multiple_choice') {
@@ -370,7 +366,6 @@ const RESULT_LABELS: Record<string, string> = {
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
     .transcript em { font-style: normal; }
-    .transcript-answer { padding: 0.55rem 0.7rem; background: var(--bg); border-radius: 0.5rem; }
     .lesson-btn {
       align-self: flex-start;
       display: inline-flex; align-items: center; gap: 0.4rem;
@@ -442,6 +437,7 @@ export class ClassComponent implements OnDestroy {
   readonly openLesson = signal<number | null>(null);
   readonly lessonLoading = signal<number | null>(null);
   readonly transcribingId = signal<number | null>(null);
+  readonly confirmedSpeaking = signal<Set<number>>(new Set());
 
   readonly editable = computed(() => {
     const status = this.klass()?.status;
@@ -505,6 +501,13 @@ export class ClassComponent implements OnDestroy {
       answers[exercise.id] = exercise.answer ?? '';
     }
     this.answers.set(answers);
+    this.confirmedSpeaking.set(
+      new Set(
+        detail.exercises
+          .filter((exercise) => exercise.response === 'SPEAK' && (exercise.answer ?? '').trim())
+          .map((exercise) => exercise.id)
+      )
+    );
     this.saveState.set({});
     this.openLesson.set(null);
     if (detail.notice) {
@@ -531,6 +534,16 @@ export class ClassComponent implements OnDestroy {
     this.edits.next({ exerciseId, answer, immediate });
   }
 
+  beginSpeaking(exerciseId: number): void {
+    this.confirmedSpeaking.update((current) => {
+      const next = new Set(current);
+      next.delete(exerciseId);
+      return next;
+    });
+    // Al empezar una nueva toma, la respuesta anterior deja de ser la respuesta vigente.
+    this.onAnswer(exerciseId, '', true);
+  }
+
   async transcribe(exercise: Exercise, recording: RecordedAudio): Promise<void> {
     const c = this.klass();
     if (!c || exercise.response !== 'SPEAK') {
@@ -543,7 +556,9 @@ export class ClassComponent implements OnDestroy {
         this.api.transcribeAnswer(c.id, exercise.id, recording.blob, recording.durationMs)
       );
       this.answers.update((current) => ({ ...current, [exercise.id]: result.transcript }));
+      this.confirmedSpeaking.update((current) => new Set(current).add(exercise.id));
       this.markSave(exercise.id, 'saved');
+      this.toast.success('Respuesta grabada.');
       if (result.switched) {
         this.toast.show('Se cambió automáticamente el proveedor para transcribir el audio.');
       }

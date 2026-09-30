@@ -15,43 +15,75 @@ export interface RecordedAudio {
 
       @if (!recordedUrl()) {
         <div class="row">
-          @if (!recording()) {
-            <button class="btn btn-sm" type="button" (click)="start()" [disabled]="busy()">
-              Grabar respuesta
-            </button>
-            <span class="muted small">Máximo {{ maxSeconds() }} segundos.</span>
-          } @else {
+          @if (recording()) {
             <button class="btn btn-sm btn-danger" type="button" (click)="stop()">
+              <span class="stop-icon" aria-hidden="true"></span>
               Detener
             </button>
             <strong class="small recording">Grabando… {{ elapsedSeconds() }} s</strong>
+          } @else if (confirmed()) {
+            <span class="confirmed small"><strong>✓ Respuesta grabada</strong></span>
+            <button class="btn btn-sm" type="button" (click)="start()" [disabled]="busy()">
+              Grabar de nuevo
+            </button>
+          } @else {
+            <button class="record-btn" type="button" (click)="start()" [disabled]="busy()">
+              <span class="record-icon" aria-hidden="true"></span>
+              <span>Grabar respuesta</span>
+            </button>
+            <span class="muted small">Máximo {{ maxSeconds() }} segundos.</span>
           }
         </div>
       } @else {
         <audio [src]="recordedUrl()" controls></audio>
-        <div class="row">
-          <button class="btn btn-primary btn-sm" type="button" (click)="accept()" [disabled]="busy()">
-            @if (busy()) { <span class="spinner"></span> Transcribiendo… } @else { Usar esta grabación }
-          </button>
-          <button class="btn btn-sm" type="button" (click)="reset()" [disabled]="busy()">
-            Volver a grabar
-          </button>
-          <span class="muted small">{{ elapsedSeconds() }} s</span>
-        </div>
+        @if (confirmed()) {
+          <div class="row">
+            <span class="confirmed small"><strong>✓ Respuesta grabada</strong></span>
+            <button class="btn btn-sm" type="button" (click)="start()" [disabled]="busy()">
+              Grabar de nuevo
+            </button>
+            <span class="muted small">{{ elapsedSeconds() }} s</span>
+          </div>
+        } @else {
+          <div class="row">
+            <button class="btn btn-primary btn-sm" type="button" (click)="accept()" [disabled]="busy()">
+              @if (busy()) { <span class="spinner"></span> Transcribiendo… } @else { Confirmar respuesta }
+            </button>
+            <button class="btn btn-sm" type="button" (click)="start()" [disabled]="busy()">
+              Volver a grabar
+            </button>
+            <span class="muted small">{{ elapsedSeconds() }} s</span>
+          </div>
+        }
       }
     </div>
   `,
   styles: `
     .recorder { gap: 0.55rem; padding: 0.7rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
     audio { width: min(100%, 32rem); height: 2.4rem; }
+    .record-btn {
+      display: inline-flex; align-items: center; gap: 0.65rem;
+      padding: 0.65rem 1rem; border: 1px solid #d23b3b; border-radius: 999px;
+      background: #fff; color: #a51f1f; font: inherit; font-weight: 700; cursor: pointer;
+    }
+    .record-btn:hover:not(:disabled) { background: #fff3f3; }
+    .record-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .record-icon {
+      width: 1rem; height: 1rem; border-radius: 50%; background: #d93025;
+      box-shadow: 0 0 0 4px rgb(217 48 37 / 0.12);
+    }
+    .stop-icon { width: 0.75rem; height: 0.75rem; background: currentColor; display: inline-block; }
+    .confirmed { color: var(--ok); }
     .recording { color: var(--bad); }
     .error { color: var(--bad); margin: 0; }
   `
 })
 export class AudioRecorderComponent implements OnDestroy {
   readonly busy = input(false);
+  readonly confirmed = input(false);
   readonly maxSeconds = input(60);
   readonly accepted = output<RecordedAudio>();
+  readonly recordingStarted = output<void>();
 
   readonly recording = signal(false);
   readonly recordedUrl = signal<string | null>(null);
@@ -91,6 +123,7 @@ export class AudioRecorderComponent implements OnDestroy {
       this.elapsedSeconds.set(0);
       this.recording.set(true);
       this.recorder.start(250);
+      this.recordingStarted.emit();
       this.timerId = window.setInterval(() => {
         const elapsed = Date.now() - this.startedAt;
         this.elapsedSeconds.set(Math.min(this.maxSeconds(), Math.ceil(elapsed / 1000)));
