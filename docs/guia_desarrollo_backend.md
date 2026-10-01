@@ -86,6 +86,13 @@ Las dependencias de desarrollo incluyen, entre otras:
 
 Alembic forma parte de las dependencias principales porque las migraciones forman parte del funcionamiento normal de la aplicación.
 
+## 3.1 Pronunciación (T-027)
+
+No requiere instalar nada. La pronunciación la estima la **misma conexión de IA que transcribe**
+la respuesta hablada, en la misma llamada (hoy: Gemini). Con OpenAI se transcribe pero no se
+estima pronunciación (`pronunciation_result = null`); Anthropic no acepta audio. El resultado se
+marca como `estimated: true`. El audio nunca se guarda.
+
 ---
 
 # 4. Configuración local

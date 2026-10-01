@@ -41,6 +41,11 @@ type SpeechWindow = Window & {
   webkitSpeechRecognition?: SpeechRecognitionConstructor;
 };
 
+export interface PronunciationPracticeEvent {
+  score: number;
+  at: string;
+}
+
 /**
  * Práctica orientativa de pronunciación, sin guardar audio ni consumir conexiones de IA.
  * Usa reconocimiento de voz del navegador como señal de inteligibilidad, no como evaluación final.
@@ -106,7 +111,10 @@ type SpeechWindow = Window & {
       }
 
       <footer>
-        <span class="muted small">No se guarda audio ni cuenta como respuesta.</span>
+        <span class="muted small">
+          Librería Inglés no guarda el audio. El reconocimiento lo hace tu navegador
+          (puede usar un servicio de Google o Microsoft). Esta práctica no cuenta como respuesta.
+        </span>
         <button class="btn btn-sm" type="button" (click)="closed.emit()">Entendido, volver al ejercicio</button>
       </footer>
     </section>
@@ -149,6 +157,7 @@ type SpeechWindow = Window & {
 })
 export class PronunciationPracticeComponent implements OnDestroy {
   readonly closed = output<void>();
+  readonly practiced = output<PronunciationPracticeEvent>();
 
   target = '';
   readonly listening = signal(false);
@@ -191,6 +200,7 @@ export class PronunciationPracticeComponent implements OnDestroy {
       const value = this.pronunciationScore(phrase, alternative.transcript, alternative.confidence);
       this.score.set(value);
       this.attempts.update((count) => count + 1);
+      this.practiced.emit({ score: value, at: new Date().toISOString() });
     };
 
     recognition.onerror = (event) => {

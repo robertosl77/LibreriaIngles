@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from app.ai.models import AIConnection
 from app.ai.service import NoAIAvailable, transcribe_audio
 from app.classes import generation, service
+from app.pronunciation import normalize_ai_pronunciation
 from app.core.deps import CurrentStudy, DbSession
 from app.curriculum.lessons import get_lesson
 from app.learning.models import (
@@ -117,6 +118,11 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                     attempt.audio_duration_ms
                     if attempt
                     else (draft.audio_duration_ms if draft else None)
+                ),
+                "pronunciationResult": (
+                    attempt.pronunciation_result
+                    if attempt and attempt.score is not None
+                    else None
                 ),
                 "assistance": (
                     attempt.assistance.value
@@ -262,7 +268,7 @@ async def transcribe_answer_audio(
     study: CurrentStudy,
     db: DbSession,
 ) -> dict:
-    """SPEAK: audio temporal -> transcripción literal -> borrador textual."""
+    """SPEAK final: audio temporal -> STT + fonética -> borrador. El audio se descarta."""
     session = _get_class(db, study, class_id)
     if session.status not in (ClassSessionStatus.READY, ClassSessionStatus.IN_PROGRESS):
         raise HTTPException(status.HTTP_409_CONFLICT, "La clase ya fue enviada.")
@@ -301,6 +307,10 @@ async def transcribe_answer_audio(
             detail += " " + "; ".join(exc.errors)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
 
+    pronunciation_result = normalize_ai_pronunciation(
+        result.pronunciation, result.text, result.connection.provider
+    )
+
     try:
         draft = service.save_draft(
             db,
@@ -309,6 +319,7 @@ async def transcribe_answer_audio(
             exercise_id,
             result.text,
             audio_duration_ms=duration_ms,
+            pronunciation_result=pronunciation_result,
         )
     except service.ClassStateError as exc:
         raise _conflict(exc)
@@ -320,6 +331,7 @@ async def transcribe_answer_audio(
         "savedAt": draft.updated_at,
         "provider": result.connection.name,
         "switched": result.switched,
+        "pronunciationResult": pronunciation_result,
     }
 
 

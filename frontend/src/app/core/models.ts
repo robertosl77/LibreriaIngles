@@ -98,6 +98,17 @@ export interface ExerciseResult {
   canAppeal: boolean;
 }
 
+export interface PronunciationResult {
+  score: number;
+  words: { word: string; score: number }[];
+  phonemes: { phoneme: string; word: string; score: number }[];
+  fluency: number | null;
+  provider: string;
+  /** true: estimación de la IA que transcribe (no medición acústica). */
+  estimated?: boolean;
+  assessedAt: string;
+}
+
 export interface Exercise {
   id: number;
   position: number;
@@ -121,6 +132,7 @@ export interface Exercise {
   options: string[] | null;
   answer: string;
   audioDurationMs: number | null;
+  pronunciationResult: PronunciationResult | null;
   assistance: Assistance;
   hasLesson: boolean;
   result: ExerciseResult | null;

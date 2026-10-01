@@ -220,6 +220,8 @@ class DraftAnswer(Base):
     answer_text: Mapped[str] = mapped_column(Text, default="")
     # Solo SPEAK: duración del audio original. El archivo nunca se persiste.
     audio_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Evaluación fonética final normalizada (T-027). Nunca contiene audio.
+    pronunciation_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     assistance: Mapped[Assistance] = mapped_column(
         SqlEnum(Assistance, native_enum=False, length=20),
         default=Assistance.NONE,
@@ -264,6 +266,8 @@ class Attempt(Base):
     )
     # SPEAK: metadato de la grabación; el audio ya fue descartado.
     audio_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Resultado fonético final, independiente de la evaluación de contenido.
+    pronunciation_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Si respondió después de consultar la lección (o una pista): no vale igual como evidencia.
     assistance: Mapped[Assistance] = mapped_column(
         SqlEnum(Assistance, native_enum=False, length=20),

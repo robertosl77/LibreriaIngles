@@ -20,6 +20,7 @@ import {
 import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ClassDetail, Exercise, Lesson } from '../../core/models';
+import { SpeakingAudioStore } from '../../core/speaking-audio.store';
 import { ToastService } from '../../core/toast.service';
 import { AudioPlayerComponent } from '../../shared/audio-player.component';
 import { AudioRecorderComponent, RecordedAudio } from '../../shared/audio-recorder.component';
@@ -175,7 +176,7 @@ const RESULT_LABELS: Record<string, string> = {
           }
 
           @for (exercise of c.exercises; track exercise.id; let i = $index) {
-            <article class="card exercise" [class]="resultClass(exercise)">
+            <article class="card exercise" [attr.id]="'ex-' + exercise.id" [class]="resultClass(exercise)" [class.form-locked]="formLocked()">
               <header class="exercise-head">
                 <span class="muted small">{{ i + 1 }}. {{ typeLabels[exercise.type] }}@if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }@if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> } · {{ exercise.skillName }}</span>
                 @if (editable() && saveState()[exercise.id]; as state) {
@@ -209,11 +210,12 @@ const RESULT_LABELS: Record<string, string> = {
                   [lang]="stimulus.lang"
                   [rate]="stimulus.rate"
                   [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
+                  [disabled]="formLocked()"
                 />
               }
               <p class="question">{{ exercise.question }}</p>
 
-              @if (exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
+              @if ((editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
                 @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
                   <app-lesson-panel
                     [lesson]="lesson"
@@ -238,7 +240,7 @@ const RESULT_LABELS: Record<string, string> = {
                 }
               }
 
-              @if (editable() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
+              @if (editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
                 @if (openPronunciationPractice() === exercise.id) {
                   <app-pronunciation-practice (closed)="closePronunciationPractice()" />
                 } @else {
@@ -255,10 +257,11 @@ const RESULT_LABELS: Record<string, string> = {
               @if (editable()) {
                 @if (exercise.response === 'SPEAK') {
                   <app-audio-recorder
-                    [busy]="transcribingId() === exercise.id"
+                    [busy]="formLocked() || audioSavingId() === exercise.id"
                     [confirmed]="confirmedSpeaking().has(exercise.id)"
                     (recordingStarted)="beginSpeaking(exercise.id)"
-                    (accepted)="transcribe(exercise, $event)"
+                    (pendingChange)="markPendingSpeaking(exercise.id, $event)"
+                    (accepted)="confirmSpeaking(exercise, $event)"
                   />
                 } @else {
                 @switch (exercise.type) {
@@ -275,6 +278,7 @@ const RESULT_LABELS: Record<string, string> = {
                       rows="4"
                       [ngModel]="answers()[exercise.id]"
                       (ngModelChange)="onAnswer(exercise.id, $event)"
+                      [disabled]="formLocked()"
                       placeholder="Escribí tu respuesta en inglés…"
                     ></textarea>
                   }
@@ -287,6 +291,7 @@ const RESULT_LABELS: Record<string, string> = {
                       spellcheck="false"
                       [ngModel]="answers()[exercise.id]"
                       (ngModelChange)="onAnswer(exercise.id, $event)"
+                      [disabled]="formLocked()"
                       [placeholder]="exercise.type === 'rewrite' ? 'Escribí la oración completa' : 'Palabra(s) que completan el espacio'"
                     />
                   }
@@ -302,6 +307,29 @@ const RESULT_LABELS: Record<string, string> = {
               @if (exercise.result; as r) {
                 <div class="feedback stack">
                   @if (r.feedback) { <p>{{ r.feedback }}</p> }
+                  @if (exercise.response === 'SPEAK') {
+                    <div class="speaking-evaluation">
+                      <div>
+                        <strong>Contenido: {{ resultLabels[r.result || 'incorrect'] }} · {{ r.score }}%</strong>
+                      </div>
+                      @if (exercise.pronunciationResult; as pronunciation) {
+                        <div class="pronunciation-result">
+                          <strong>Pronunciación: {{ pronunciation.score }}%</strong>
+                          <span class="muted small"> · estimada por IA ({{ pronunciation.provider }})</span>
+                          @for (word of pronunciation.words; track $index) {
+                            @if (word.score < 70) {
+                              <span class="small">· <strong>{{ word.word }} {{ word.score }}%</strong></span>
+                            }
+                          }
+                        </div>
+                      } @else {
+                        <div class="pronunciation-result pronunciation-unavailable">
+                          <strong>Pronunciación: no evaluada</strong>
+                          <span class="muted small"> · no disponible con la conexión de IA usada (se estima con Gemini).</span>
+                        </div>
+                      }
+                    </div>
+                  }
                   @if (exercise.presentation === 'LISTEN' && exercise.stimulus) {
                     <p class="small transcript"><span class="muted">El audio decía: </span><em lang="en">“{{ exercise.stimulus.text }}”</em></p>
                   }
@@ -344,6 +372,7 @@ const RESULT_LABELS: Record<string, string> = {
                     [name]="'ex-' + exercise.id"
                     [value]="option"
                     [checked]="answers()[exercise.id] === option"
+                    [disabled]="formLocked()"
                     (change)="onAnswer(exercise.id, option, true)"
                   />
                   {{ option }}
@@ -354,8 +383,19 @@ const RESULT_LABELS: Record<string, string> = {
 
           @if (editable()) {
             <div class="submit-bar">
-              <span class="muted small">{{ answeredCount() }}/{{ c.exercises.length }} respondidas</span>
-              <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="busy()">
+              <div class="submit-status">
+                <span class="muted small">{{ answeredCount() }}/{{ c.exercises.length }} respondidas</span>
+                @if (!busy() && !allAnswered()) {
+                  <span class="small missing">
+                    @if (pendingSpeakingCount()) {
+                      {{ pendingSpeakingCount() }} grabación(es) sin confirmar ·
+                    }
+                    Respondé todos los ejercicios para finalizar.
+                    <button class="btn-link small" type="button" (click)="goToFirstMissing()">Ir al primero pendiente</button>
+                  </span>
+                }
+              </div>
+              <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="busy() || !allAnswered()">
                 @if (busy()) { <span class="spinner"></span> Corrigiendo… } @else { {{ c.kind === 'EXAM' ? 'Finalizar examen' : 'Finalizar y comprobar' }} }
               </button>
             </div>
@@ -374,6 +414,10 @@ const RESULT_LABELS: Record<string, string> = {
     .exercise.result-correct { border-left: 4px solid var(--ok); }
     .exercise.result-partial { border-left: 4px solid var(--warn); }
     .exercise.result-incorrect { border-left: 4px solid var(--bad); }
+    .exercise.form-locked input,
+    .exercise.form-locked textarea,
+    .exercise.form-locked .option { cursor: not-allowed; }
+    .exercise.form-locked .option { opacity: 0.75; }
     .exercise-head { display: flex; gap: 0.6rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
     .instruction { margin: 0; font-weight: 600; }
     .question { margin: 0; font-size: 1.15rem; }
@@ -404,6 +448,12 @@ const RESULT_LABELS: Record<string, string> = {
     .your-answer { margin: 0; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
     .feedback { gap: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.6rem; }
     .feedback p { margin: 0; }
+    .speaking-evaluation { display: flex; flex-direction: column; gap: 0.45rem; }
+    .pronunciation-result {
+      display: flex; gap: 0.35rem; align-items: baseline; flex-wrap: wrap;
+      padding: 0.5rem 0.65rem; background: #faf5ff; border: 1px solid #dcc7f2; border-radius: 0.5rem;
+    }
+    .pronunciation-unavailable { background: var(--bg); border-color: var(--border); }
     .suggestion { color: #5a3d00; }
     .feedback .btn-link { align-self: flex-start; }
     .error-text { color: var(--bad); }
@@ -424,6 +474,8 @@ const RESULT_LABELS: Record<string, string> = {
     .score-card { display: flex; gap: 1.5rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
     .score-card p { margin: 0; }
     .history { display: flex; flex-direction: column; gap: 0.2rem; }
+    .submit-status { display: flex; flex-direction: column; gap: 0.15rem; }
+    .submit-status .missing { color: var(--warn); }
     .submit-bar {
       position: sticky; bottom: 0.8rem;
       display: flex; align-items: center; justify-content: space-between; gap: 1rem;
@@ -437,6 +489,7 @@ export class ClassComponent implements OnDestroy {
 
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly speakingAudio = inject(SpeakingAudioStore);
   private readonly toast = inject(ToastService);
 
   readonly labels = STATUS_LABELS;
@@ -456,16 +509,37 @@ export class ClassComponent implements OnDestroy {
   readonly openLesson = signal<number | null>(null);
   readonly openPronunciationPractice = signal<number | null>(null);
   readonly lessonLoading = signal<number | null>(null);
-  readonly transcribingId = signal<number | null>(null);
+  readonly audioSavingId = signal<number | null>(null);
   readonly confirmedSpeaking = signal<Set<number>>(new Set());
+  /** Grabaciones hechas pero no confirmadas: no cuentan como respuesta. */
+  readonly pendingSpeaking = signal<Set<number>>(new Set());
+  readonly pendingSpeakingCount = computed(
+    () => [...this.pendingSpeaking()].filter((id) => !this.confirmedSpeaking().has(id)).length
+  );
 
   readonly editable = computed(() => {
     const status = this.klass()?.status;
     return status === 'READY' || status === 'IN_PROGRESS';
   });
-  readonly answeredCount = computed(
-    () => Object.values(this.answers()).filter((a) => a && a.trim().length > 0).length
-  );
+  /** Desde que se envía a corregir, ninguna interacción puede alterar la evidencia. */
+  readonly formLocked = computed(() => this.busy() || !this.editable());
+  readonly answeredCount = computed(() => {
+    const c = this.klass();
+    if (!c) return 0;
+    const answers = this.answers();
+    const confirmed = this.confirmedSpeaking();
+    return c.exercises.filter((exercise) =>
+      exercise.response === 'SPEAK'
+        ? confirmed.has(exercise.id)
+        : Boolean((answers[exercise.id] ?? '').trim())
+    ).length;
+  });
+
+  /** Se puede finalizar recién cuando todos los ejercicios tienen respuesta (las habladas, confirmadas). */
+  readonly allAnswered = computed(() => {
+    const c = this.klass();
+    return !!c && c.exercises.length > 0 && this.answeredCount() === c.exercises.length;
+  });
 
   private readonly edits = new Subject<{ exerciseId: number; answer: string; immediate: boolean }>();
   private readonly subscription: Subscription;
@@ -521,13 +595,13 @@ export class ClassComponent implements OnDestroy {
       answers[exercise.id] = exercise.answer ?? '';
     }
     this.answers.set(answers);
-    this.confirmedSpeaking.set(
-      new Set(
-        detail.exercises
-          .filter((exercise) => exercise.response === 'SPEAK' && (exercise.answer ?? '').trim())
-          .map((exercise) => exercise.id)
-      )
-    );
+    this.confirmedSpeaking.set(new Set());
+    this.pendingSpeaking.set(new Set());
+    if (detail.status === 'READY' || detail.status === 'IN_PROGRESS') {
+      void this.restoreSpeakingAudio(detail);
+    } else {
+      void this.speakingAudio.clearAttempt(detail.id, detail.currentAttempt).catch(() => undefined);
+    }
     this.saveState.set({});
     this.openLesson.set(null);
     this.openPronunciationPractice.set(null);
@@ -550,44 +624,77 @@ export class ClassComponent implements OnDestroy {
   }
 
   onAnswer(exerciseId: number, answer: string, immediate = false): void {
+    if (this.formLocked()) return;
     this.answers.update((current) => ({ ...current, [exerciseId]: answer }));
     this.markSave(exerciseId, 'saving');
     this.edits.next({ exerciseId, answer, immediate });
   }
 
-  beginSpeaking(exerciseId: number): void {
+  async beginSpeaking(exerciseId: number): Promise<void> {
+    if (this.formLocked()) return;
+    const c = this.klass();
     this.confirmedSpeaking.update((current) => {
       const next = new Set(current);
       next.delete(exerciseId);
       return next;
     });
-    // Al empezar una nueva toma, la respuesta anterior deja de ser la respuesta vigente.
-    this.onAnswer(exerciseId, '', true);
+    if (!c) return;
+
+    // Si un envío anterior alcanzó a procesar este audio pero no llegó a cerrar
+    // la clase, una nueva toma invalida ese borrador derivado sin gastar IA.
+    try {
+      const stored = await this.speakingAudio.get(c.id, c.currentAttempt, exerciseId);
+      if (stored?.processed) {
+        await this.speakingAudio.markUnprocessed(c.id, c.currentAttempt, exerciseId);
+        await firstValueFrom(this.api.saveAnswer(c.id, exerciseId, ''));
+      }
+    } catch {
+      // La nueva grabación puede continuar: al confirmar se reemplazará el audio local.
+    }
   }
 
-  async transcribe(exercise: Exercise, recording: RecordedAudio): Promise<void> {
+  async confirmSpeaking(exercise: Exercise, recording: RecordedAudio): Promise<void> {
+    if (this.formLocked()) return;
     const c = this.klass();
-    if (!c || exercise.response !== 'SPEAK') {
-      return;
-    }
-    this.transcribingId.set(exercise.id);
+    if (!c || exercise.response !== 'SPEAK') return;
+
+    this.audioSavingId.set(exercise.id);
     this.markSave(exercise.id, 'saving');
     try {
-      const result = await firstValueFrom(
-        this.api.transcribeAnswer(c.id, exercise.id, recording.blob, recording.durationMs)
-      );
-      this.answers.update((current) => ({ ...current, [exercise.id]: result.transcript }));
+      await this.speakingAudio.put(c.id, c.currentAttempt, exercise.id, recording);
       this.confirmedSpeaking.update((current) => new Set(current).add(exercise.id));
       this.markSave(exercise.id, 'saved');
-      this.toast.success('Respuesta grabada.');
-      if (result.switched) {
-        this.toast.show('Se cambió automáticamente el proveedor para transcribir el audio.');
-      }
+      this.toast.success('Respuesta grabada en este dispositivo.');
     } catch (err) {
       this.markSave(exercise.id, 'error');
-      this.toast.error(errorMessage(err, 'No se pudo transcribir la grabación.'));
+      this.toast.error(
+        err instanceof Error ? err.message : 'No se pudo guardar temporalmente la grabación.'
+      );
     } finally {
-      this.transcribingId.set(null);
+      this.audioSavingId.set(null);
+    }
+  }
+
+  private async restoreSpeakingAudio(detail: ClassDetail): Promise<void> {
+    const restored = new Set<number>();
+    try {
+      for (const exercise of detail.exercises) {
+        if (exercise.response !== 'SPEAK') continue;
+        const stored = await this.speakingAudio.get(
+          detail.id,
+          detail.currentAttempt,
+          exercise.id
+        );
+        if (stored) restored.add(exercise.id);
+      }
+      if (
+        this.klass()?.id === detail.id &&
+        this.klass()?.currentAttempt === detail.currentAttempt
+      ) {
+        this.confirmedSpeaking.set(restored);
+      }
+    } catch {
+      this.toast.error('No se pudieron recuperar las grabaciones guardadas en este navegador.');
     }
   }
 
@@ -608,6 +715,7 @@ export class ClassComponent implements OnDestroy {
   }
 
   togglePronunciationPractice(exerciseId: number): void {
+    if (this.formLocked()) return;
     this.openLesson.set(null);
     this.openPronunciationPractice.update((current) => current === exerciseId ? null : exerciseId);
   }
@@ -618,6 +726,8 @@ export class ClassComponent implements OnDestroy {
 
   /** "Necesito lección": se abre dentro del ejercicio; al cerrarla sigue respondiendo ahí. */
   async toggleLesson(exercise: Exercise): Promise<void> {
+    // Corregida: la lección se puede leer (no registra ayuda). Enviando/corrigiendo: bloqueado.
+    if (this.busy() || (this.formLocked() && this.klass()?.status !== 'COMPLETED')) return;
     const c = this.klass();
     if (!c) {
       return;
@@ -653,17 +763,77 @@ export class ClassComponent implements OnDestroy {
     }
   }
 
+  markPendingSpeaking(exerciseId: number, pending: boolean): void {
+    this.pendingSpeaking.update((current) => {
+      const next = new Set(current);
+      if (pending) next.add(exerciseId);
+      else next.delete(exerciseId);
+      return next;
+    });
+  }
+
+  goToFirstMissing(): void {
+    const c = this.klass();
+    if (!c) return;
+    const answers = this.answers();
+    const confirmed = this.confirmedSpeaking();
+    const missing = c.exercises.find((exercise) =>
+      exercise.response === 'SPEAK'
+        ? !confirmed.has(exercise.id)
+        : !(answers[exercise.id] ?? '').trim()
+    );
+    if (missing) {
+      document.getElementById('ex-' + missing.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
   async submit(): Promise<void> {
     const c = this.klass();
-    if (!c) {
+    if (!c || !this.editable() || this.busy()) return;
+
+    if (!this.allAnswered()) {
+      this.toast.show('Respondé todos los ejercicios antes de finalizar.');
+      this.goToFirstMissing();
       return;
     }
-    const unanswered = c.exercises.length - this.answeredCount();
-    if (unanswered > 0) {
-      this.toast.show(`Enviaste la clase con ${unanswered} ejercicio(s) sin responder.`);
+
+    this.busy.set(true);
+    try {
+      // Recién al entregar la clase salen del navegador los audios confirmados.
+      // Cada audio se procesa como máximo una vez salvo que el alumno lo reemplace.
+      for (const exercise of c.exercises) {
+        if (exercise.response !== 'SPEAK' || !this.confirmedSpeaking().has(exercise.id)) {
+          continue;
+        }
+        const stored = await this.speakingAudio.get(c.id, c.currentAttempt, exercise.id);
+        if (!stored) {
+          throw new Error('Falta una grabación confirmada. Volvé a grabar ese ejercicio.');
+        }
+        if (!stored.processed) {
+          const result = await firstValueFrom(
+            this.api.processSpeakingAnswer(
+              c.id,
+              exercise.id,
+              stored.blob,
+              stored.durationMs
+            )
+          );
+          await this.speakingAudio.markProcessed(c.id, c.currentAttempt, exercise.id);
+          if (result.switched) {
+            this.toast.show('Se cambió automáticamente el proveedor para transcribir un audio.');
+          }
+        }
+      }
+
+      const detail = await firstValueFrom(this.api.submitClass(c.id, this.answers()));
+      await this.speakingAudio.clearAttempt(c.id, c.currentAttempt);
+      this.setClass(detail);
+      await this.auth.refreshMe().catch(() => undefined);
+    } catch (err) {
+      this.toast.error(errorMessage(err, err instanceof Error ? err.message : undefined));
+    } finally {
+      this.busy.set(false);
     }
-    await this.run(() => this.api.submitClass(c.id, this.answers()));
-    await this.auth.refreshMe().catch(() => undefined);
   }
 
   async retryGeneration(): Promise<void> {

@@ -71,6 +71,22 @@ class MockProvider:
             text = ""
         return text or "This is a simulated spoken answer."
 
+    def analyze_speech(self, audio: bytes, mime_type: str):
+        """Transcripción simulada + pronunciación determinística (para tests y desarrollo)."""
+        from app.ai.providers import SpeechAnalysis
+
+        text = self.transcribe_audio(audio, mime_type)
+        words = [w.strip(".,!?") for w in text.split() if w.strip(".,!?")]
+        return SpeechAnalysis(
+            text,
+            {
+                "score": 80,
+                "words": [{"word": w, "score": 60 if i == 0 else 85} for i, w in enumerate(words)],
+                "phonemes": [],
+                "fluency": 75,
+            },
+        )
+
     def _generate(self, task: dict) -> dict:
         rng = random.Random()
         exercises = []

@@ -46,7 +46,7 @@ def test_speaking_keeps_existing_exercise_types() -> None:
     assert all(slot["allowedTypes"][0] != "speaking_prompt" for slot in slots)
 
 
-def test_audio_is_transcribed_to_draft_and_never_persisted(client) -> None:
+def test_audio_is_transcribed_to_draft_and_never_persisted(client, monkeypatch) -> None:
     headers = _setup(client)
     klass = client.post(f"{API}/classes", headers=headers).json()
 
@@ -68,6 +68,20 @@ def test_audio_is_transcribed_to_draft_and_never_persisted(client) -> None:
         exercise_id = exercise.id
         db.commit()
 
+    expected_pronunciation = {
+        "score": 82,
+        "words": [{"word": "hello", "score": 91}],
+        "phonemes": [{"phoneme": "h", "word": "hello", "score": 94}],
+        "fluency": None,
+        "provider": "GEMINI",
+        "estimated": True,
+        "assessedAt": "2026-10-01T00:00:00+00:00",
+    }
+    monkeypatch.setattr(
+        "app.classes.api.normalize_ai_pronunciation",
+        lambda *args, **kwargs: expected_pronunciation,
+    )
+
     response = client.post(
         f"{API}/classes/{klass['id']}/answers/{exercise_id}/transcribe",
         content=expected.encode("utf-8"),
@@ -79,12 +93,14 @@ def test_audio_is_transcribed_to_draft_and_never_persisted(client) -> None:
     )
     assert response.status_code == 200, response.text
     assert response.json()["transcript"] == expected
+    assert response.json()["pronunciationResult"] == expected_pronunciation
 
     with SessionLocal() as db:
         draft = db.scalar(select(DraftAnswer).where(DraftAnswer.exercise_id == exercise_id))
         assert draft is not None
         assert draft.answer_text == expected
         assert draft.audio_duration_ms == 2400
+        assert draft.pronunciation_result == expected_pronunciation
 
     detail = client.get(f"{API}/classes/{klass['id']}", headers=headers).json()
     answers = {str(item["id"]): item["answer"] for item in detail["exercises"]}
@@ -92,6 +108,10 @@ def test_audio_is_transcribed_to_draft_and_never_persisted(client) -> None:
         f"{API}/classes/{klass['id']}/submit", json={"answers": answers}, headers=headers
     )
     assert result.status_code == 200
+    completed_exercise = next(
+        item for item in result.json()["exercises"] if item["id"] == exercise_id
+    )
+    assert completed_exercise["pronunciationResult"] == expected_pronunciation
 
     with SessionLocal() as db:
         attempt = db.scalar(
@@ -103,5 +123,51 @@ def test_audio_is_transcribed_to_draft_and_never_persisted(client) -> None:
         assert attempt.response_mode == ResponseMode.SPEAK
         assert attempt.raw_answer == expected
         assert attempt.audio_duration_ms == 2400
-        # No existe columna/blob de audio: solo transcripción + duración.
+        assert attempt.pronunciation_result == expected_pronunciation
+        # No existe columna/blob de audio: solo resultados derivados.
         assert not hasattr(attempt, "audio")
+
+
+def test_pronunciation_result_is_null_when_service_is_unavailable(client, monkeypatch) -> None:
+    headers = _setup(client)
+    klass = client.post(f"{API}/classes", headers=headers).json()
+
+    with SessionLocal() as db:
+        exercises = db.scalars(
+            select(Exercise).where(Exercise.class_session_id == klass["id"])
+        ).all()
+        exercise = next(
+            item
+            for item in exercises
+            if item.exercise_type in {"fill_blank", "rewrite", "short_writing"}
+        )
+        exercise.response_mode = ResponseMode.SPEAK
+        exercise_id = exercise.id
+        db.commit()
+
+    from app.ai.mock import MockProvider
+    from app.ai.providers import SpeechAnalysis
+
+    # Proveedor que transcribe pero no estima pronunciación (como OpenAI).
+    monkeypatch.setattr(
+        MockProvider,
+        "analyze_speech",
+        lambda self, audio, mime_type: SpeechAnalysis(audio.decode("utf-8"), None),
+    )
+    response = client.post(
+        f"{API}/classes/{klass['id']}/answers/{exercise_id}/transcribe",
+        content=b"I work every day",
+        headers={
+            **headers,
+            "content-type": "audio/webm",
+            "x-audio-duration-ms": "1800",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["pronunciationResult"] is None
+
+    with SessionLocal() as db:
+        draft = db.scalar(select(DraftAnswer).where(DraftAnswer.exercise_id == exercise_id))
+        assert draft is not None
+        assert draft.pronunciation_result is None
+        assert not hasattr(draft, "audio")
