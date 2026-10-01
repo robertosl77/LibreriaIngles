@@ -101,7 +101,7 @@ export class SpeakingAudioStore {
           db.createObjectStore(STORE, { keyPath: 'key' });
         }
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => resolve(request.result as T);
       request.onerror = () =>
         reject(request.error ?? new Error('No se pudo abrir el almacenamiento local.'));
     });
@@ -109,7 +109,7 @@ export class SpeakingAudioStore {
 
   private async request<T = unknown>(
     mode: IDBTransactionMode,
-    action: (store: IDBObjectStore) => IDBRequest<T>
+    action: (store: IDBObjectStore) => IDBRequest
   ): Promise<T> {
     const db = await this.open();
     return new Promise<T>((resolve, reject) => {

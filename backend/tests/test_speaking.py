@@ -107,6 +107,10 @@ def test_audio_is_transcribed_to_draft_and_never_persisted(client, monkeypatch) 
         f"{API}/classes/{klass['id']}/submit", json={"answers": answers}, headers=headers
     )
     assert result.status_code == 200
+    completed_exercise = next(
+        item for item in result.json()["exercises"] if item["id"] == exercise_id
+    )
+    assert completed_exercise["pronunciationResult"] == expected_pronunciation
 
     with SessionLocal() as db:
         attempt = db.scalar(
