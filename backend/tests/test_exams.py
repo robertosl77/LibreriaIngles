@@ -1,5 +1,6 @@
 """T-024: examen de aprobación de nivel y certificado."""
 
+import math
 from datetime import timedelta
 
 from conftest import login
@@ -82,8 +83,8 @@ def test_exam_requires_eligibility(client) -> None:
 def test_exam_proposal_appears_when_student_is_close(client) -> None:
     headers = _setup(client)
     total = len(get_level("A1").skills)
-    preview = __import__("math").ceil(service.EXAM_PREVIEW_COVERAGE * total)
-    required = __import__("math").ceil(service.ELIGIBLE_COVERAGE * total)
+    preview = math.ceil(service.EXAM_PREVIEW_COVERAGE * total)
+    required = math.ceil(service.ELIGIBLE_COVERAGE * total)
 
     _make_eligible(client, headers, skills=preview, score=83.3)
     status = client.get(f"{API}/exams/status", headers=headers).json()
