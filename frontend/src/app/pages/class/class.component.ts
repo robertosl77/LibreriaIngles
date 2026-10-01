@@ -307,14 +307,9 @@ const RESULT_LABELS: Record<string, string> = {
                     <div class="pronunciation-result">
                       <strong>Pronunciación: {{ pronunciation.score }}%</strong>
                       <span class="muted small"> · {{ pronunciation.provider }}</span>
-                      @if (pronunciation.words.length) {
-                        @let weakWords = pronunciation.words.filter(word => word.score < 70);
-                        @if (weakWords.length) {
-                          <span class="small"> · A revisar:
-                            @for (word of weakWords; track $index) {
-                              <strong>{{ word.word }} {{ word.score }}%</strong>@if (!$last) {, }
-                            }
-                          </span>
+                      @for (word of pronunciation.words; track $index) {
+                        @if (word.score < 70) {
+                          <span class="small">· <strong>{{ word.word }} {{ word.score }}%</strong></span>
                         }
                       }
                     </div>
