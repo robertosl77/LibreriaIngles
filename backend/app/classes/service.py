@@ -104,6 +104,8 @@ def open_lesson(
         raise ClassStateError("El ejercicio no pertenece a la clase.")
     if session.kind == SessionKind.EXAM:
         raise ClassStateError("En el examen de nivel no hay lecciones.")
+    if session.status not in (ClassSessionStatus.READY, ClassSessionStatus.IN_PROGRESS):
+        raise ClassStateError("La clase ya fue enviada. Rehacela para volver a consultar la lección.")
     lesson = lesson_payload(exercise.skill_key) if exercise.skill_key else None
     if lesson is None:
         raise ClassStateError("Todavía no hay lección para este tema.")

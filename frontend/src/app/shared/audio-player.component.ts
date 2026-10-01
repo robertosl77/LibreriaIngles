@@ -17,7 +17,7 @@ import { Component, OnDestroy, OnInit, computed, input, signal } from '@angular/
           class="play"
           type="button"
           (click)="toggle()"
-          [disabled]="!playing() && exhausted()"
+          [disabled]="disabled() || (!playing() && exhausted())"
           [attr.aria-label]="playing() ? 'Detener audio' : 'Reproducir audio'"
         >
           @if (playing()) {
@@ -37,8 +37,8 @@ import { Component, OnDestroy, OnInit, computed, input, signal } from '@angular/
           }
         </div>
         <div class="speed" role="group" aria-label="Velocidad">
-          <button type="button" [class.on]="slow()" (click)="slow.set(true)">Lento</button>
-          <button type="button" [class.on]="!slow()" (click)="slow.set(false)">Normal</button>
+          <button type="button" [class.on]="slow()" [disabled]="disabled()" (click)="slow.set(true)">Lento</button>
+          <button type="button" [class.on]="!slow()" [disabled]="disabled()" (click)="slow.set(false)">Normal</button>
         </div>
       </div>
       @if (noEnglishVoice()) {
@@ -69,6 +69,7 @@ import { Component, OnDestroy, OnInit, computed, input, signal } from '@angular/
     .speed { display: inline-flex; border: 1px solid #c9d6ff; border-radius: 999px; overflow: hidden; }
     .speed button { border: 0; background: transparent; padding: 0.3rem 0.7rem; font: inherit; font-size: 0.8rem; cursor: pointer; color: #2f4ab3; }
     .speed button.on { background: #2f4ab3; color: #fff; }
+    .speed button:disabled { opacity: 0.6; cursor: not-allowed; }
     @media (prefers-reduced-motion: reduce) { .playing .play { animation: none; } }
   `
 })
@@ -76,6 +77,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   readonly text = input.required<string>();
   readonly lang = input('en-US');
   readonly rate = input(1);
+  readonly disabled = input(false);
   /** En el examen se limita la cantidad de reproducciones (null = sin límite). */
   readonly maxPlays = input<number | null>(null);
 
@@ -126,6 +128,9 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   }
 
   toggle(): void {
+    if (this.disabled()) {
+      return;
+    }
     if (this.playing()) {
       speechSynthesis.cancel();
       this.playing.set(false);

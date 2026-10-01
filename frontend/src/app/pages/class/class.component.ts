@@ -176,7 +176,7 @@ const RESULT_LABELS: Record<string, string> = {
           }
 
           @for (exercise of c.exercises; track exercise.id; let i = $index) {
-            <article class="card exercise" [class]="resultClass(exercise)">
+            <article class="card exercise" [class]="resultClass(exercise)" [class.form-locked]="formLocked()">
               <header class="exercise-head">
                 <span class="muted small">{{ i + 1 }}. {{ typeLabels[exercise.type] }}@if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }@if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> } · {{ exercise.skillName }}</span>
                 @if (editable() && saveState()[exercise.id]; as state) {
@@ -210,11 +210,12 @@ const RESULT_LABELS: Record<string, string> = {
                   [lang]="stimulus.lang"
                   [rate]="stimulus.rate"
                   [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
+                  [disabled]="formLocked()"
                 />
               }
               <p class="question">{{ exercise.question }}</p>
 
-              @if (exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
+              @if (editable() && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
                 @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
                   <app-lesson-panel
                     [lesson]="lesson"
@@ -239,7 +240,7 @@ const RESULT_LABELS: Record<string, string> = {
                 }
               }
 
-              @if (editable() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
+              @if (editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
                 @if (openPronunciationPractice() === exercise.id) {
                   <app-pronunciation-practice (closed)="closePronunciationPractice()" />
                 } @else {
@@ -256,7 +257,7 @@ const RESULT_LABELS: Record<string, string> = {
               @if (editable()) {
                 @if (exercise.response === 'SPEAK') {
                   <app-audio-recorder
-                    [busy]="audioSavingId() === exercise.id"
+                    [busy]="formLocked() || audioSavingId() === exercise.id"
                     [confirmed]="confirmedSpeaking().has(exercise.id)"
                     (recordingStarted)="beginSpeaking(exercise.id)"
                     (accepted)="confirmSpeaking(exercise, $event)"
@@ -276,6 +277,7 @@ const RESULT_LABELS: Record<string, string> = {
                       rows="4"
                       [ngModel]="answers()[exercise.id]"
                       (ngModelChange)="onAnswer(exercise.id, $event)"
+                      [disabled]="formLocked()"
                       placeholder="Escribí tu respuesta en inglés…"
                     ></textarea>
                   }
@@ -288,6 +290,7 @@ const RESULT_LABELS: Record<string, string> = {
                       spellcheck="false"
                       [ngModel]="answers()[exercise.id]"
                       (ngModelChange)="onAnswer(exercise.id, $event)"
+                      [disabled]="formLocked()"
                       [placeholder]="exercise.type === 'rewrite' ? 'Escribí la oración completa' : 'Palabra(s) que completan el espacio'"
                     />
                   }
@@ -368,6 +371,7 @@ const RESULT_LABELS: Record<string, string> = {
                     [name]="'ex-' + exercise.id"
                     [value]="option"
                     [checked]="answers()[exercise.id] === option"
+                    [disabled]="formLocked()"
                     (change)="onAnswer(exercise.id, option, true)"
                   />
                   {{ option }}
@@ -398,6 +402,10 @@ const RESULT_LABELS: Record<string, string> = {
     .exercise.result-correct { border-left: 4px solid var(--ok); }
     .exercise.result-partial { border-left: 4px solid var(--warn); }
     .exercise.result-incorrect { border-left: 4px solid var(--bad); }
+    .exercise.form-locked input,
+    .exercise.form-locked textarea,
+    .exercise.form-locked .option { cursor: not-allowed; }
+    .exercise.form-locked .option { opacity: 0.75; }
     .exercise-head { display: flex; gap: 0.6rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
     .instruction { margin: 0; font-weight: 600; }
     .question { margin: 0; font-size: 1.15rem; }
@@ -494,6 +502,8 @@ export class ClassComponent implements OnDestroy {
     const status = this.klass()?.status;
     return status === 'READY' || status === 'IN_PROGRESS';
   });
+  /** Desde que se envía a corregir, ninguna interacción puede alterar la evidencia. */
+  readonly formLocked = computed(() => this.busy() || !this.editable());
   readonly answeredCount = computed(() => {
     const c = this.klass();
     if (!c) return 0;
@@ -588,12 +598,14 @@ export class ClassComponent implements OnDestroy {
   }
 
   onAnswer(exerciseId: number, answer: string, immediate = false): void {
+    if (this.formLocked()) return;
     this.answers.update((current) => ({ ...current, [exerciseId]: answer }));
     this.markSave(exerciseId, 'saving');
     this.edits.next({ exerciseId, answer, immediate });
   }
 
   async beginSpeaking(exerciseId: number): Promise<void> {
+    if (this.formLocked()) return;
     const c = this.klass();
     this.confirmedSpeaking.update((current) => {
       const next = new Set(current);
@@ -616,6 +628,7 @@ export class ClassComponent implements OnDestroy {
   }
 
   async confirmSpeaking(exercise: Exercise, recording: RecordedAudio): Promise<void> {
+    if (this.formLocked()) return;
     const c = this.klass();
     if (!c || exercise.response !== 'SPEAK') return;
 
@@ -676,6 +689,7 @@ export class ClassComponent implements OnDestroy {
   }
 
   togglePronunciationPractice(exerciseId: number): void {
+    if (this.formLocked()) return;
     this.openLesson.set(null);
     this.openPronunciationPractice.update((current) => current === exerciseId ? null : exerciseId);
   }
@@ -686,6 +700,7 @@ export class ClassComponent implements OnDestroy {
 
   /** "Necesito lección": se abre dentro del ejercicio; al cerrarla sigue respondiendo ahí. */
   async toggleLesson(exercise: Exercise): Promise<void> {
+    if (this.formLocked()) return;
     const c = this.klass();
     if (!c) {
       return;
@@ -723,7 +738,7 @@ export class ClassComponent implements OnDestroy {
 
   async submit(): Promise<void> {
     const c = this.klass();
-    if (!c) return;
+    if (!c || !this.editable() || this.busy()) return;
 
     const unanswered = c.exercises.length - this.answeredCount();
     if (unanswered > 0) {
