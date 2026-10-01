@@ -38,7 +38,15 @@ from app.learning.models import (
 CHOICE_TYPES = {"multiple_choice", "reading_multiple_choice"}
 STATUS_SCORE = {"correct": 100.0, "partially_correct": 50.0, "incorrect": 0.0}
 ERROR_TYPES = {"GRAMMAR_ERROR", "VOCABULARY_ERROR", "SPELLING_ERROR", "WORD_ORDER_ERROR", "PRONUNCIATION_ERROR"}
-SUGGESTION_TYPES = {"STYLE_SUGGESTION", "NATURALNESS_SUGGESTION", "SHORTER_ALTERNATIVE"}
+SUGGESTION_TYPES = {
+    "STYLE_SUGGESTION",
+    "NATURALNESS_SUGGESTION",
+    "SHORTER_ALTERNATIVE",
+    "MECHANICS_NOTE",  # mayúsculas / puntuación: se señala, no descuenta (T-043)
+}
+# Puntaje fino por concepto (T-043): la IA da 0-100 y se respeta dentro de la banda de su
+# estado, así un error chico no vale lo mismo que no saber el tema.
+STATUS_BANDS = {"correct": (85.0, 100.0), "partially_correct": (35.0, 84.0), "incorrect": (0.0, 34.0)}
 
 
 @dataclass
@@ -48,12 +56,22 @@ class Evaluation:
     score: float
 
 
+def _concept_score(concept: dict) -> float:
+    """Puntaje de un concepto: el fino de la IA (acotado a la banda de su estado) o el del estado."""
+    status = concept["status"]
+    value = concept.get("score")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        low, high = STATUS_BANDS[status]
+        return min(high, max(low, float(value)))
+    return STATUS_SCORE[status]
+
+
 def score_from_result(result: dict) -> float:
     concepts = [
         c for c in result.get("conceptResults") or [] if isinstance(c, dict) and c.get("status") in STATUS_SCORE
     ]
     if concepts:
-        return round(sum(STATUS_SCORE[c["status"]] for c in concepts) / len(concepts), 1)
+        return round(sum(_concept_score(c) for c in concepts) / len(concepts), 1)
     return STATUS_SCORE.get(result.get("result"), 0.0)
 
 
@@ -191,12 +209,39 @@ def _common_error_result(exercise: Exercise, error: dict) -> dict:
     return result
 
 
+def _is_mechanics(error: dict) -> bool:
+    """Solo mayúsculas o puntuación ("i" → "I", "game" → "game."): no es gramática."""
+    fragment, correction = error.get("fragment"), error.get("correction")
+    if not fragment or not correction:
+        return False
+    return fragment != correction and normalize_spoken(fragment) == normalize_spoken(correction)
+
+
+def _dedupe_errors(errors: list[dict]) -> list[dict]:
+    """El mismo error repetido ("like play", "like drink", "like read") se informa una vez."""
+    merged: dict[tuple, dict] = {}
+    for error in errors:
+        key = (error["type"], (error.get("explanation") or "").strip().lower() or error.get("correction"))
+        if key in merged:
+            first = merged[key]
+            fragments = [f for f in (first.get("fragment"), error.get("fragment")) if f]
+            if error.get("fragment") and error["fragment"] not in (first.get("fragment") or ""):
+                first["fragment"] = " · ".join(fragments)
+            first["occurrences"] = first.get("occurrences", 1) + 1
+            continue
+        merged[key] = dict(error)
+    return list(merged.values())
+
+
 def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
     concepts = []
     for item in data.get("conceptResults") or []:
         if isinstance(item, dict) and item.get("status") in STATUS_SCORE:
-            concepts.append({"concept": str(item.get("concept") or "concept"), "status": item["status"]})
-    errors = [
+            concept = {"concept": str(item.get("concept") or "concept"), "status": item["status"]}
+            if isinstance(item.get("score"), (int, float)) and not isinstance(item.get("score"), bool):
+                concept["score"] = item["score"]
+            concepts.append(concept)
+    raw_errors = [
         {
             "type": e.get("type") if e.get("type") in ERROR_TYPES else "GRAMMAR_ERROR",
             "fragment": e.get("fragment"),
@@ -206,6 +251,9 @@ def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
         for e in data.get("errors") or []
         if isinstance(e, dict)
     ]
+    # Mayúsculas y puntuación: una sola observación, sin descontar (T-043).
+    mechanics = [e for e in raw_errors if _is_mechanics(e)]
+    errors = _dedupe_errors([e for e in raw_errors if not _is_mechanics(e)])
     suggestions = [
         {
             "type": s.get("type") if s.get("type") in SUGGESTION_TYPES else "STYLE_SUGGESTION",
@@ -214,6 +262,14 @@ def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
         for s in data.get("suggestions") or []
         if isinstance(s, dict) and s.get("text")
     ]
+    if mechanics and not any(s["type"] == "MECHANICS_NOTE" for s in suggestions):
+        suggestions.append(
+            {
+                "type": "MECHANICS_NOTE",
+                "text": "Ojo con las mayúsculas y la puntuación: \"I\" va siempre en mayúscula y cada "
+                "oración empieza con mayúscula y termina con punto.",
+            }
+        )
     result = {
         "result": data.get("result") if data.get("result") in STATUS_SCORE else None,
         "conceptResults": concepts,

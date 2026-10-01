@@ -1538,6 +1538,24 @@ Writing miente para abajo y desmotiva justo donde más hay que practicar.
 3. **Ajuste** (con OK): prompt del evaluador calibrado por nivel (qué es error en A1 y qué es
    sugerencia), estilo/naturalidad nunca descuentan, ortografía según T-021; tests con esos casos.
 
+Diagnóstico (2026-10-01, 9 escrituras libres reales de Roberto en A1):
+
+| Resultado | Casos | Causa |
+|---|---|---|
+| Nota dura | 2 (67 % → ~90; 38 % → ~60-65) | 1 error chico = −33 %; mayúsculas/puntos como gramática (6 de 12 "errores") |
+| Algo dura | 2 | errores reales + mayúsculas sumando |
+| Justa | 5 | errores reales o la respuesta no cumplía la consigna |
+
+Causas de severidad: (1) mayúsculas/puntuación contadas como GRAMMAR_ERROR; (2) el mismo
+error repetido contado varias veces; (3) un concepto castigado por errores de otro tema;
+(4) puntaje a saltos 100/50/0. Errores reales que se repiten (la corrección está bien):
+*like + verbo* ("I like read" → "I like reading / to read") y *at the morning* → *in the morning*.
+
+Cambios: puntaje fino por concepto acotado a la banda de su estado; mayúsculas/puntuación →
+una observación `MECHANICS_NOTE` que no descuenta; errores repetidos se agrupan (`occurrences`,
+"×3" en pantalla); prompt con evaluación por concepto y calibración por nivel. Tests con casos
+de la misma forma que los reales (sin copiar los textos del alumno).
+
 ---
 
 ## T-044 — Apelación con justificación

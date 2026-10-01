@@ -103,7 +103,7 @@ export interface ExerciseResult {
   result: 'correct' | 'partially_correct' | 'incorrect' | null;
   feedback: string | null;
   correctAnswer: string | null;
-  errors: { type: string; fragment: string | null; correction: string | null; explanation: string }[];
+  errors: { type: string; fragment: string | null; correction: string | null; explanation: string; occurrences?: number }[];
   suggestions: { type: string; text: string }[];
   conceptResults: { concept: string; status: string }[];
   evaluationSource: string | null;

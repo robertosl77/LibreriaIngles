@@ -369,6 +369,7 @@ const RESULT_LABELS: Record<string, string> = {
                       <p class="small error-line">
                         @if (err.fragment) { <s>{{ err.fragment }}</s> }
                         @if (err.correction) { → <strong>{{ err.correction }}</strong> }
+                        @if ((err.occurrences ?? 1) > 1) { <span class="chip">×{{ err.occurrences }}</span> }
                         @if (err.explanation) { <span class="muted"> · {{ err.explanation }}</span> }
                       </p>
                     }

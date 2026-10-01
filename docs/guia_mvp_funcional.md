@@ -343,6 +343,16 @@ es otra palabra que la app conoce ("sleep" por "sheep"). No aplica a respuestas 
 opción múltiple. Si la IA corrige y el único problema es ortografía, en ejercicios cerrados
 también vale 80 % (y una apelación así nunca agrega la palabra mal escrita como aceptada).
 
+**Corrección proporcional de la escritura (T-043):**
+
+- Puntaje fino por concepto: la IA da 0-100 y se respeta dentro de la banda de su estado
+  (correcto 85-100, parcial 35-84, incorrecto 0-34). Sin puntaje fino, se usa 100/50/0 como antes.
+- Mayúsculas y puntuación ("i" → "I", falta el punto final) no son errores de gramática: se
+  convierten en **una** observación `MECHANICS_NOTE` que no descuenta.
+- El mismo error repetido se informa una vez, con `occurrences` (la corrección muestra "×3").
+- Prompt: cada concepto se evalúa solo por sus propios errores; calibración por nivel (en A1-A2
+  las expresiones por encima del nivel son sugerencias, nunca errores).
+
 ---
 
 # 8. Endpoints nuevos
