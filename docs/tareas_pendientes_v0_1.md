@@ -1624,7 +1624,7 @@ realmente se está acercando al requisito.
 ## T-046 — Detención automática por silencio en respuestas Speaking
 
 **Prioridad:** P2 — Media  
-**Estado:** En curso  
+**Estado:** Resuelta (PR #20 a `develop`)  
 **Responsable:** ChatGPT
 
 Problema detectado en uso real: en los ejercicios de Speaking el alumno debe iniciar la
