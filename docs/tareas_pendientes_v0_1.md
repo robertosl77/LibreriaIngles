@@ -883,6 +883,7 @@ T-038 Publicación: servidor para backend con fonética + frontend (servidor pen
 T-039 Motor de pronunciación preciso OpenPronounce (futuro, rama archivo/t-027-openpronounce: NO BORRAR)
 T-043 Calibrar la corrección de escritura libre según el nivel (Claude)
 T-044 Apelación con justificación escrita o grabada (Claude)
+T-046 v2 Grabación de Speaking: corte más rápido y sin "Confirmar respuesta" (Claude)
 ```
 
 Referencias: documento funcional v0.3 §4.1, §5, §8, §15, §16, §17, §17.1, §39, §41 (Audio), §42 (Audio).
@@ -1650,6 +1651,33 @@ Solución:
 
 **Criterio UX:** una pausa normal al hablar no debe cortar prematuramente la respuesta; el
 auto-stop debe sentirse similar a la práctica de pronunciación sin sacrificar el audio final.
+
+---
+
+## T-046 v2 — Grabación de Speaking: corte más rápido y sin "Confirmar respuesta"
+
+**Prioridad:** P2 — Media  
+**Estado:** En curso · Claude  
+**Relación:** T-046 (auto-stop por silencio, ChatGPT), T-034 (evidencias/señales)
+
+Problemas detectados por Roberto al usar T-046:
+
+1. El corte automático tarda 1-2 s de más después de terminar de hablar.
+2. Paso de más: grabar → corta → **Confirmar respuesta**. La respuesta grabada ya es la
+   respuesta: se transcribe y corrige recién al enviar la clase, así que confirmar no aporta.
+
+Flujo nuevo:
+
+```text
+Grabar → hablar → corta solo (más rápido) → queda como respuesta ✓
+                                           └─ "Volver a grabar" (opcional)
+                                                 └─ cuenta como señal de esfuerzo en Speaking
+```
+
+1. Ajustar la detección de fin de habla para cortar antes sin cortar pausas normales.
+2. Quitar "Confirmar respuesta": la grabación se guarda sola al cortar (manual o automático).
+3. "Volver a grabar" se registra como señal (como las escuchas extra en Listening) y aparece en
+   el resumen de esfuerzo; muchas regrabaciones marcan Speaking como asistido.
 
 ---
 
