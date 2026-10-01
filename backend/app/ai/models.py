@@ -100,7 +100,7 @@ class AIConnection(Base):
 
 
 class AICredentialAuditEvent(Base):
-    """Auditoría de revelado/copia de credenciales por PLATFORM_OWNER.
+    """Auditoría de copia de credenciales por PLATFORM_OWNER.
 
     Nunca guarda el secreto: solo quién, qué conexión, qué acción y cuándo.
     """
