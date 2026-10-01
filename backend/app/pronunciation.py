@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import logging
 import math
+from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -99,11 +100,21 @@ def _normalize_phone_result(raw: dict, reference_text: str) -> dict | None:
         "assessedAt": datetime.now(timezone.utc).isoformat(),
     }
 
+def _find_ffmpeg() -> str | None:
+    """Prefiere el FFmpeg portable incluido en el root del proyecto."""
+    project_ffmpeg = Path(__file__).resolve().parents[2] / "ffmpeg" / "bin" / "ffmpeg.exe"
+    if project_ffmpeg.is_file():
+        return str(project_ffmpeg)
+    return shutil.which("ffmpeg")
+
+
 def _decode_in_memory(audio: bytes):
     """Decodifica webm/ogg/wav a mono float32 16 kHz sin escribir audio a disco."""
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = _find_ffmpeg()
     if ffmpeg is None:
-        raise RuntimeError("ffmpeg no está instalado")
+        raise RuntimeError(
+            "ffmpeg no está disponible: se esperaba en root/ffmpeg/bin/ffmpeg.exe o en PATH"
+        )
 
     result = subprocess.run(
         [
