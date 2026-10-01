@@ -7,7 +7,14 @@ from app.accounts.models import Account, PlatformRole
 from app.ai.models import AIConnection, AIConnectionOwnerType, AIConnectionStatus
 from app.ai.providers import PROVIDERS, ProviderError, build_provider
 from app.ai.models import utcnow
-from app.ai.service import LIMIT_WINDOW, check_connection, provider_for, successful_requests
+from app.ai.service import (
+    LIMIT_WINDOW,
+    active_connection,
+    check_connection,
+    connection_snapshot,
+    provider_for,
+    successful_requests,
+)
 from app.core.config import settings
 from app.core.deps import CurrentAccount, DbSession
 from app.core.security import encrypt_secret, mask_secret
@@ -167,6 +174,17 @@ def list_models_for_connection(connection_id: int, account: CurrentAccount, db: 
     except ProviderError as exc:
         raise HTTPException(422, exc.message)
     return _models_payload(provider)
+
+
+@router.get("/active")
+def active_connections(account: CurrentAccount, db: DbSession) -> dict:
+    """Conexiones que el router usaría ahora para texto y audio."""
+    default = active_connection(db, account)
+    audio = active_connection(db, account, audio=True)
+    return {
+        "default": connection_snapshot(default) if default else None,
+        "audio": connection_snapshot(audio) if audio else None,
+    }
 
 
 @router.get("/connections")

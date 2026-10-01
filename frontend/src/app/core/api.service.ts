@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import {
+  ActiveAiConnections,
   AiConnection,
   AuthConfig,
   Certificate,
@@ -73,6 +74,10 @@ export class ApiService {
     return this.http.get<AiConnection[]>(`${this.base}/ai/connections`, { params: { scope } });
   }
 
+  activeAiConnections(): Observable<ActiveAiConnections> {
+    return this.http.get<ActiveAiConnections>(`${this.base}/ai/active`);
+  }
+
   createConnection(body: ConnectionDraft): Observable<AiConnection> {
     return this.http.post<AiConnection>(`${this.base}/ai/connections`, body);
   }
@@ -139,6 +144,7 @@ export class ApiService {
     durationMs: number | null;
     savedAt: string;
     provider: string;
+    ai: import('./models').AiEngineTrace;
     switched: boolean;
     pronunciationResult: import('./models').PronunciationResult | null;
   }> {
@@ -148,6 +154,7 @@ export class ApiService {
       durationMs: number | null;
       savedAt: string;
       provider: string;
+      ai: import('./models').AiEngineTrace;
       switched: boolean;
       pronunciationResult: import('./models').PronunciationResult | null;
     }>(`${this.base}/classes/${classId}/answers/${exerciseId}/transcribe`, audio, {

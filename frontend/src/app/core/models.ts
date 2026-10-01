@@ -40,6 +40,19 @@ export interface ProviderInfo {
 
 export type ConnectionScope = 'account' | 'platform';
 
+export interface AiEngineTrace {
+  connectionId: number;
+  connection: string;
+  provider: string;
+  providerLabel: string;
+  model: string;
+}
+
+export interface ActiveAiConnections {
+  default: AiEngineTrace | null;
+  audio: AiEngineTrace | null;
+}
+
 export interface AiConnection {
   id: number;
   scope: ConnectionScope;
@@ -94,6 +107,7 @@ export interface ExerciseResult {
   suggestions: { type: string; text: string }[];
   conceptResults: { concept: string; status: string }[];
   evaluationSource: string | null;
+  ai: AiEngineTrace | null;
   appeal: { accepted: boolean; feedback?: string } | null;
   canAppeal: boolean;
 }
@@ -104,6 +118,9 @@ export interface PronunciationResult {
   phonemes: { phoneme: string; word: string; score: number }[];
   fluency: number | null;
   provider: string;
+  providerLabel?: string;
+  model?: string | null;
+  connection?: string | null;
   /** true: estimación de la IA que transcribe (no medición acústica). */
   estimated?: boolean;
   assessedAt: string;
@@ -177,6 +194,7 @@ export interface ClassDetail {
   evaluatedAt: string | null;
   generationError: string | null;
   generatedBy: string | null;
+  generationAi: AiEngineTrace | null;
   exercises: Exercise[];
   answered: number;
   history: { attempt: number; score: number }[];

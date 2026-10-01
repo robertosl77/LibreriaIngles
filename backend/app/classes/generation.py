@@ -11,7 +11,13 @@ from pydantic import BaseModel, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from app.ai.models import utcnow
-from app.ai.service import AIResult, NoAIAvailable, has_audio_connection, run_json_task
+from app.ai.service import (
+    AIResult,
+    NoAIAvailable,
+    connection_snapshot,
+    has_audio_connection,
+    run_json_task,
+)
 from app.classes.normalize import BLANK, normalize_answer, normalize_blank
 from app.classes.prompts import GENERATION_SYSTEM, generation_user_prompt
 from app.core.deps import StudyContext
@@ -482,6 +488,10 @@ def generate_content(
         session.generation_error = "No hay conexiones de IA disponibles. " + "; ".join(exc.errors)
         db.commit()
         return None
+
+    # Snapshot histórico del motor que realmente respondió (T-041).
+    request = {**request, "ai": connection_snapshot(result.connection)}
+    session.generation_request = request
 
     matched = _match_slots(result.data.get("exercises") or [], slots)
     if not _enough(session, slots, matched):
