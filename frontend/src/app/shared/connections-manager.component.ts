@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
@@ -56,10 +56,33 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
                 </div>
                 <span class="muted small">
                   {{ providerLabel(c.provider) }} · {{ c.model }}
-                  @if (c.credentialHint) { · {{ c.credentialHint }} }
                   @if (c.lastUsedAt) { · usada {{ c.lastUsedAt | date: 'dd/MM HH:mm' }} }
                   @if (c.backoffUntil && !c.usable) { · reintento {{ c.backoffUntil | date: 'HH:mm' }} }
                 </span>
+                @if (c.credentialHint) {
+                  <div class="credential-row small">
+                    <span class="muted">API key:</span>
+                    <code class="secret-value">{{ revealedKey(c.id) || c.credentialHint }}</code>
+                    @if (isOwner()) {
+                      <button
+                        class="btn btn-sm"
+                        type="button"
+                        (click)="toggleReveal(c)"
+                        [disabled]="credentialBusyId() === c.id"
+                      >
+                        {{ revealedKey(c.id) ? 'Ocultar' : 'Mostrar' }}
+                      </button>
+                      <button
+                        class="btn btn-sm"
+                        type="button"
+                        (click)="copyKey(c)"
+                        [disabled]="credentialBusyId() === c.id"
+                      >
+                        Copiar
+                      </button>
+                    }
+                  </div>
+                }
                 @if (isPlatform()) {
                   <div class="limits">
                     <span class="small">
@@ -203,6 +226,11 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
     .prio { display: flex; align-items: center; gap: 0.4rem; }
     .prio .input { width: 4.5rem; padding: 0.35rem 0.5rem; }
     .limits { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-top: 0.3rem; }
+    .credential-row { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+    .secret-value {
+      max-width: min(100%, 36rem); overflow-wrap: anywhere; user-select: text;
+      padding: 0.2rem 0.35rem; border-radius: 0.35rem; background: var(--bg);
+    }
     .usage-bar { width: 120px; }
     .limit-field { display: flex; align-items: center; gap: 0.4rem; }
     .limit-field .input { width: 6.5rem; padding: 0.35rem 0.5rem; }
@@ -210,7 +238,7 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
     .readonly { background: var(--bg); color: var(--muted); }
   `
 })
-export class ConnectionsManagerComponent implements OnInit {
+export class ConnectionsManagerComponent implements OnInit, OnDestroy {
   readonly scope = input<ConnectionScope>('account');
   readonly title = input('Tus conexiones');
   readonly changed = output<void>();
@@ -230,6 +258,10 @@ export class ConnectionsManagerComponent implements OnInit {
     this.providers().find((p) => p.key === this.selectedProviderKey())
   );
   readonly isPlatform = computed(() => this.scope() === 'platform');
+  readonly isOwner = computed(() => this.auth.me()?.account.isPlatformOwner ?? false);
+  readonly credentialBusyId = signal<number | null>(null);
+  readonly revealedKeys = signal<Record<number, string>>({});
+  private readonly revealTimers = new Map<number, number>();
 
   // Modelos disponibles (consultados al proveedor)
   readonly newModels = signal<ModelOption[] | null>(null);
@@ -263,6 +295,83 @@ export class ConnectionsManagerComponent implements OnInit {
       this.toast.error(errorMessage(err));
     }
     await this.reload();
+  }
+
+  ngOnDestroy(): void {
+    for (const timer of this.revealTimers.values()) {
+      window.clearTimeout(timer);
+    }
+    this.revealTimers.clear();
+    this.revealedKeys.set({});
+  }
+
+  revealedKey(connectionId: number): string | null {
+    return this.revealedKeys()[connectionId] ?? null;
+  }
+
+  async toggleReveal(connection: AiConnection): Promise<void> {
+    if (this.revealedKey(connection.id)) {
+      this.hideKey(connection.id);
+      return;
+    }
+
+    this.credentialBusyId.set(connection.id);
+    try {
+      const response = await firstValueFrom(
+        this.api.connectionCredential(connection.id, 'reveal')
+      );
+      this.revealedKeys.update((values) => ({
+        ...values,
+        [connection.id]: response.apiKey
+      }));
+      this.scheduleHide(connection.id);
+    } catch (err) {
+      this.toast.error(errorMessage(err, 'No se pudo mostrar la API key.'));
+    } finally {
+      this.credentialBusyId.set(null);
+    }
+  }
+
+  async copyKey(connection: AiConnection): Promise<void> {
+    this.credentialBusyId.set(connection.id);
+    try {
+      const response = await firstValueFrom(
+        this.api.connectionCredential(connection.id, 'copy')
+      );
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard API no disponible.');
+      }
+      await navigator.clipboard.writeText(response.apiKey);
+      this.toast.success(`API key de "${connection.name}" copiada.`);
+    } catch (err) {
+      this.toast.error(errorMessage(err, 'No se pudo copiar la API key.'));
+    } finally {
+      this.credentialBusyId.set(null);
+    }
+  }
+
+  hideKey(connectionId: number): void {
+    const timer = this.revealTimers.get(connectionId);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      this.revealTimers.delete(connectionId);
+    }
+    this.revealedKeys.update((values) => {
+      const next = { ...values };
+      delete next[connectionId];
+      return next;
+    });
+  }
+
+  private scheduleHide(connectionId: number): void {
+    const previous = this.revealTimers.get(connectionId);
+    if (previous !== undefined) {
+      window.clearTimeout(previous);
+    }
+    this.revealTimers.set(
+      connectionId,
+      window.setTimeout(() => this.hideKey(connectionId), 30_000)
+    );
   }
 
   providerLabel(key: string): string {
@@ -399,6 +508,9 @@ export class ConnectionsManagerComponent implements OnInit {
   }
 
   private async reload(): Promise<void> {
+    for (const connectionId of Object.keys(this.revealedKeys()).map(Number)) {
+      this.hideKey(connectionId);
+    }
     this.loading.set(true);
     try {
       const list = await firstValueFrom(this.api.connections(this.scope()));
