@@ -47,7 +47,7 @@ export interface RecordedAudio {
         } @else {
           <div class="row">
             <button class="btn btn-primary btn-sm" type="button" (click)="accept()" [disabled]="busy()">
-              @if (busy()) { <span class="spinner"></span> Transcribiendo… } @else { Confirmar respuesta }
+              @if (busy()) { <span class="spinner"></span> Guardando… } @else { Confirmar respuesta }
             </button>
             <button class="btn btn-sm" type="button" (click)="start()" [disabled]="busy()">
               Volver a grabar

@@ -127,7 +127,7 @@ export class ApiService {
     );
   }
 
-  transcribeAnswer(
+  processSpeakingAnswer(
     classId: number,
     exerciseId: number,
     audio: Blob,
@@ -139,6 +139,7 @@ export class ApiService {
     savedAt: string;
     provider: string;
     switched: boolean;
+    pronunciationResult: import('./models').PronunciationResult | null;
   }> {
     return this.http.post<{
       exerciseId: number;
@@ -147,6 +148,7 @@ export class ApiService {
       savedAt: string;
       provider: string;
       switched: boolean;
+      pronunciationResult: import('./models').PronunciationResult | null;
     }>(`${this.base}/classes/${classId}/answers/${exerciseId}/transcribe`, audio, {
       headers: {
         'Content-Type': audio.type || 'audio/webm',
