@@ -101,7 +101,7 @@ export class SpeakingAudioStore {
           db.createObjectStore(STORE, { keyPath: 'key' });
         }
       };
-      request.onsuccess = () => resolve(request.result as T);
+      request.onsuccess = () => resolve(request.result);
       request.onerror = () =>
         reject(request.error ?? new Error('No se pudo abrir el almacenamiento local.'));
     });
@@ -115,7 +115,7 @@ export class SpeakingAudioStore {
     return new Promise<T>((resolve, reject) => {
       const tx = db.transaction(STORE, mode);
       const request = action(tx.objectStore(STORE));
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => resolve(request.result as T);
       request.onerror = () => reject(request.error ?? new Error('No se pudo guardar el audio local.'));
       tx.oncomplete = () => db.close();
       tx.onerror = () => {
