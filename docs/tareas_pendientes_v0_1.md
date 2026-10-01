@@ -1657,7 +1657,7 @@ auto-stop debe sentirse similar a la práctica de pronunciación sin sacrificar 
 ## T-046 v2 — Grabación de Speaking: corte más rápido y sin "Confirmar respuesta"
 
 **Prioridad:** P2 — Media  
-**Estado:** Resuelta (PR a `develop`) · Claude  
+**Estado:** Resuelta (PR #21 a `develop`) · Claude  
 **Relación:** T-046 (auto-stop por silencio, ChatGPT), T-034 (evidencias/señales)
 
 Problemas detectados por Roberto al usar T-046:
