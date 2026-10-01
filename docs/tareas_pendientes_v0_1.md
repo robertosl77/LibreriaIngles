@@ -1198,7 +1198,7 @@ Requisitos técnicos:
 ## T-034 — Evidencias por habilidad, dashboard por habilidad y balanceo adaptativo
 
 **Prioridad:** P1 — Alta (el dashboard es lo más importante del producto)  
-**Estado:** Resuelta (PR a `develop`, ramas `feat/t-034-evidencias` → `-dashboard` → `-balanceo`)  
+**Estado:** Resuelta (PR #15 a `develop`)  
 **Responsable:** Claude
 
 Resolución (detalle en `guia_mvp_funcional.md` §6.5–6.7):
