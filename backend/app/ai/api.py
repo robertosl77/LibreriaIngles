@@ -58,10 +58,6 @@ class ModelsRequest(BaseModel):
     apiKey: str | None = Field(default=None, max_length=2000)
 
 
-class CredentialAccessRequest(BaseModel):
-    action: Literal["reveal", "copy"]
-
-
 def _models_payload(provider) -> list[dict]:
     try:
         models = provider.list_models()
@@ -197,17 +193,17 @@ def list_models_for_key(payload: ModelsRequest, account: CurrentAccount) -> list
     return _models_payload(provider)
 
 
-@router.post("/connections/{connection_id}/credential")
-def access_connection_credential(
+@router.post("/connections/{connection_id}/credential/copy")
+def copy_connection_credential(
     connection_id: int,
-    payload: CredentialAccessRequest,
     account: CurrentAccount,
     db: DbSession,
     response: Response,
 ) -> dict:
-    """Excepción T-042: revelar/copiar una API key solo al PLATFORM_OWNER.
+    """Excepción T-042: copiar una API key solo para el PLATFORM_OWNER.
 
-    El secreto nunca se escribe en logs ni en la auditoría.
+    La credencial nunca se incluye en listados, logs ni auditoría. El frontend la recibe
+    únicamente como respuesta a esta acción explícita para enviarla al portapapeles.
     """
     connection = _get_owner_credential_connection(db, account, connection_id)
     secret = decrypt_secret(connection.credentials_encrypted)
@@ -217,7 +213,7 @@ def access_connection_credential(
             account_id=account.id,
             connection_name=connection.name,
             owner_type=connection.owner_type.value,
-            action=payload.action.upper(),
+            action="COPY",
         )
     )
     db.commit()
