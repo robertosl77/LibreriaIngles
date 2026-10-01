@@ -105,6 +105,16 @@ export class ApiService {
     return this.http.get<ModelOption[]>(`${this.base}/ai/connections/${id}/models`);
   }
 
+  connectionCredential(
+    id: number,
+    action: 'reveal' | 'copy'
+  ): Observable<{ apiKey: string }> {
+    return this.http.post<{ apiKey: string }>(
+      `${this.base}/ai/connections/${id}/credential`,
+      { action }
+    );
+  }
+
   deleteConnection(id: number): Observable<void> {
     return this.http.delete<void>(`${this.base}/ai/connections/${id}`);
   }
