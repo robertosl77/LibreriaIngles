@@ -7,19 +7,25 @@ import { ApiService, errorMessage } from '../core/api.service';
 import { ExamStatus } from '../core/models';
 import { ToastService } from '../core/toast.service';
 
-/** Examen de aprobación del nivel actual (T-024): requisitos, rendir, resultado, certificado. */
+/** Examen de aprobación del nivel actual (T-024 + presentación progresiva T-045). */
 @Component({
   selector: 'app-exam-card',
   imports: [RouterLink, DatePipe],
   template: `
     @if (status(); as s) {
-      @if (s.available) {
+      @if (s.available && s.showProposal) {
         <section class="card exam" [class.passed]="s.passed">
           <div class="exam-head">
             <div>
               <p class="eyebrow">Examen de nivel</p>
               <h2>
-                @if (s.passed) { Aprobaste el nivel {{ s.level }} } @else { Examen {{ s.level }} }
+                @if (s.passed) {
+                  Aprobaste el nivel {{ s.level }}
+                } @else if (approaching(s)) {
+                  Te estás acercando al examen {{ s.level }}
+                } @else {
+                  Examen {{ s.level }}
+                }
               </h2>
             </div>
             <span class="seal" aria-hidden="true">{{ s.level }}</span>
@@ -47,6 +53,48 @@ import { ToastService } from '../core/toast.service';
             <div class="row">
               <a class="btn btn-primary" [routerLink]="['/app/clase', s.openExamId]">Continuar examen</a>
             </div>
+          } @else if (approaching(s)) {
+            @if (s.progress; as p) {
+              <div class="approach stack">
+                <p>
+                  Practicaste <strong>{{ p.practiced }} de {{ p.total }} temas</strong>.
+                  El requisito de cobertura se cumple al llegar a {{ p.requiredNeeded }} temas
+                  ({{ p.requiredCoveragePercent }}% del nivel).
+                </p>
+
+                <div class="coverage" aria-label="Progreso hacia la cobertura requerida para el examen">
+                  <div class="coverage-head small">
+                    <span>Cobertura actual: <strong>{{ p.coveragePercent }}%</strong></span>
+                    <span class="muted">Objetivo: {{ p.requiredCoveragePercent }}%</span>
+                  </div>
+                  <div class="coverage-track">
+                    <span
+                      class="coverage-fill"
+                      [style.width.%]="coverageTowardRequirement(s)"
+                    ></span>
+                  </div>
+                </div>
+
+                @if (p.averageScore !== null) {
+                  <p
+                    class="average-note"
+                    [class.good]="p.averageScore >= p.requiredAverageScore"
+                  >
+                    @if (p.averageScore >= p.requiredAverageScore) {
+                      Vas bien: <strong>{{ p.averageScore }}%</strong> de promedio en lo practicado.
+                    } @else {
+                      Tu promedio actual es <strong>{{ p.averageScore }}%</strong>.
+                      Para habilitar el examen necesitás {{ p.requiredAverageScore }}% o más.
+                    }
+                  </p>
+                }
+
+                <p class="muted small">
+                  Cuando llegues al {{ p.requiredCoveragePercent }}% de cobertura vas a ver los
+                  requisitos formales y, si también cumplís el promedio, se habilitará el examen.
+                </p>
+              </div>
+            }
           } @else {
             @if (s.lastExam?.result; as last) {
               <p class="last">
@@ -60,7 +108,10 @@ import { ToastService } from '../core/toast.service';
             }
 
             @if (s.cooldownUntil) {
-              <p class="muted small">Podés volver a rendirlo desde el {{ s.cooldownUntil | date: 'dd/MM HH:mm' }}. Mientras tanto, seguí practicando.</p>
+              <p class="muted small">
+                Podés volver a rendirlo desde el {{ s.cooldownUntil | date: 'dd/MM HH:mm' }}.
+                Mientras tanto, seguí practicando.
+              </p>
             } @else if (s.eligible) {
               <p class="muted">
                 Tu práctica muestra que estás listo. Son {{ s.rules?.exercises }} ejercicios de todas
@@ -68,24 +119,26 @@ import { ToastService } from '../core/toast.service';
                 {{ s.rules?.areaMinScore }}% en cada área.
               </p>
             } @else {
-              <p class="muted small">Se habilita cuando tu práctica del nivel sea suficiente:</p>
+              <p class="muted small">Para habilitar el examen necesitás cumplir ambos requisitos:</p>
             }
 
-            @if (!s.eligible) {
-              <ul class="checks">
-                @for (check of s.checks; track check.key) {
-                  <li [class.ok]="check.ok">
-                    <span class="tick" aria-hidden="true">{{ check.ok ? '✓' : '' }}</span>
-                    <span>{{ check.label }} <span class="muted small">· {{ check.detail }}</span></span>
-                  </li>
-                }
-              </ul>
-            }
+            <ul class="checks">
+              @for (check of s.checks; track check.key) {
+                <li [class.ok]="check.ok">
+                  <span class="tick" aria-hidden="true">{{ check.ok ? '✓' : '' }}</span>
+                  <span>{{ check.label }} <span class="muted small">· {{ check.detail }}</span></span>
+                </li>
+              }
+            </ul>
 
             @if (s.canStart) {
               <div class="row">
                 <button class="btn btn-primary" type="button" (click)="start()" [disabled]="starting()">
-                  @if (starting()) { <span class="spinner"></span> Armando examen… } @else { Rendir examen {{ s.level }} }
+                  @if (starting()) {
+                    <span class="spinner"></span> Armando examen…
+                  } @else {
+                    Rendir examen {{ s.level }}
+                  }
                 </button>
               </div>
             }
@@ -115,6 +168,24 @@ import { ToastService } from '../core/toast.service';
     }
     .checks li.ok .tick { background: var(--ok-bg); color: var(--ok); border-color: transparent; }
     .last { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+    .approach { gap: 0.65rem; }
+    .coverage { display: flex; flex-direction: column; gap: 0.35rem; }
+    .coverage-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .coverage-track {
+      height: 0.55rem; border-radius: 999px; overflow: hidden;
+      background: var(--bg); border: 1px solid var(--border);
+    }
+    .coverage-fill {
+      display: block; height: 100%; min-width: 0.35rem;
+      background: #b8943c; border-radius: inherit;
+    }
+    .average-note {
+      padding: 0.55rem 0.7rem; border-radius: 0.5rem;
+      background: var(--bg); border: 1px solid var(--border);
+    }
+    .average-note.good {
+      background: var(--ok-bg); color: var(--ok); border-color: transparent;
+    }
   `
 })
 export class ExamCardComponent implements OnInit {
@@ -131,6 +202,25 @@ export class ExamCardComponent implements OnInit {
     } catch {
       this.status.set(null);
     }
+  }
+
+  approaching(status: ExamStatus): boolean {
+    const progress = status.progress;
+    if (!progress || status.passed || status.openExamId || status.lastExam) {
+      return false;
+    }
+    return progress.coveragePercent < progress.requiredCoveragePercent;
+  }
+
+  coverageTowardRequirement(status: ExamStatus): number {
+    const progress = status.progress;
+    if (!progress || progress.requiredCoveragePercent <= 0) {
+      return 0;
+    }
+    return Math.min(
+      100,
+      Math.round((progress.coveragePercent / progress.requiredCoveragePercent) * 100)
+    );
   }
 
   async start(): Promise<void> {

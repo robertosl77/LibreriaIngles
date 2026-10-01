@@ -43,6 +43,7 @@ from app.progress.service import progress_by_skill
 EXAM_BLUEPRINT = {"grammar": 5, "vocabulary": 3, "listening": 2, "reading": 2, "writing": 2}
 PASS_SCORE = 70  # promedio global mínimo
 AREA_MIN_SCORE = 60  # mínimo en cada área
+EXAM_PREVIEW_COVERAGE = 0.6  # desde acá se empieza a anticipar el examen en la UI
 ELIGIBLE_COVERAGE = 0.7  # porción de skills del nivel practicadas
 ELIGIBLE_SCORE = 70  # promedio de las skills practicadas
 RETRY_COOLDOWN = timedelta(hours=24)
@@ -114,6 +115,7 @@ def exam_status(db: Session, study: StudyContext) -> dict:
     total = len(curriculum.skills)
     coverage = len(practiced) / total if total else 0
     average = round(sum(practiced) / len(practiced), 1) if practiced else None
+    preview_needed = math.ceil(EXAM_PREVIEW_COVERAGE * total)
     needed = math.ceil(ELIGIBLE_COVERAGE * total)
     checks = [
         {
@@ -143,11 +145,30 @@ def exam_status(db: Session, study: StudyContext) -> dict:
         if until and until > utcnow():
             cooldown_until = until
 
+    show_proposal = (
+        coverage >= EXAM_PREVIEW_COVERAGE
+        or certificate is not None
+        or open_exam is not None
+        or bool(completed)
+    )
+
     return {
         "level": level,
         "available": True,
+        "showProposal": show_proposal,
         "eligible": eligible,
         "checks": checks,
+        "progress": {
+            "practiced": len(practiced),
+            "total": total,
+            "coveragePercent": round(coverage * 100, 1),
+            "previewCoveragePercent": int(EXAM_PREVIEW_COVERAGE * 100),
+            "requiredCoveragePercent": int(ELIGIBLE_COVERAGE * 100),
+            "previewNeeded": preview_needed,
+            "requiredNeeded": needed,
+            "averageScore": average,
+            "requiredAverageScore": ELIGIBLE_SCORE,
+        },
         "passed": certificate is not None,
         "certificateCode": certificate.code if certificate else None,
         "openExamId": open_exam.id if open_exam else None,
