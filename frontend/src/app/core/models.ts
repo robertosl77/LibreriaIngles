@@ -165,7 +165,7 @@ export interface ClassDetail {
   kind: SessionKind;
   examResult: ExamResult | null;
   /** Habilidades que esta clase refuerza (T-034) y por qué. */
-  focus: { key: string; name: string; reason: string }[];
+  focus: { key: string; kind: 'ability' | 'topic'; name: string; reason: string }[];
   certificateCode: string | null;
   title: string | null;
   status: ClassStatus;
@@ -220,6 +220,8 @@ export interface AbilityProgress {
   assistedRecent: number;
   trend: string | null;
   status: SkillProgress['status'];
+  /** De qué temas vino la evidencia. */
+  sources: { skillKey: string; name: string; count: number; score: number | null; assistedCount: number }[];
   practiceTrials?: number;
   practiceFirst?: number | null;
   practiceLast?: number | null;

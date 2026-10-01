@@ -244,10 +244,17 @@ def ability_progress(db: Session, study_profile_id: int, level: str) -> list[dic
     ).all()
 
     series: dict[str, list] = {key: [] for key, _ in ABILITIES}
+    # De qué temas vino la evidencia de cada habilidad (para Listening/Speaking/Pronunciation).
+    sources: dict[str, dict[str, dict]] = {key: {} for key, _ in ABILITIES}
     practice: list[float] = []
     for attempt, exercise in rows:
         for item in attempt_evidence(attempt, exercise):
             series[item.ability].append(item)
+            src = sources[item.ability].setdefault(
+                exercise.skill_key or "", {"scores": [], "assisted": 0}
+            )
+            src["scores"].append(item.score)
+            src["assisted"] += int(item.assisted)
         practice += (attempt.signals or {}).get("practiceScores") or []
 
     result = []
@@ -273,6 +280,19 @@ def ability_progress(db: Session, study_profile_id: int, level: str) -> list[dic
             "trend": trend,
             "status": _status(score, sum(weights), assisted_recent) if scores else "NOT_STARTED",
         }
+        item["sources"] = sorted(
+            (
+                {
+                    "skillKey": skill_key,
+                    "name": skill_name(skill_key) or skill_key,
+                    "count": len(src["scores"]),
+                    "score": _average(src["scores"]),
+                    "assistedCount": src["assisted"],
+                }
+                for skill_key, src in sources[key].items()
+            ),
+            key=lambda s: (-s["count"], s["name"]),
+        )
         if key == "PRONUNCIATION":
             # La práctica no pesa en el puntaje: se muestra su evolución aparte.
             item["practiceTrials"] = len(practice)

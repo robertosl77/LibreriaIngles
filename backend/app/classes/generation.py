@@ -91,9 +91,39 @@ def weak_abilities(abilities: list[dict], *, allow_speaking: bool = False) -> li
         if helped:
             reasons.append(f"necesitaste ayuda en {ab['assistedRecent']} de los últimos ejercicios")
         need = (100 - ab["score"]) / 100 + 0.25 * (ab.get("assistedRecent") or 0)
-        found.append({"key": ab["key"], "name": ab["name"], "reason": " y ".join(reasons), "_need": need})
+        found.append(
+            {"key": ab["key"], "kind": "ability", "name": ab["name"], "reason": " y ".join(reasons), "_need": need}
+        )
     found.sort(key=lambda f: f["_need"], reverse=True)
     return [{k: v for k, v in f.items() if k != "_need"} for f in found[:FOCUS_MAX]]
+
+
+WEAK_TOPICS_MAX = 2
+
+
+def weak_topics_in(slots: list[dict], progress) -> list[dict]:
+    """Temas flojos que entraron en la clase (para "Esta clase refuerza…")."""
+    found = []
+    for key in dict.fromkeys(slot["skillKey"] for slot in slots):
+        row = progress.get(key)
+        if row is None or not row.attempt_count:
+            continue
+        reasons = []
+        if row.status == "NEEDS_REVIEW" or row.score < WEAK_SCORE:
+            reasons.append(f"vas {row.score:g}%")
+        if row.assisted_recent:
+            reasons.append("usaste la lección hace poco")
+        if reasons:
+            slot = next(s for s in slots if s["skillKey"] == key)
+            found.append({
+                "key": key,
+                "kind": "topic",
+                "name": f'{slot["topic"]} · {slot["skill"]}',
+                "reason": " y ".join(reasons),
+                "_score": row.score,
+            })
+    found.sort(key=lambda f: f["_score"])
+    return [{k: v for k, v in f.items() if k != "_score"} for f in found[:WEAK_TOPICS_MAX]]
 
 
 def _force_area(chosen: list[Skill], skills: list[Skill], area: str, keep: set[str], progress, rng) -> None:
@@ -408,12 +438,14 @@ def create_class(
     focus = weak_abilities(
         ability_progress(db, study.profile.id, curriculum.level), allow_speaking=allow_speaking
     )
+    progress = progress_by_skill(db, study.profile.id)
     slots = select_slots(
         list(curriculum.skills),
-        progress_by_skill(db, study.profile.id),
+        progress,
         allow_speaking=allow_speaking,
         focus=focus,
     )
+    focus = focus + weak_topics_in(slots, progress)
     session = ClassSession(
         study_profile_id=study.profile.id,
         account_id=study.account.id,

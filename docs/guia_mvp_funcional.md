@@ -255,7 +255,7 @@ Un ejercicio genera **varias evidencias**, una por habilidad que toca, cada una 
 | Presentado escuchando | Listening | resultado × esfuerzo: −15 % por escucha extra, −20 % si usó lento, piso 40 % |
 | Respondido hablando | Speaking | resultado del contenido |
 | Respondido hablando | Pronunciation | estimación final; una palabra dicha como otra parecida (think/sink) la limita a 50 % |
-| Escribió una oración (rewrite, short_writing) | Writing (señal secundaria, peso 0,5) | resultado |
+| Ejercicio del área Writing (armar/componer oraciones) | Writing | resultado (reescribir una oración dada en gramática **no** cuenta: es Grammar) |
 | Usó "Necesito lección" | todas sus evidencias | pesan la mitad y quedan marcadas como asistidas |
 | Escuchó más de 2 veces o en lento | Listening | además del descuento, queda marcada como asistida |
 | Practicó la pronunciación más de 2 veces | Pronunciation | pesa la mitad y queda asistida; el puntaje no baja |
@@ -278,8 +278,10 @@ Un ejercicio genera **varias evidencias**, una por habilidad que toca, cada una 
 
 - Una tarjeta por habilidad (Grammar, Vocabulary, Listening, Speaking, Pronunciation, Reading, Writing)
   con puntaje, estado, barra, evidencias, tendencia y la marca "N reciente(s) con ayuda".
-- Desplegable nativo (`<details>`): qué suma a esa habilidad, cuántas evidencias fueron con ayuda y,
-  si la habilidad es un área del currículum, sus temas y skills. Pronunciation muestra aparte la
+- Desplegable nativo (`<details>`): qué suma a esa habilidad, cuántas evidencias fueron con ayuda,
+  en Listening/Speaking/Pronunciation **de qué temas vino la evidencia** (`sources`) y, si la
+  habilidad es un área del currículum, sus temas y skills.
+- Color de la barra por tramo: 0-25 rojo, 25-50 naranja, 50-75 azul, 75-100 verde. Pronunciation muestra aparte la
   evolución de la práctica (no cambia el puntaje).
 - Se quitó "Por modalidad": lo escuchado y lo hablado ahora son Listening, Speaking y Pronunciation.
 
@@ -298,7 +300,9 @@ Al armar una clase, el motor mira las habilidades (`weak_abilities` en `classes/
   - Listening: al menos 2 ejercicios escuchados (normal: 1).
   - Speaking / Pronunciation: al menos 2 respuestas habladas; si faltan tipos que se puedan hablar, se
     cambia el tipo de un ejercicio cuya skill lo admita.
-- La clase muestra **"Esta clase refuerza: Writing · vas 40 %"** (campo `focus` de la clase).
+- La clase muestra **"Esta clase refuerza"** (campo `focus`): hasta 2 habilidades (`kind: ability`)
+  y hasta 2 temas flojos que entraron en la clase (`kind: topic`, ej. "Present Continuous ·
+  Preguntas · vas 0 % y usaste la lección hace poco").
 - Contenido A1 de escritura de oraciones: About me, Daily life (rutina), Short messages, Descriptions
   (personas y lugares) y Sentence building (ordenar palabras), cada uno con su lección.
 - **Examen sin ayudas:** sin lección, 2 escuchas por audio (el contador sobrevive a recargar) y sin modo lento.

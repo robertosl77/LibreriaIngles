@@ -110,7 +110,7 @@ const RESULT_LABELS: Record<string, string> = {
               <p class="focus-title">Esta clase refuerza</p>
               <ul>
                 @for (f of c.focus; track f.key) {
-                  <li><strong>{{ f.name }}</strong><span class="muted">{{ ' · ' + f.reason }}</span></li>
+                  <li [class.topic]="f.kind === 'topic'"><strong>{{ f.name }}</strong><span class="muted">{{ ' · ' + f.reason }}</span></li>
                 }
               </ul>
             </section>
@@ -491,6 +491,7 @@ const RESULT_LABELS: Record<string, string> = {
     }
     .focus-title { margin: 0 0 0.3rem; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--warn); }
     .focus ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.2rem; }
+    .focus li.topic strong { font-weight: 600; }
     .area-bars li { display: grid; grid-template-columns: minmax(7rem, 14rem) 1fr 3.5rem; align-items: center; gap: 0.8rem; }
     .area-bars strong { text-align: right; }
     .bar { position: relative; height: 0.6rem; border-radius: 999px; background: var(--info-bg); }

@@ -92,10 +92,16 @@ def test_pronunciation_slip_limits_pronunciation_not_topic() -> None:
     assert items["PRONUNCIATION"].score == 50
 
 
-def test_written_sentence_is_secondary_writing_evidence() -> None:
-    items = _by_ability(attempt_evidence(_attempt(40), _exercise(type_="rewrite")))
-    assert items["GRAMMAR"].weight == 1.0
-    assert items["WRITING"].score == 40 and items["WRITING"].weight == 0.5
+def test_grammar_rewrite_is_not_writing() -> None:
+    # Reescribir una oración dada mide gramática; no debe inflar Writing.
+    items = _by_ability(attempt_evidence(_attempt(100), _exercise(type_="rewrite")))
+    assert set(items) == {"GRAMMAR"}
+
+
+def test_writing_area_is_writing() -> None:
+    for type_ in ("short_writing", "rewrite"):  # componer o armar la oración
+        items = _by_ability(attempt_evidence(_attempt(56), _exercise(area="writing", type_=type_)))
+        assert items["WRITING"].score == 56 and items["WRITING"].weight == 1.0
 
 
 def test_lesson_halves_every_evidence() -> None:

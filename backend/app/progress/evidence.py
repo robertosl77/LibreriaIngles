@@ -8,8 +8,9 @@ a su manera (no se copia el mismo puntaje):
   (escuchas extra y uso de "lento").
 - SPEAK: Speaking = resultado del contenido; Pronunciation = estimación final
   (y un error de pronunciación tipo think/sink la limita).
-- Producir una oración escribiendo (rewrite, short_writing) también es evidencia
-  de Writing, aunque el foco sea gramática.
+- Writing se mide solo con ejercicios del área Writing (el alumno arma la oración).
+  Reescribir una oración que ya se da (rewrite de gramática) es Grammar, no Writing:
+  contarlo inflaba Writing con aciertos fáciles.
 - Pedir lección (ayuda) reduce el peso de la evidencia y la marca como asistida:
   es señal de debilidad aunque la respuesta sea correcta.
 - Asistencia continua: escuchar muchas veces o en lento marca Listening como
@@ -43,12 +44,10 @@ AREA_TO_ABILITY = {
 }
 
 ASSISTED_WEIGHT = 0.5  # respuesta con lección o pista
-SECONDARY_WEIGHT = 0.5  # señal secundaria (ej.: oración escrita en un ejercicio de gramática)
 EXTRA_PLAY_PENALTY = 0.15  # Listening: cada escucha extra
 SLOW_PENALTY = 0.20  # Listening: usó modo lento
 LISTEN_FLOOR = 0.40  # Listening: aunque costó, entendió
 PRONUNCIATION_SLIP_CAP = 50  # palabra dicha como otra parecida (think → sink)
-SENTENCE_TYPES = {"rewrite", "short_writing"}
 LISTEN_FREE_PLAYS = 2  # más escuchas que esto (o usar lento) = asistencia continua
 PRACTICE_FREE_TRIALS = 2  # más prácticas que esto = asistencia continua
 
@@ -123,7 +122,5 @@ def attempt_evidence(attempt, exercise) -> list[Evidence]:
                 weight * (ASSISTED_WEIGHT if practiced else 1.0),
                 assisted or practiced,
             )
-    elif exercise.exercise_type in SENTENCE_TYPES and "WRITING" not in evidence:
-        evidence["WRITING"] = Evidence("WRITING", score, weight * SECONDARY_WEIGHT, assisted)
 
     return list(evidence.values())

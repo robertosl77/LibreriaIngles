@@ -27,7 +27,7 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
   PRONUNCIATION:
     'Cómo sonó lo que dijiste (estimación de la IA). Si una palabra sonó como otra (think → sink), queda limitada.',
   READING: 'Textos que leíste. Un texto escuchado cuenta como Listening, no como Reading.',
-  WRITING: 'Ejercicios de escritura y, con menos peso, las oraciones que escribiste en otros ejercicios.'
+  WRITING: 'Ejercicios de escritura, donde armás la oración vos. Reescribir una oración dada cuenta como Grammar.'
 };
 
 @Component({
@@ -122,6 +122,26 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
                   </div>
                 }
 
+                @if (showSources(ab.key) && ab.sources.length) {
+                  <div class="sources">
+                    <p class="label">De dónde vino</p>
+                    <ul class="list">
+                      @for (src of ab.sources; track src.skillKey) {
+                        <li class="list-item skill">
+                          <div class="skill-name">
+                            <span>{{ src.name }}</span>
+                            <span class="muted small">
+                              {{ src.count }} ejercicio(s)
+                              @if (src.assistedCount) { · <span class="help-mark">{{ src.assistedCount }} con ayuda</span> }
+                            </span>
+                          </div>
+                          <strong>{{ src.score === null ? '' : src.score + '%' }}</strong>
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                }
+
                 @if (area) {
                   @for (topic of area.topics; track topic.key) {
                     <div class="topic">
@@ -188,6 +208,7 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
     .ab-body p { margin: 0; }
     .practice { background: var(--info-bg); border-radius: 0.6rem; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.2rem; }
     .label { font-weight: 600; font-size: 0.85rem; }
+    .sources { margin-top: 0.4rem; }
     .up { color: var(--ok); font-weight: 600; }
     .topic { margin-top: 0.6rem; }
     .topic-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
@@ -219,6 +240,11 @@ export class DashboardComponent implements OnInit {
 
   statusInfo(status: SkillProgress['status']): { label: string; chip: string } {
     return this.status[status] ?? this.status.NOT_STARTED;
+  }
+
+  /** Habilidades transversales: se alimentan de ejercicios de cualquier tema. */
+  showSources(key: AbilityProgress['key']): boolean {
+    return key === 'LISTENING' || key === 'SPEAKING' || key === 'PRONUNCIATION';
   }
 
   /** Tramo de color de la barra según el puntaje. */

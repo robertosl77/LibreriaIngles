@@ -856,7 +856,7 @@ T-030 Currícula A2 → B2                  (después de A1 completo)
 T-031 Temáticas en tres capas + portal  (futuro, después de A1)
 T-032 Incremento de contenido por versión (recurrente; arranca con T-028)
 T-033 Tema opcional al pedir nueva clase (mejora rápida, adelanto de T-031)
-T-034 Evidencias + dashboard por habilidad + balanceo (Claude; espera T-027)
+T-034 Evidencias + dashboard por habilidad + balanceo (Claude) — resuelta
 T-035 Migración a Bootstrap con tema configurable por empresa
 T-036 Reglas de examen y aprendizaje configurables (owner / ADMIN)
 T-037 Bloquear el formulario al enviar la clase (bug, Claude)
@@ -1198,8 +1198,29 @@ Requisitos técnicos:
 ## T-034 — Evidencias por habilidad, dashboard por habilidad y balanceo adaptativo
 
 **Prioridad:** P1 — Alta (el dashboard es lo más importante del producto)  
-**Estado:** Pendiente · **espera a que termine T-027 (Pronunciación, ChatGPT)**  
+**Estado:** Resuelta (PR a `develop`, ramas `feat/t-034-evidencias` → `-dashboard` → `-balanceo`)  
 **Responsable:** Claude
+
+Resolución (detalle en `guia_mvp_funcional.md` §6.5–6.7):
+
+1. **Evidencias:** señales por respuesta (escuchas, lento, prácticas; migración `0010_answer_signals`),
+   varias evidencias por ejercicio, ayuda = media evidencia y marca de asistencia (lección, escuchar
+   más de 2 veces o en lento, practicar más de 2 veces); con ayuda reciente no se da por dominado.
+   think/sink → `PRONUNCIATION_ERROR` también sin IA (`classes/spoken.py`). Examen sin lento y
+   2 escuchas persistentes.
+2. **Dashboard:** tarjeta desplegable por habilidad, color por tramo, marca de ayuda, "de dónde vino"
+   en Listening/Speaking/Pronunciation, evolución de la práctica aparte. Sin "Por modalidad".
+3. **Balanceo:** hasta 2 habilidades flojas reforzadas por clase (área con más peso + ejercicio
+   garantizado; Listening ≥2 escuchados; Speaking/Pronunciation ≥2 hablados; Writing escrito) y
+   hasta 2 temas flojos; visible en "Esta clase refuerza". 4 temas nuevos de escritura A1.
+
+Cambios respecto del plan original (decididos con Roberto, 2026-10-01):
+
+- **Writing solo cuenta ejercicios del área Writing.** Contar *rewrite* de gramática como señal
+  secundaria inflaba Writing (77 % real 56 %): reescribir una oración dada es Grammar.
+- Balanceo por foco (máx. 2 habilidades) en vez de "mínimo 1 por habilidad": 7 habilidades no
+  entran en 6 ejercicios; Listening y Speaking siguen teniendo mínimo 1 siempre.
+- Pendiente para otra tarea: que una habilidad no sea "Dominado" si tiene muchos temas sin practicar.
 
 Decisión de arquitectura (debatida 2026-09-30): **un ejercicio genera varias evidencias**.
 Cada ejercicio tiene un **foco principal** (su habilidad) y puede dejar **señales** en otras

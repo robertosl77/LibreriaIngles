@@ -69,7 +69,26 @@ def test_class_shows_what_it_reinforces(client) -> None:
     answers = {str(e["id"]): "xx" for e in first["exercises"]}
     client.post(f"{API}/classes/{first['id']}/submit", json={"answers": answers}, headers=headers)
     second = client.post(f"{API}/classes", headers=headers).json()
-    assert 1 <= len(second["focus"]) <= 2
+    assert 1 <= sum(f["kind"] == "ability" for f in second["focus"]) <= 2
+    assert sum(f["kind"] == "topic" for f in second["focus"]) <= 2
     assert all(f["reason"] for f in second["focus"])
     detail = client.get(f"{API}/classes/{second['id']}", headers=headers).json()
     assert detail["focus"] == second["focus"]
+
+
+def test_focus_names_weak_topics_and_abilities_show_sources(client) -> None:
+    headers = login(client, "topics@example.com")
+    client.put(f"{API}/me/level", json={"level": "A1"}, headers=headers)
+    client.post(f"{API}/ai/connections",
+                json={"provider": "MOCK", "name": "Simulado", "model": "mock", "priority": 1}, headers=headers)
+    for _ in range(2):  # todo mal dos veces: hay temas flojos
+        k = client.post(f"{API}/classes", headers=headers).json()
+        client.post(f"{API}/classes/{k['id']}/submit",
+                    json={"answers": {str(e["id"]): "xx" for e in k["exercises"]}}, headers=headers)
+    k = client.post(f"{API}/classes", headers=headers).json()
+    kinds = {f["kind"] for f in k["focus"]}
+    assert kinds <= {"ability", "topic"} and "ability" in kinds
+    progress = client.get(f"{API}/progress", headers=headers).json()
+    listening = next(a for a in progress["abilities"] if a["key"] == "LISTENING")
+    assert listening["sources"] and listening["sources"][0]["count"] >= 1
+    assert sum(s["count"] for s in listening["sources"]) == listening["evidenceCount"]
