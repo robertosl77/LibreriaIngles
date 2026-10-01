@@ -1621,6 +1621,37 @@ realmente se está acercando al requisito.
 
 ---
 
+## T-046 — Detención automática por silencio en respuestas Speaking
+
+**Prioridad:** P2 — Media  
+**Estado:** En curso  
+**Responsable:** ChatGPT
+
+Problema detectado en uso real: en los ejercicios de Speaking el alumno debe iniciar la
+grabación y luego pulsar manualmente `Detener`, mientras que la práctica de pronunciación
+finaliza sola cuando el navegador detecta que terminó de hablar.
+
+Objetivo: mantener `MediaRecorder` para conservar el audio real de la respuesta, pero mejorar
+la experiencia agregando detección local de fin de habla.
+
+Solución:
+
+1. Detectar actividad de voz localmente con Web Audio API durante la grabación.
+2. No detener la grabación hasta haber detectado voz real al menos una vez.
+3. Después de detectar voz, detener automáticamente tras aproximadamente 1,8–2 segundos
+   continuos de silencio.
+4. Mantener siempre el botón `Detener` para corte manual.
+5. Mantener el límite máximo actual como salvaguarda.
+6. Si Web Audio API no está disponible, conservar el comportamiento manual actual sin bloquear
+   el ejercicio.
+7. La detección de silencio no debe enviar audio a servicios externos ni consumir IA.
+8. Después del auto-stop se conserva el flujo actual: escuchar, confirmar o volver a grabar.
+
+**Criterio UX:** una pausa normal al hablar no debe cortar prematuramente la respuesta; el
+auto-stop debe sentirse similar a la práctica de pronunciación sin sacrificar el audio final.
+
+---
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
