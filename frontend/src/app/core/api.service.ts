@@ -105,13 +105,10 @@ export class ApiService {
     return this.http.get<ModelOption[]>(`${this.base}/ai/connections/${id}/models`);
   }
 
-  connectionCredential(
-    id: number,
-    action: 'reveal' | 'copy'
-  ): Observable<{ apiKey: string }> {
+  copyConnectionCredential(id: number): Observable<{ apiKey: string }> {
     return this.http.post<{ apiKey: string }>(
-      `${this.base}/ai/connections/${id}/credential`,
-      { action }
+      `${this.base}/ai/connections/${id}/credential/copy`,
+      {}
     );
   }
 
