@@ -272,7 +272,16 @@ Un ejercicio genera **varias evidencias**, una por habilidad que toca, cada una 
   transcripción que no coincide va a la IA aunque el ejercicio sea determinístico (si no hay IA, incorrecta).
   Los casos más difusos los resuelve la IA con la misma regla.
 - `/progress` devuelve `abilities` (puntaje, evidencias, ayudas, ayuda reciente, tendencia, estado y, en
-  Pronunciation, prácticas con su primer y último puntaje). El dashboard por habilidad es la etapa 2.
+  Pronunciation, prácticas con su primer y último puntaje). Ya no devuelve `modalities`.
+
+## 6.6 Dashboard por habilidad (T-034, etapa 2)
+
+- Una tarjeta por habilidad (Grammar, Vocabulary, Listening, Speaking, Pronunciation, Reading, Writing)
+  con puntaje, estado, barra, evidencias, tendencia y la marca "N reciente(s) con ayuda".
+- Desplegable nativo (`<details>`): qué suma a esa habilidad, cuántas evidencias fueron con ayuda y,
+  si la habilidad es un área del currículum, sus temas y skills. Pronunciation muestra aparte la
+  evolución de la práctica (no cambia el puntaje).
+- Se quitó "Por modalidad": lo escuchado y lo hablado ahora son Listening, Speaking y Pronunciation.
 - **Examen sin ayudas:** sin lección, 2 escuchas por audio (el contador sobrevive a recargar) y sin modo lento.
 
 # 7. Flujo técnico

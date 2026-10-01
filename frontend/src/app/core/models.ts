@@ -205,8 +205,22 @@ export interface Dashboard {
     attemptCount: number;
     topics: { key: string; name: string; score: number | null; skills: SkillProgress[] }[];
   }[];
-  /** Dimensión transversal: todo lo practicado escuchando (y hablando, cuando exista). */
-  modalities: { key: 'LISTEN' | 'SPEAK'; name: string; score: number | null; attemptCount: number }[];
+  /** Progreso por habilidad del idioma (T-034): un ejercicio deja evidencia en varias. */
+  abilities: AbilityProgress[];
+}
+
+export interface AbilityProgress {
+  key: 'GRAMMAR' | 'VOCABULARY' | 'LISTENING' | 'SPEAKING' | 'PRONUNCIATION' | 'READING' | 'WRITING';
+  name: string;
+  score: number | null;
+  evidenceCount: number;
+  assistedCount: number;
+  assistedRecent: number;
+  trend: string | null;
+  status: SkillProgress['status'];
+  practiceTrials?: number;
+  practiceFirst?: number | null;
+  practiceLast?: number | null;
 }
 
 export interface UsageCounts {

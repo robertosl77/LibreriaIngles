@@ -105,7 +105,7 @@ def test_engine_assigns_presentation_and_guarantees_listening() -> None:
     assert all(s["response"] in ("WRITE", "SELECT") for s in slots)
 
 
-def test_listening_class_flow_and_modality_progress(client) -> None:
+def test_listening_class_flow_and_ability_progress(client) -> None:
     headers = _setup(client)
     klass = client.post(f"{API}/classes", headers=headers).json()
     listened = [e for e in klass["exercises"] if e["presentation"] == "LISTEN"]
@@ -135,12 +135,10 @@ def test_listening_class_flow_and_modality_progress(client) -> None:
     assert corrected["result"]["score"] == 100
 
     progress = client.get(f"{API}/progress", headers=headers).json()
-    listen = next(m for m in progress["modalities"] if m["key"] == "LISTEN")
-    assert listen["name"] == "Escucha"
-    assert listen["attemptCount"] == len(listened)
-    assert listen["score"] == 100
+    assert "modalities" not in progress  # reemplazado por habilidades (T-034)
+    abilities = {a["key"]: a for a in progress["abilities"]}
+    assert abilities["LISTENING"]["evidenceCount"] >= len(listened)
+    assert abilities["LISTENING"]["score"] == 100  # sin señales de esfuerzo: sin descuento
     spoken = [e for e in klass["exercises"] if e["response"] == "SPEAK"]
     if spoken:
-        speak = next(m for m in progress["modalities"] if m["key"] == "SPEAK")
-        assert speak["name"] == "Habla"
-        assert speak["attemptCount"] == len(spoken)
+        assert abilities["SPEAKING"]["evidenceCount"] == len(spoken)
