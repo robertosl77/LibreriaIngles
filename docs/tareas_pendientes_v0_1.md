@@ -1590,7 +1590,7 @@ nueva y repite su criterio. La apelación debe permitir explicar por qué la res
 ## T-045 — Presentar el examen de nivel solo cuando el alumno esté cerca de habilitarlo
 
 **Prioridad:** P2 — Media  
-**Estado:** En curso  
+**Estado:** Resuelta (PR #19 a `develop`)  
 **Responsable:** ChatGPT
 
 Problema detectado en prueba real: con muy poca práctica el inicio ya muestra el bloque
