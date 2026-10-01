@@ -22,6 +22,3 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Dependencias binarias locales de pronunciación (se descargan con setup-pronunciation.ps1)
-/ffmpeg/
-/espeak-ng/

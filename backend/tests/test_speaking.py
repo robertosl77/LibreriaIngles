@@ -73,12 +73,13 @@ def test_audio_is_transcribed_to_draft_and_never_persisted(client, monkeypatch) 
         "words": [{"word": "hello", "score": 91}],
         "phonemes": [{"phoneme": "h", "word": "hello", "score": 94}],
         "fluency": None,
-        "provider": "OPENPRONOUNCE",
+        "provider": "GEMINI",
+        "estimated": True,
         "assessedAt": "2026-10-01T00:00:00+00:00",
     }
     monkeypatch.setattr(
-        "app.classes.api.assess_pronunciation",
-        lambda **kwargs: expected_pronunciation,
+        "app.classes.api.normalize_ai_pronunciation",
+        lambda *args, **kwargs: expected_pronunciation,
     )
 
     response = client.post(
@@ -144,7 +145,15 @@ def test_pronunciation_result_is_null_when_service_is_unavailable(client, monkey
         exercise_id = exercise.id
         db.commit()
 
-    monkeypatch.setattr("app.classes.api.assess_pronunciation", lambda **kwargs: None)
+    from app.ai.mock import MockProvider
+    from app.ai.providers import SpeechAnalysis
+
+    # Proveedor que transcribe pero no estima pronunciación (como OpenAI).
+    monkeypatch.setattr(
+        MockProvider,
+        "analyze_speech",
+        lambda self, audio, mime_type: SpeechAnalysis(audio.decode("utf-8"), None),
+    )
     response = client.post(
         f"{API}/classes/{klass['id']}/answers/{exercise_id}/transcribe",
         content=b"I work every day",

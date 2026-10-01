@@ -104,6 +104,8 @@ export interface PronunciationResult {
   phonemes: { phoneme: string; word: string; score: number }[];
   fluency: number | null;
   provider: string;
+  /** true: estimación de la IA que transcribe (no medición acústica). */
+  estimated?: boolean;
   assessedAt: string;
 }
 

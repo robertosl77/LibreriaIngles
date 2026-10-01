@@ -86,18 +86,12 @@ Las dependencias de desarrollo incluyen, entre otras:
 
 Alembic forma parte de las dependencias principales porque las migraciones forman parte del funcionamiento normal de la aplicación.
 
-## 3.1 Evaluación fonética local (T-027)
+## 3.1 Pronunciación (T-027)
 
-Para probar la evaluación fonética final con OpenPronounce, instalar el extra opcional:
-
-```powershell
-pip install -e ".[dev,pronunciation]"
-```
-
-OpenPronounce no necesita API key ni configuración de proveedor, pero requiere que `ffmpeg` y
-`espeak-ng` estén instalados y disponibles en el `PATH`. La primera evaluación descarga sus
-modelos de voz. Si el motor local no está disponible, la clase se corrige igual y
-`pronunciation_result` queda en `null`; nunca se inventa un puntaje.
+No requiere instalar nada. La pronunciación la estima la **misma conexión de IA que transcribe**
+la respuesta hablada, en la misma llamada (hoy: Gemini). Con OpenAI se transcribe pero no se
+estima pronunciación (`pronunciation_result = null`); Anthropic no acepta audio. El resultado se
+marca como `estimated: true`. El audio nunca se guarda.
 
 ---
 

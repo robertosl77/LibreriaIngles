@@ -215,7 +215,7 @@ const RESULT_LABELS: Record<string, string> = {
               }
               <p class="question">{{ exercise.question }}</p>
 
-              @if (editable() && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
+              @if ((editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
                 @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
                   <app-lesson-panel
                     [lesson]="lesson"
@@ -314,7 +314,7 @@ const RESULT_LABELS: Record<string, string> = {
                       @if (exercise.pronunciationResult; as pronunciation) {
                         <div class="pronunciation-result">
                           <strong>Pronunciación: {{ pronunciation.score }}%</strong>
-                          <span class="muted small"> · {{ pronunciation.provider }}</span>
+                          <span class="muted small"> · estimada por IA ({{ pronunciation.provider }})</span>
                           @for (word of pronunciation.words; track $index) {
                             @if (word.score < 70) {
                               <span class="small">· <strong>{{ word.word }} {{ word.score }}%</strong></span>
@@ -324,7 +324,7 @@ const RESULT_LABELS: Record<string, string> = {
                       } @else {
                         <div class="pronunciation-result pronunciation-unavailable">
                           <strong>Pronunciación: no evaluada</strong>
-                          <span class="muted small"> · OpenPronounce no devolvió un resultado.</span>
+                          <span class="muted small"> · no disponible con la conexión de IA usada (se estima con Gemini).</span>
                         </div>
                       }
                     </div>
@@ -700,7 +700,8 @@ export class ClassComponent implements OnDestroy {
 
   /** "Necesito lección": se abre dentro del ejercicio; al cerrarla sigue respondiendo ahí. */
   async toggleLesson(exercise: Exercise): Promise<void> {
-    if (this.formLocked()) return;
+    // Corregida: la lección se puede leer (no registra ayuda). Enviando/corrigiendo: bloqueado.
+    if (this.busy() || (this.formLocked() && this.klass()?.status !== 'COMPLETED')) return;
     const c = this.klass();
     if (!c) {
       return;

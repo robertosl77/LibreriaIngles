@@ -60,6 +60,8 @@ class AudioTranscriptionResult:
     text: str
     connection: AIConnection
     failed_connections: list[str] = field(default_factory=list)
+    # Estimación de pronunciación cruda del proveedor (None si no la ofrece).
+    pronunciation: dict | None = None
 
     @property
     def switched(self) -> bool:
@@ -244,7 +246,8 @@ def transcribe_audio(
             errors.append(f"{connection.name}: {reason}")
             continue
         try:
-            text = provider_for(connection).transcribe_audio(audio, mime_type).strip()
+            analysis = provider_for(connection).analyze_speech(audio, mime_type)
+            text = analysis.text.strip()
             if not text:
                 raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "No se detectó voz.")
         except ProviderError as exc:
@@ -260,7 +263,10 @@ def transcribe_audio(
         record_usage(db, connection, account=account, operation="transcribe_audio")
         db.commit()
         return AudioTranscriptionResult(
-            text=text, connection=connection, failed_connections=failed
+            text=text,
+            connection=connection,
+            failed_connections=failed,
+            pronunciation=analysis.pronunciation,
         )
     if not errors:
         errors.append("No hay conexiones activas compatibles con audio.")

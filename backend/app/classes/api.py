@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from app.ai.models import AIConnection
 from app.ai.service import NoAIAvailable, transcribe_audio
 from app.classes import generation, service
-from app.pronunciation import assess_pronunciation
+from app.pronunciation import normalize_ai_pronunciation
 from app.core.deps import CurrentStudy, DbSession
 from app.curriculum.lessons import get_lesson
 from app.learning.models import (
@@ -307,10 +307,8 @@ async def transcribe_answer_audio(
             detail += " " + "; ".join(exc.errors)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
 
-    pronunciation_result = assess_pronunciation(
-        audio=audio,
-        mime_type=mime_type,
-        reference_text=result.text,
+    pronunciation_result = normalize_ai_pronunciation(
+        result.pronunciation, result.text, result.connection.provider
     )
 
     try:
