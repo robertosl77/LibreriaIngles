@@ -132,6 +132,8 @@ class AICredentialAuditEvent(Base):
         ForeignKey("accounts.id", name="fk_ai_credential_audit_account_id"),
         nullable=False,
     )
+    connection_name: Mapped[str] = mapped_column(String(120))
+    owner_type: Mapped[str] = mapped_column(String(20))
     action: Mapped[str] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
