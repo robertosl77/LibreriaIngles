@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from app.ai.models import AIConnection
-from app.ai.service import NoAIAvailable, transcribe_audio
+from app.ai.service import NoAIAvailable, connection_snapshot, transcribe_audio
 from app.classes import generation, service
 from app.pronunciation import normalize_ai_pronunciation
 from app.core.deps import CurrentStudy, DbSession
@@ -65,6 +65,7 @@ def _result_payload(attempt: Attempt, exercise: Exercise) -> dict | None:
         "suggestions": result.get("suggestions") or [],
         "conceptResults": result.get("conceptResults") or [],
         "evaluationSource": attempt.evaluation_source.value if attempt.evaluation_source else None,
+        "ai": result.get("ai"),
         "appeal": result.get("appeal"),
         "canAppeal": attempt.score < 100
         and attempt.appealed_at is None
@@ -151,6 +152,12 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
         if session.generated_by_connection_id
         else None
     )
+    generation_ai = (session.generation_request or {}).get("ai")
+    if generation_ai is None and connection is not None:
+        # Compatibilidad con clases previas a T-041: no es histórico, pero al
+        # menos muestra la configuración actual de la conexión si sigue viva.
+        generation_ai = connection_snapshot(connection)
+
     return {
         "id": session.id,
         "kind": session.kind.value,
@@ -163,7 +170,12 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
         "submittedAt": session.submitted_at,
         "evaluatedAt": session.evaluated_at,
         "generationError": session.generation_error,
-        "generatedBy": connection.name if connection else None,
+        "generatedBy": (
+            generation_ai.get("connection")
+            if generation_ai
+            else (connection.name if connection else None)
+        ),
+        "generationAi": generation_ai,
         "exercises": items,
         "answered": sum(1 for i in items if (i["answer"] or "").strip()),
         "history": [
@@ -320,8 +332,14 @@ async def transcribe_answer_audio(
             detail += " " + "; ".join(exc.errors)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
 
+    ai = connection_snapshot(result.connection)
     pronunciation_result = normalize_ai_pronunciation(
-        result.pronunciation, result.text, result.connection.provider
+        result.pronunciation,
+        result.text,
+        ai["provider"],
+        model=ai["model"],
+        connection=ai["connection"],
+        provider_label=ai["providerLabel"],
     )
 
     try:
@@ -343,6 +361,7 @@ async def transcribe_answer_audio(
         "durationMs": duration_ms,
         "savedAt": draft.updated_at,
         "provider": result.connection.name,
+        "ai": ai,
         "switched": result.switched,
         "pronunciationResult": pronunciation_result,
     }

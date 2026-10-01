@@ -33,7 +33,15 @@ def _score(value: Any) -> int | None:
     return round(max(0.0, min(100.0, numeric)))
 
 
-def normalize_ai_pronunciation(raw: Any, transcript: str, provider: str) -> dict | None:
+def normalize_ai_pronunciation(
+    raw: Any,
+    transcript: str,
+    provider: str,
+    *,
+    model: str | None = None,
+    connection: str | None = None,
+    provider_label: str | None = None,
+) -> dict | None:
     if not isinstance(raw, dict) or not transcript.strip():
         return None
     score = _score(raw.get("score"))
@@ -66,6 +74,9 @@ def normalize_ai_pronunciation(raw: Any, transcript: str, provider: str) -> dict
         "phonemes": phonemes,
         "fluency": _score(raw.get("fluency")),
         "provider": provider,
+        "providerLabel": provider_label or provider,
+        "model": model,
+        "connection": connection,
         "estimated": True,
         "assessedAt": datetime.now(timezone.utc).isoformat(),
     }

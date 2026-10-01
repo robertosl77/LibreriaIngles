@@ -91,6 +91,37 @@ def candidate_connections(
     return [c for c in rows if c.is_usable]
 
 
+def connection_snapshot(connection: AIConnection) -> dict:
+    """Metadatos no sensibles de la conexión que produjo un resultado.
+
+    Se persisten junto al resultado para que el histórico no dependa de que la
+    conexión siga existiendo o conserve el mismo nombre/modelo.
+    """
+    info = PROVIDERS.get(connection.provider.upper())
+    model = connection.model or (info.default_model if info else "")
+    return {
+        "connectionId": connection.id,
+        "connection": connection.name,
+        "provider": connection.provider,
+        "providerLabel": info.label if info else connection.provider,
+        "model": model,
+    }
+
+
+def active_connection(
+    db: Session,
+    account: Account,
+    *,
+    audio: bool = False,
+) -> AIConnection | None:
+    """Primera conexión que el router usaría ahora, incluyendo límites de cuota."""
+    rows = audio_connections(db, account) if audio else candidate_connections(db, account)
+    for connection in rows:
+        if limit_reason(db, connection, account) is None:
+            return connection
+    return None
+
+
 def connection_supports_audio(connection: AIConnection) -> bool:
     info = PROVIDERS.get(connection.provider.upper())
     return bool(info and info.supports_audio_input)

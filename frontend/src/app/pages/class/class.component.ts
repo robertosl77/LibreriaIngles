@@ -324,6 +324,11 @@ const RESULT_LABELS: Record<string, string> = {
               @if (exercise.result; as r) {
                 <div class="feedback stack">
                   @if (r.feedback) { <p>{{ r.feedback }}</p> }
+                  @if (r.ai; as ai) {
+                    <p class="muted small">
+                      Corrección realizada por {{ ai.providerLabel }} · motor {{ ai.model }}
+                    </p>
+                  }
                   @if (exercise.response === 'SPEAK') {
                     <div class="speaking-evaluation">
                       <div>
@@ -332,7 +337,10 @@ const RESULT_LABELS: Record<string, string> = {
                       @if (exercise.pronunciationResult; as pronunciation) {
                         <div class="pronunciation-result">
                           <strong>Pronunciación: {{ pronunciation.score }}%</strong>
-                          <span class="muted small"> · estimada por IA ({{ pronunciation.provider }})</span>
+                          <span class="muted small">
+                            · estimada por {{ pronunciation.providerLabel || pronunciation.provider }}
+                            @if (pronunciation.model) { · motor {{ pronunciation.model }} }
+                          </span>
                           @for (word of pronunciation.words; track $index) {
                             @if (word.score < 70) {
                               <span class="small">· <strong>{{ word.word }} {{ word.score }}%</strong></span>
@@ -423,7 +431,12 @@ const RESULT_LABELS: Record<string, string> = {
 
           <p class="muted small">
             Creada {{ c.createdAt | date: 'dd/MM/yyyy HH:mm' }}
-            @if (c.generatedBy) { · generada con {{ c.generatedBy }} }
+            @if (c.generationAi; as ai) {
+              · {{ c.kind === 'EXAM' ? 'Examen' : 'Clase' }} realizada por el agente
+              {{ ai.providerLabel }} · motor {{ ai.model }}
+            } @else if (c.generatedBy) {
+              · generada con {{ c.generatedBy }}
+            }
           </p>
         }
       }
