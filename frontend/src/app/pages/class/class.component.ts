@@ -303,14 +303,26 @@ const RESULT_LABELS: Record<string, string> = {
               @if (exercise.result; as r) {
                 <div class="feedback stack">
                   @if (r.feedback) { <p>{{ r.feedback }}</p> }
-                  @if (exercise.pronunciationResult; as pronunciation) {
-                    <div class="pronunciation-result">
-                      <strong>Pronunciación: {{ pronunciation.score }}%</strong>
-                      <span class="muted small"> · {{ pronunciation.provider }}</span>
-                      @for (word of pronunciation.words; track $index) {
-                        @if (word.score < 70) {
-                          <span class="small">· <strong>{{ word.word }} {{ word.score }}%</strong></span>
-                        }
+                  @if (exercise.response === 'SPEAK') {
+                    <div class="speaking-evaluation">
+                      <div>
+                        <strong>Contenido: {{ resultLabels[r.result || 'incorrect'] }} · {{ r.score }}%</strong>
+                      </div>
+                      @if (exercise.pronunciationResult; as pronunciation) {
+                        <div class="pronunciation-result">
+                          <strong>Pronunciación: {{ pronunciation.score }}%</strong>
+                          <span class="muted small"> · {{ pronunciation.provider }}</span>
+                          @for (word of pronunciation.words; track $index) {
+                            @if (word.score < 70) {
+                              <span class="small">· <strong>{{ word.word }} {{ word.score }}%</strong></span>
+                            }
+                          }
+                        </div>
+                      } @else {
+                        <div class="pronunciation-result pronunciation-unavailable">
+                          <strong>Pronunciación: no evaluada</strong>
+                          <span class="muted small"> · OpenPronounce no devolvió un resultado.</span>
+                        </div>
                       }
                     </div>
                   }
@@ -416,10 +428,12 @@ const RESULT_LABELS: Record<string, string> = {
     .your-answer { margin: 0; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
     .feedback { gap: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.6rem; }
     .feedback p { margin: 0; }
+    .speaking-evaluation { display: flex; flex-direction: column; gap: 0.45rem; }
     .pronunciation-result {
       display: flex; gap: 0.35rem; align-items: baseline; flex-wrap: wrap;
       padding: 0.5rem 0.65rem; background: #faf5ff; border: 1px solid #dcc7f2; border-radius: 0.5rem;
     }
+    .pronunciation-unavailable { background: var(--bg); border-color: var(--border); }
     .suggestion { color: #5a3d00; }
     .feedback .btn-link { align-self: flex-start; }
     .error-text { color: var(--bad); }
