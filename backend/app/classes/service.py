@@ -24,6 +24,7 @@ from app.learning.models import (
     DraftAnswer,
     EvaluationSource,
     Exercise,
+    ResponseMode,
     SessionKind,
     stronger_assistance,
 )
@@ -68,6 +69,7 @@ def save_draft(
     answer: str,
     *,
     audio_duration_ms: int | None = None,
+    pronunciation_result: dict | None = None,
 ) -> DraftAnswer:
     if session.status not in (ClassSessionStatus.READY, ClassSessionStatus.IN_PROGRESS):
         raise ClassStateError("La clase ya fue enviada.")
@@ -81,6 +83,7 @@ def save_draft(
         db.add(draft)
     draft.answer_text = answer
     draft.audio_duration_ms = audio_duration_ms
+    draft.pronunciation_result = pronunciation_result
     draft.account_id = study.account.id
     draft.updated_at = utcnow()
     session.status = ClassSessionStatus.IN_PROGRESS
@@ -133,7 +136,11 @@ def submit(
 
     # 1) Persistir TODAS las respuestas antes de evaluar (documento funcional §2.4).
     for exercise in exercises:
-        if exercise.id in answers:
+        # SPEAK se procesa al enviar la clase: la transcripción válida vive en
+        # el borrador creado desde el audio confirmado, no en el payload textual.
+        if exercise.response_mode == ResponseMode.SPEAK and exercise.id in drafts:
+            text = drafts[exercise.id].answer_text
+        elif exercise.id in answers:
             text = answers[exercise.id]
         elif exercise.id in drafts:
             text = drafts[exercise.id].answer_text
@@ -152,6 +159,9 @@ def submit(
                 response_mode=exercise.response_mode,
                 audio_duration_ms=(
                     drafts[exercise.id].audio_duration_ms if exercise.id in drafts else None
+                ),
+                pronunciation_result=(
+                    drafts[exercise.id].pronunciation_result if exercise.id in drafts else None
                 ),
                 assistance=(
                     drafts[exercise.id].assistance if exercise.id in drafts else Assistance.NONE
