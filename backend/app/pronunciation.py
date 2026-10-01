@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import logging
 import math
+import os
 from pathlib import Path
 import re
 import shutil
@@ -108,6 +109,32 @@ def _find_ffmpeg() -> str | None:
     return shutil.which("ffmpeg")
 
 
+def _configure_espeak_portable() -> bool:
+    """Configura phonemizer para usar eSpeak NG incluido en el root del proyecto."""
+    project_espeak = Path(__file__).resolve().parents[2] / "espeak-ng"
+    library = project_espeak / "libespeak-ng.dll"
+    data = project_espeak / "espeak-ng-data"
+
+    if not library.is_file() or not data.is_dir():
+        return False
+
+    # phonemizer admite ambas rutas explícitas; así no dependemos del PATH ni
+    # de una instalación global de Windows.
+    os.environ["PHONEMIZER_ESPEAK_LIBRARY"] = str(library)
+    os.environ["PHONEMIZER_ESPEAK_DATA_PATH"] = str(data)
+
+    # En Windows ayuda también a resolver DLLs auxiliares que vivan junto a
+    # libespeak-ng.dll. El handle debe permanecer vivo durante el proceso.
+    if os.name == "nt" and hasattr(os, "add_dll_directory"):
+        global _ESPEAK_DLL_DIRECTORY
+        if _ESPEAK_DLL_DIRECTORY is None:
+            _ESPEAK_DLL_DIRECTORY = os.add_dll_directory(str(project_espeak))
+    return True
+
+
+_ESPEAK_DLL_DIRECTORY = None
+
+
 def _decode_in_memory(audio: bytes):
     """Decodifica webm/ogg/wav a mono float32 16 kHz sin escribir audio a disco."""
     ffmpeg = _find_ffmpeg()
@@ -155,6 +182,8 @@ def assess_pronunciation(*, audio: bytes, mime_type: str, reference_text: str) -
     reference_text = reference_text.strip()
     if not audio or not reference_text:
         return None
+
+    _configure_espeak_portable()
 
     try:
         from openpronounce import compare_phones, recognize_phones
