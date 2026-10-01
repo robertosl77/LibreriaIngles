@@ -8,10 +8,10 @@ from app.ai.models import utcnow
 from app.ai.service import NoAIAvailable
 from app.classes.evaluation import (
     Evaluation,
+    ai_score,
     apply_evaluation,
     evaluate,
     evaluate_with_ai,
-    score_from_result,
 )
 from app.classes.normalize import normalize_answer
 from app.core.deps import StudyContext
@@ -330,7 +330,8 @@ def appeal(db: Session, study: StudyContext, session: ClassSession, exercise_id:
         raise ClassStateError("No hay conexiones de IA disponibles para revisar la respuesta.") from exc
 
     attempt.appealed_at = utcnow()
-    new_score = score_from_result(result)
+    # Ortografía sola no llega a 100: así una palabra mal escrita nunca entra como aceptada.
+    new_score = ai_score(exercise, result)
     previous = attempt.evaluation_result or {}
     if new_score > (attempt.score or 0):
         apply_evaluation(attempt, Evaluation(EvaluationSource.AI, result, new_score))
