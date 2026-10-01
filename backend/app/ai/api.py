@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.accounts.models import Account, PlatformRole
@@ -203,6 +203,7 @@ def access_connection_credential(
     payload: CredentialAccessRequest,
     account: CurrentAccount,
     db: DbSession,
+    response: Response,
 ) -> dict:
     """Excepción T-042: revelar/copiar una API key solo al PLATFORM_OWNER.
 
@@ -214,10 +215,14 @@ def access_connection_credential(
         AICredentialAuditEvent(
             connection_id=connection.id,
             account_id=account.id,
+            connection_name=connection.name,
+            owner_type=connection.owner_type.value,
             action=payload.action.upper(),
         )
     )
     db.commit()
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
     return {"apiKey": secret}
 
 
