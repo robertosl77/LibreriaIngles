@@ -58,7 +58,7 @@ import { ToastService } from '../core/toast.service';
               <div class="approach stack">
                 <p>
                   Practicaste <strong>{{ p.practiced }} de {{ p.total }} temas</strong>.
-                  El examen se habilita a partir de {{ p.requiredNeeded }} temas
+                  El requisito de cobertura se cumple al llegar a {{ p.requiredNeeded }} temas
                   ({{ p.requiredCoveragePercent }}% del nivel).
                 </p>
 
@@ -122,16 +122,14 @@ import { ToastService } from '../core/toast.service';
               <p class="muted small">Para habilitar el examen necesitás cumplir ambos requisitos:</p>
             }
 
-            @if (!s.eligible) {
-              <ul class="checks">
-                @for (check of s.checks; track check.key) {
-                  <li [class.ok]="check.ok">
-                    <span class="tick" aria-hidden="true">{{ check.ok ? '✓' : '' }}</span>
-                    <span>{{ check.label }} <span class="muted small">· {{ check.detail }}</span></span>
-                  </li>
-                }
-              </ul>
-            }
+            <ul class="checks">
+              @for (check of s.checks; track check.key) {
+                <li [class.ok]="check.ok">
+                  <span class="tick" aria-hidden="true">{{ check.ok ? '✓' : '' }}</span>
+                  <span>{{ check.label }} <span class="muted small">· {{ check.detail }}</span></span>
+                </li>
+              }
+            </ul>
 
             @if (s.canStart) {
               <div class="row">
@@ -208,7 +206,7 @@ export class ExamCardComponent implements OnInit {
 
   approaching(status: ExamStatus): boolean {
     const progress = status.progress;
-    if (!progress || status.passed || status.openExamId) {
+    if (!progress || status.passed || status.openExamId || status.lastExam) {
       return false;
     }
     return progress.coveragePercent < progress.requiredCoveragePercent;
