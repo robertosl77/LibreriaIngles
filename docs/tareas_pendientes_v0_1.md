@@ -1524,7 +1524,7 @@ credenciales bajo su propia administración.
 ## T-043 — Calibrar la corrección de escritura libre según el nivel
 
 **Prioridad:** P1 — Alta  
-**Estado:** En curso · tomada por Claude (2026-10-01)  
+**Estado:** Resuelta (PR a `develop`) · Claude  
 **Responsable:** Claude  
 **Relación:** T-021 (ortografía), T-019 (presentación), T-034 (puntaje de Writing)
 
