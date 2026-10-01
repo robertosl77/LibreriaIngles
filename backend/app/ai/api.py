@@ -4,9 +4,14 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.accounts.models import Account, PlatformRole
-from app.ai.models import AIConnection, AIConnectionOwnerType, AIConnectionStatus
+from app.ai.models import (
+    AICredentialAuditEvent,
+    AIConnection,
+    AIConnectionOwnerType,
+    AIConnectionStatus,
+    utcnow,
+)
 from app.ai.providers import PROVIDERS, ProviderError, build_provider
-from app.ai.models import utcnow
 from app.ai.service import (
     LIMIT_WINDOW,
     active_connection,
@@ -17,7 +22,7 @@ from app.ai.service import (
 )
 from app.core.config import settings
 from app.core.deps import CurrentAccount, DbSession
-from app.core.security import encrypt_secret, mask_secret
+from app.core.security import decrypt_secret, encrypt_secret, mask_secret
 from sqlalchemy import select
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -51,6 +56,10 @@ class ConnectionUpdate(BaseModel):
 class ModelsRequest(BaseModel):
     provider: str
     apiKey: str | None = Field(default=None, max_length=2000)
+
+
+class CredentialAccessRequest(BaseModel):
+    action: Literal["reveal", "copy"]
 
 
 def _models_payload(provider) -> list[dict]:
@@ -131,6 +140,29 @@ def _get_owned(db, account: Account, connection_id: int) -> AIConnection:
     return connection
 
 
+def _get_owner_credential_connection(
+    db, account: Account, connection_id: int
+) -> AIConnection:
+    """Solo el PLATFORM_OWNER puede recuperar secretos bajo su administración."""
+    if not _is_platform_owner(account):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo PLATFORM_OWNER.")
+
+    connection = db.get(AIConnection, connection_id)
+    if connection is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conexión inexistente.")
+
+    allowed = connection.owner_type == AIConnectionOwnerType.PLATFORM or (
+        connection.owner_type == AIConnectionOwnerType.ACCOUNT
+        and connection.owner_id == account.id
+    )
+    if not allowed:
+        # No confirmar la existencia de credenciales BYOK de otras cuentas.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conexión inexistente.")
+    if not connection.credentials_encrypted:
+        raise HTTPException(status.HTTP_409_CONFLICT, "La conexión no tiene una API key guardada.")
+    return connection
+
+
 @router.get("/providers")
 def providers() -> list[dict]:
     return [
@@ -163,6 +195,29 @@ def list_models_for_key(payload: ModelsRequest, account: CurrentAccount) -> list
     except ProviderError as exc:
         raise HTTPException(422, exc.message)
     return _models_payload(provider)
+
+
+@router.post("/connections/{connection_id}/credential")
+def access_connection_credential(
+    connection_id: int,
+    payload: CredentialAccessRequest,
+    account: CurrentAccount,
+    db: DbSession,
+) -> dict:
+    """Excepción T-042: revelar/copiar una API key solo al PLATFORM_OWNER.
+
+    El secreto nunca se escribe en logs ni en la auditoría.
+    """
+    connection = _get_owner_credential_connection(db, account, connection_id)
+    db.add(
+        AICredentialAuditEvent(
+            connection_id=connection.id,
+            account_id=account.id,
+            action=payload.action.upper(),
+        )
+    )
+    db.commit()
+    return {"apiKey": decrypt_secret(connection.credentials_encrypted)}
 
 
 @router.get("/connections/{connection_id}/models")
