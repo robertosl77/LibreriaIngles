@@ -676,7 +676,7 @@ T-017 (claridad de ejercicios).
 ## T-021 — Tolerancia a errores de ortografía menores
 
 **Prioridad:** P3 — Baja  
-**Estado:** En curso · rama `feat/t-021-ortografia` (Claude)
+**Estado:** Resuelta (PR a `develop`) · Claude
 
 Resolución (detalle en `guia_mvp_funcional.md` §7):
 
@@ -1524,7 +1524,7 @@ credenciales bajo su propia administración.
 ## T-043 — Calibrar la corrección de escritura libre según el nivel
 
 **Prioridad:** P1 — Alta  
-**Estado:** Pendiente  
+**Estado:** En curso · tomada por Claude (2026-10-01)  
 **Responsable:** Claude  
 **Relación:** T-021 (ortografía), T-019 (presentación), T-034 (puntaje de Writing)
 
