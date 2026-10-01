@@ -34,22 +34,22 @@ def _create_keyed_connection(
     return response.json()["id"]
 
 
-def test_non_owner_cannot_reveal_even_own_key(client) -> None:
+def test_non_owner_cannot_copy_even_own_key(client) -> None:
     user = login(client, "user@example.com")
     connection_id = _create_keyed_connection(
         client, user, name="Personal", key="secret-user-1234"
     )
 
     response = client.post(
-        f"{API}/ai/connections/{connection_id}/credential",
-        json={"action": "reveal"},
+        f"{API}/ai/connections/{connection_id}/credential/copy",
+        json={"action": "copy"},
         headers=user,
     )
     assert response.status_code == 403
     assert "secret-user-1234" not in response.text
 
 
-def test_owner_can_reveal_and_copy_own_key_and_actions_are_audited(client) -> None:
+def test_owner_can_copy_own_key_and_action_is_audited(client) -> None:
     owner = login(client, "owner@example.com")
     connection_id = _create_keyed_connection(
         client, owner, name="Owner personal", key="secret-owner-5678"
@@ -60,17 +60,17 @@ def test_owner_can_reveal_and_copy_own_key_and_actions_are_audited(client) -> No
     assert "secret-owner-5678" not in listed.text
     assert listed.json()[0]["credentialHint"].endswith("5678")
 
-    reveal = client.post(
-        f"{API}/ai/connections/{connection_id}/credential",
-        json={"action": "reveal"},
+    copy = client.post(
+        f"{API}/ai/connections/{connection_id}/credential/copy",
+        json={"action": "copy"},
         headers=owner,
     )
-    assert reveal.status_code == 200
-    assert reveal.headers["cache-control"] == "no-store"
-    assert reveal.json() == {"apiKey": "secret-owner-5678"}
+    assert copy.status_code == 200
+    assert copy.headers["cache-control"] == "no-store"
+    assert copy.json() == {"apiKey": "secret-owner-5678"}
 
     copy = client.post(
-        f"{API}/ai/connections/{connection_id}/credential",
+        f"{API}/ai/connections/{connection_id}/credential/copy",
         json={"action": "copy"},
         headers=owner,
     )
@@ -85,7 +85,7 @@ def test_owner_can_reveal_and_copy_own_key_and_actions_are_audited(client) -> No
                 .order_by(AICredentialAuditEvent.id)
             )
         )
-        assert [row.action for row in rows] == ["REVEAL", "COPY"]
+        assert [row.action for row in rows] == ["COPY"]
         assert all(row.account_id is not None for row in rows)
         assert all(row.connection_name == "Owner personal" for row in rows)
         assert all(row.owner_type == "ACCOUNT" for row in rows)
@@ -102,7 +102,7 @@ def test_owner_can_retrieve_platform_key(client) -> None:
     )
 
     response = client.post(
-        f"{API}/ai/connections/{connection_id}/credential",
+        f"{API}/ai/connections/{connection_id}/credential/copy",
         json={"action": "copy"},
         headers=owner,
     )
@@ -118,15 +118,15 @@ def test_owner_cannot_retrieve_another_accounts_byok(client) -> None:
     owner = login(client, "owner@example.com")
 
     response = client.post(
-        f"{API}/ai/connections/{connection_id}/credential",
-        json={"action": "reveal"},
+        f"{API}/ai/connections/{connection_id}/credential/copy",
+        json={"action": "copy"},
         headers=owner,
     )
     assert response.status_code == 404
     assert "other-secret-3456" not in response.text
 
 
-def test_connection_without_key_cannot_be_revealed(client) -> None:
+def test_connection_without_key_cannot_be_copyed(client) -> None:
     owner = login(client, "owner@example.com")
     response = client.post(
         f"{API}/ai/connections",
@@ -135,9 +135,9 @@ def test_connection_without_key_cannot_be_revealed(client) -> None:
     )
     assert response.status_code == 201
 
-    reveal = client.post(
-        f"{API}/ai/connections/{response.json()['id']}/credential",
-        json={"action": "reveal"},
+    copy = client.post(
+        f"{API}/ai/connections/{response.json()['id']}/credential/copy",
+        json={"action": "copy"},
         headers=owner,
     )
-    assert reveal.status_code == 409
+    assert copy.status_code == 409
