@@ -1,4 +1,4 @@
-"""Auditoría de revelado/copia de API keys por PLATFORM_OWNER (T-042).
+"""Auditoría de copia de API keys por PLATFORM_OWNER (T-042).
 
 Revision ID: 0011_ai_credential_audit
 Revises: 0010_answer_signals
