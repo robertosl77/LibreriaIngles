@@ -19,7 +19,7 @@ import { ConnectionsManagerComponent } from '../../shared/connections-manager.co
             Se usan en orden de prioridad (1 = primero). Si una falla o se queda sin cuota, la app
             pasa sola a la siguiente. Las API keys se guardan cifradas.
             @if (isOwner()) {
-              Como dueño de la plataforma, podés revelarlas o copiarlas explícitamente.
+              Como dueño de la plataforma, podés copiarlas explícitamente desde el icono junto a cada credencial.
             } @else {
               Una vez guardadas, no vuelven al navegador.
             }
