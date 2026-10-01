@@ -20,6 +20,7 @@ import {
 import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ClassDetail, Exercise, Lesson } from '../../core/models';
+import { SpeakingAudioStore } from '../../core/speaking-audio.store';
 import { ToastService } from '../../core/toast.service';
 import { AudioPlayerComponent } from '../../shared/audio-player.component';
 import { AudioRecorderComponent, RecordedAudio } from '../../shared/audio-recorder.component';
@@ -255,10 +256,10 @@ const RESULT_LABELS: Record<string, string> = {
               @if (editable()) {
                 @if (exercise.response === 'SPEAK') {
                   <app-audio-recorder
-                    [busy]="transcribingId() === exercise.id"
+                    [busy]="audioSavingId() === exercise.id"
                     [confirmed]="confirmedSpeaking().has(exercise.id)"
                     (recordingStarted)="beginSpeaking(exercise.id)"
-                    (accepted)="transcribe(exercise, $event)"
+                    (accepted)="confirmSpeaking(exercise, $event)"
                   />
                 } @else {
                 @switch (exercise.type) {
@@ -302,6 +303,22 @@ const RESULT_LABELS: Record<string, string> = {
               @if (exercise.result; as r) {
                 <div class="feedback stack">
                   @if (r.feedback) { <p>{{ r.feedback }}</p> }
+                  @if (exercise.pronunciationResult; as pronunciation) {
+                    <div class="pronunciation-result">
+                      <strong>Pronunciación: {{ pronunciation.score }}%</strong>
+                      <span class="muted small"> · {{ pronunciation.provider }}</span>
+                      @if (pronunciation.words.length) {
+                        @let weakWords = pronunciation.words.filter(word => word.score < 70);
+                        @if (weakWords.length) {
+                          <span class="small"> · A revisar:
+                            @for (word of weakWords; track $index) {
+                              <strong>{{ word.word }} {{ word.score }}%</strong>@if (!$last) {, }
+                            }
+                          </span>
+                        }
+                      }
+                    </div>
+                  }
                   @if (exercise.presentation === 'LISTEN' && exercise.stimulus) {
                     <p class="small transcript"><span class="muted">El audio decía: </span><em lang="en">“{{ exercise.stimulus.text }}”</em></p>
                   }
@@ -404,6 +421,10 @@ const RESULT_LABELS: Record<string, string> = {
     .your-answer { margin: 0; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
     .feedback { gap: 0.4rem; border-top: 1px solid var(--border); padding-top: 0.6rem; }
     .feedback p { margin: 0; }
+    .pronunciation-result {
+      display: flex; gap: 0.35rem; align-items: baseline; flex-wrap: wrap;
+      padding: 0.5rem 0.65rem; background: #faf5ff; border: 1px solid #dcc7f2; border-radius: 0.5rem;
+    }
     .suggestion { color: #5a3d00; }
     .feedback .btn-link { align-self: flex-start; }
     .error-text { color: var(--bad); }
@@ -437,6 +458,7 @@ export class ClassComponent implements OnDestroy {
 
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly speakingAudio = inject(SpeakingAudioStore);
   private readonly toast = inject(ToastService);
 
   readonly labels = STATUS_LABELS;
@@ -456,16 +478,24 @@ export class ClassComponent implements OnDestroy {
   readonly openLesson = signal<number | null>(null);
   readonly openPronunciationPractice = signal<number | null>(null);
   readonly lessonLoading = signal<number | null>(null);
-  readonly transcribingId = signal<number | null>(null);
+  readonly audioSavingId = signal<number | null>(null);
   readonly confirmedSpeaking = signal<Set<number>>(new Set());
 
   readonly editable = computed(() => {
     const status = this.klass()?.status;
     return status === 'READY' || status === 'IN_PROGRESS';
   });
-  readonly answeredCount = computed(
-    () => Object.values(this.answers()).filter((a) => a && a.trim().length > 0).length
-  );
+  readonly answeredCount = computed(() => {
+    const c = this.klass();
+    if (!c) return 0;
+    const answers = this.answers();
+    const confirmed = this.confirmedSpeaking();
+    return c.exercises.filter((exercise) =>
+      exercise.response === 'SPEAK'
+        ? confirmed.has(exercise.id)
+        : Boolean((answers[exercise.id] ?? '').trim())
+    ).length;
+  });
 
   private readonly edits = new Subject<{ exerciseId: number; answer: string; immediate: boolean }>();
   private readonly subscription: Subscription;
@@ -521,13 +551,12 @@ export class ClassComponent implements OnDestroy {
       answers[exercise.id] = exercise.answer ?? '';
     }
     this.answers.set(answers);
-    this.confirmedSpeaking.set(
-      new Set(
-        detail.exercises
-          .filter((exercise) => exercise.response === 'SPEAK' && (exercise.answer ?? '').trim())
-          .map((exercise) => exercise.id)
-      )
-    );
+    this.confirmedSpeaking.set(new Set());
+    if (detail.status === 'READY' || detail.status === 'IN_PROGRESS') {
+      void this.restoreSpeakingAudio(detail);
+    } else {
+      void this.speakingAudio.clearAttempt(detail.id, detail.currentAttempt).catch(() => undefined);
+    }
     this.saveState.set({});
     this.openLesson.set(null);
     this.openPronunciationPractice.set(null);
@@ -555,39 +584,69 @@ export class ClassComponent implements OnDestroy {
     this.edits.next({ exerciseId, answer, immediate });
   }
 
-  beginSpeaking(exerciseId: number): void {
+  async beginSpeaking(exerciseId: number): Promise<void> {
+    const c = this.klass();
     this.confirmedSpeaking.update((current) => {
       const next = new Set(current);
       next.delete(exerciseId);
       return next;
     });
-    // Al empezar una nueva toma, la respuesta anterior deja de ser la respuesta vigente.
-    this.onAnswer(exerciseId, '', true);
+    if (!c) return;
+
+    // Si un envío anterior alcanzó a procesar este audio pero no llegó a cerrar
+    // la clase, una nueva toma invalida ese borrador derivado sin gastar IA.
+    try {
+      const stored = await this.speakingAudio.get(c.id, c.currentAttempt, exerciseId);
+      if (stored?.processed) {
+        await this.speakingAudio.markUnprocessed(c.id, c.currentAttempt, exerciseId);
+        await firstValueFrom(this.api.saveAnswer(c.id, exerciseId, ''));
+      }
+    } catch {
+      // La nueva grabación puede continuar: al confirmar se reemplazará el audio local.
+    }
   }
 
-  async transcribe(exercise: Exercise, recording: RecordedAudio): Promise<void> {
+  async confirmSpeaking(exercise: Exercise, recording: RecordedAudio): Promise<void> {
     const c = this.klass();
-    if (!c || exercise.response !== 'SPEAK') {
-      return;
-    }
-    this.transcribingId.set(exercise.id);
+    if (!c || exercise.response !== 'SPEAK') return;
+
+    this.audioSavingId.set(exercise.id);
     this.markSave(exercise.id, 'saving');
     try {
-      const result = await firstValueFrom(
-        this.api.transcribeAnswer(c.id, exercise.id, recording.blob, recording.durationMs)
-      );
-      this.answers.update((current) => ({ ...current, [exercise.id]: result.transcript }));
+      await this.speakingAudio.put(c.id, c.currentAttempt, exercise.id, recording);
       this.confirmedSpeaking.update((current) => new Set(current).add(exercise.id));
       this.markSave(exercise.id, 'saved');
-      this.toast.success('Respuesta grabada.');
-      if (result.switched) {
-        this.toast.show('Se cambió automáticamente el proveedor para transcribir el audio.');
-      }
+      this.toast.success('Respuesta grabada en este dispositivo.');
     } catch (err) {
       this.markSave(exercise.id, 'error');
-      this.toast.error(errorMessage(err, 'No se pudo transcribir la grabación.'));
+      this.toast.error(
+        err instanceof Error ? err.message : 'No se pudo guardar temporalmente la grabación.'
+      );
     } finally {
-      this.transcribingId.set(null);
+      this.audioSavingId.set(null);
+    }
+  }
+
+  private async restoreSpeakingAudio(detail: ClassDetail): Promise<void> {
+    const restored = new Set<number>();
+    try {
+      for (const exercise of detail.exercises) {
+        if (exercise.response !== 'SPEAK') continue;
+        const stored = await this.speakingAudio.get(
+          detail.id,
+          detail.currentAttempt,
+          exercise.id
+        );
+        if (stored) restored.add(exercise.id);
+      }
+      if (
+        this.klass()?.id === detail.id &&
+        this.klass()?.currentAttempt === detail.currentAttempt
+      ) {
+        this.confirmedSpeaking.set(restored);
+      }
+    } catch {
+      this.toast.error('No se pudieron recuperar las grabaciones guardadas en este navegador.');
     }
   }
 
@@ -655,15 +714,50 @@ export class ClassComponent implements OnDestroy {
 
   async submit(): Promise<void> {
     const c = this.klass();
-    if (!c) {
-      return;
-    }
+    if (!c) return;
+
     const unanswered = c.exercises.length - this.answeredCount();
     if (unanswered > 0) {
       this.toast.show(`Enviaste la clase con ${unanswered} ejercicio(s) sin responder.`);
     }
-    await this.run(() => this.api.submitClass(c.id, this.answers()));
-    await this.auth.refreshMe().catch(() => undefined);
+
+    this.busy.set(true);
+    try {
+      // Recién al entregar la clase salen del navegador los audios confirmados.
+      // Cada audio se procesa como máximo una vez salvo que el alumno lo reemplace.
+      for (const exercise of c.exercises) {
+        if (exercise.response !== 'SPEAK' || !this.confirmedSpeaking().has(exercise.id)) {
+          continue;
+        }
+        const stored = await this.speakingAudio.get(c.id, c.currentAttempt, exercise.id);
+        if (!stored) {
+          throw new Error('Falta una grabación confirmada. Volvé a grabar ese ejercicio.');
+        }
+        if (!stored.processed) {
+          const result = await firstValueFrom(
+            this.api.processSpeakingAnswer(
+              c.id,
+              exercise.id,
+              stored.blob,
+              stored.durationMs
+            )
+          );
+          await this.speakingAudio.markProcessed(c.id, c.currentAttempt, exercise.id);
+          if (result.switched) {
+            this.toast.show('Se cambió automáticamente el proveedor para transcribir un audio.');
+          }
+        }
+      }
+
+      const detail = await firstValueFrom(this.api.submitClass(c.id, this.answers()));
+      await this.speakingAudio.clearAttempt(c.id, c.currentAttempt);
+      this.setClass(detail);
+      await this.auth.refreshMe().catch(() => undefined);
+    } catch (err) {
+      this.toast.error(errorMessage(err, err instanceof Error ? err.message : undefined));
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   async retryGeneration(): Promise<void> {
