@@ -29,6 +29,14 @@ class AnswerRequest(BaseModel):
     answer: str = Field(default="", max_length=4000)
 
 
+class SignalRequest(BaseModel):
+    """Señal de la respuesta en curso (T-034)."""
+
+    kind: str = Field(pattern="^(listen|practice)$")
+    slow: bool = False
+    score: int | None = Field(default=None, ge=0, le=100)
+
+
 class SubmitRequest(BaseModel):
     answers: dict[int, str] = Field(default_factory=dict)
 
@@ -124,6 +132,9 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                     if attempt and attempt.score is not None
                     else None
                 ),
+                "signals": (
+                    attempt.signals if attempt else (draft.signals if draft else None)
+                ) or {},
                 "assistance": (
                     attempt.assistance.value
                     if attempt
@@ -361,6 +372,29 @@ def retake_class(class_id: int, study: CurrentStudy, db: DbSession) -> dict:
     except service.ClassStateError as exc:
         raise _conflict(exc)
     return _detail(db, session)
+
+
+@router.post("/{class_id}/exercises/{exercise_id}/signals")
+def record_signal(
+    class_id: int, exercise_id: int, payload: SignalRequest, study: CurrentStudy, db: DbSession
+) -> dict:
+    """Registra una escucha (y si fue lenta) o un intento de práctica de pronunciación."""
+    session = _get_class(db, study, class_id)
+    if payload.kind == "practice" and payload.score is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Falta el puntaje de la práctica.")
+    try:
+        signals = service.record_signals(
+            db,
+            study,
+            session,
+            exercise_id,
+            listen_play=payload.kind == "listen",
+            slow=payload.slow,
+            practice_score=payload.score if payload.kind == "practice" else None,
+        )
+    except service.ClassStateError as exc:
+        raise _conflict(exc)
+    return {"exerciseId": exercise_id, "signals": signals}
 
 
 @router.post("/{class_id}/exercises/{exercise_id}/lesson")

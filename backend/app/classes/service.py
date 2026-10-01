@@ -84,11 +84,59 @@ def save_draft(
     draft.answer_text = answer
     draft.audio_duration_ms = audio_duration_ms
     draft.pronunciation_result = pronunciation_result
+    # Las señales (escuchas, prácticas) se conservan al guardar la respuesta.
     draft.account_id = study.account.id
     draft.updated_at = utcnow()
     session.status = ClassSessionStatus.IN_PROGRESS
     db.commit()
     return draft
+
+
+MAX_SIGNAL_COUNT = 50
+MAX_PRACTICE_TRIALS = 20
+
+
+def record_signals(
+    db: Session,
+    study: StudyContext,
+    session: ClassSession,
+    exercise_id: int,
+    *,
+    listen_play: bool = False,
+    slow: bool = False,
+    practice_score: int | None = None,
+) -> dict:
+    """Acumula señales de la respuesta en curso (T-034): escuchas, lento, prácticas.
+
+    Solo con la clase abierta: una vez enviada, la evidencia ya no cambia.
+    """
+    if session.status not in (ClassSessionStatus.READY, ClassSessionStatus.IN_PROGRESS):
+        raise ClassStateError("La clase ya fue enviada.")
+    exercise = db.get(Exercise, exercise_id)
+    if exercise is None or exercise.class_session_id != session.id:
+        raise ClassStateError("El ejercicio no pertenece a la clase.")
+
+    draft = db.scalar(select(DraftAnswer).where(DraftAnswer.exercise_id == exercise_id))
+    if draft is None:
+        draft = DraftAnswer(class_session_id=session.id, exercise_id=exercise_id, answer_text="")
+        db.add(draft)
+    signals = dict(draft.signals or {})
+    if listen_play:
+        signals["listenPlays"] = min(MAX_SIGNAL_COUNT, int(signals.get("listenPlays", 0)) + 1)
+        if slow:
+            signals["listenSlowPlays"] = min(
+                MAX_SIGNAL_COUNT, int(signals.get("listenSlowPlays", 0)) + 1
+            )
+    if practice_score is not None:
+        trials = list(signals.get("practiceScores") or [])
+        trials.append(max(0, min(100, int(practice_score))))
+        signals["practiceScores"] = trials[-MAX_PRACTICE_TRIALS:]
+    draft.signals = signals
+    draft.account_id = study.account.id
+    draft.updated_at = utcnow()
+    session.status = ClassSessionStatus.IN_PROGRESS
+    db.commit()
+    return signals
 
 
 def open_lesson(
@@ -165,6 +213,7 @@ def submit(
                 audio_duration_ms=(
                     drafts[exercise.id].audio_duration_ms if exercise.id in drafts else None
                 ),
+                signals=(drafts[exercise.id].signals if exercise.id in drafts else None),
                 pronunciation_result=(
                     drafts[exercise.id].pronunciation_result if exercise.id in drafts else None
                 ),

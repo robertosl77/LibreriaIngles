@@ -244,6 +244,30 @@ Migración: `0007_modalities`.
   opciones sin repetir, sin "odd one out") y que todo tema tenga lección.
 - Efecto en el examen: la habilitación pide practicar el 70 % de 37 temas (26).
 
+## 6.5 Evidencias por habilidad (T-034, etapa 1)
+
+Un ejercicio genera **varias evidencias**, una por habilidad que toca, cada una medida a su manera
+(`backend/app/progress/evidence.py`):
+
+| Situación | Habilidad | Cómo se mide |
+|---|---|---|
+| Foco del ejercicio (su área) | Grammar / Vocabulary / Reading / Writing / Listening | resultado |
+| Presentado escuchando | Listening | resultado × esfuerzo: −15 % por escucha extra, −20 % si usó lento, piso 40 % |
+| Respondido hablando | Speaking | resultado del contenido |
+| Respondido hablando | Pronunciation | estimación final; una palabra dicha como otra parecida (think/sink) la limita a 50 % |
+| Escribió una oración (rewrite, short_writing) | Writing (señal secundaria, peso 0,5) | resultado |
+| Usó "Necesito lección" | todas sus evidencias | pesan la mitad (señal de debilidad) |
+
+- Lo escuchado no cuenta como Reading; lo hablado no cuenta como Writing.
+- **Señales** (`signals` en borrador e intento, migración `0010_answer_signals`): escuchas, escuchas en
+  lento y prácticas de pronunciación, registradas con `POST /classes/{id}/exercises/{eid}/signals`
+  mientras la clase está abierta. Se muestran en la corrección ("Escuchaste el audio 3 veces (1 en lento)").
+- Corrector: en respuestas habladas, una palabra que suena casi igual a la correcta se marca como
+  `PRONUNCIATION_ERROR` y no baja el tema.
+- `/progress` devuelve `abilities` (puntaje, evidencias, ayudas, tendencia, estado). El dashboard por
+  habilidad es la etapa 2.
+- **Examen sin ayudas:** sin lección, 2 escuchas por audio (el contador sobrevive a recargar) y sin modo lento.
+
 # 7. Flujo técnico
 
 ```text

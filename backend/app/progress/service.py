@@ -217,6 +217,7 @@ def dashboard(db: Session, study_profile_id: int, level: str) -> dict:
         "weakest": weakest,
         "areas": result_areas,
         "modalities": modality_progress(db, study_profile_id, level),
+        "abilities": ability_progress(db, study_profile_id, level),
     }
 
 
@@ -261,6 +262,63 @@ def modality_progress(db: Session, study_profile_id: int, level: str) -> list[di
                 "attemptCount": len(scores),
             }
         )
+    return result
+
+
+def ability_progress(db: Session, study_profile_id: int, level: str) -> list[dict]:
+    """Progreso por habilidad del idioma (T-034) a partir de las evidencias de cada intento.
+
+    Mismo cálculo que una skill: EMA ponderada (la ayuda y las señales secundarias pesan menos),
+    tendencia sobre los últimos intentos y cuántas evidencias fueron con ayuda.
+    """
+    from app.progress.evidence import ABILITIES, attempt_evidence
+
+    rows = db.execute(
+        select(Attempt, Exercise)
+        .join(Exercise, Exercise.id == Attempt.exercise_id)
+        .join(ClassSession, ClassSession.id == Exercise.class_session_id)
+        .where(
+            Attempt.study_profile_id == study_profile_id,
+            Attempt.score.is_not(None),
+            Exercise.level == level,
+            ClassSession.kind == SessionKind.CLASS,
+        )
+        .order_by(Attempt.evaluated_at, Attempt.id)
+    ).all()
+
+    series: dict[str, tuple[list[float], list[float]]] = {key: ([], []) for key, _ in ABILITIES}
+    assisted: dict[str, int] = {key: 0 for key, _ in ABILITIES}
+    practice_trials = 0
+    for attempt, exercise in rows:
+        for item in attempt_evidence(attempt, exercise):
+            series[item.ability][0].append(item.score)
+            series[item.ability][1].append(item.weight)
+        if (attempt.assistance or Assistance.NONE) != Assistance.NONE:
+            for item in attempt_evidence(attempt, exercise):
+                assisted[item.ability] += 1
+        practice_trials += len((attempt.signals or {}).get("practiceScores") or [])
+
+    result = []
+    for key, name in ABILITIES:
+        scores, weights = series[key]
+        count = len(scores)
+        score = round(_ema(scores, weights), 1) if scores else None
+        trend = None
+        if count >= 4:
+            delta = score - _ema(scores[:-3], weights[:-3])
+            trend = "up" if delta >= 5 else "down" if delta <= -5 else "stable"
+        item = {
+            "key": key,
+            "name": name,
+            "score": score,
+            "evidenceCount": count,
+            "assistedCount": assisted[key],
+            "trend": trend,
+            "status": _status(score, sum(weights)) if scores else "NOT_STARTED",
+        }
+        if key == "PRONUNCIATION":
+            item["practiceTrials"] = practice_trials
+        result.append(item)
     return result
 
 

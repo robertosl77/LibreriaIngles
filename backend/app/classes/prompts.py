@@ -97,6 +97,11 @@ Rules:
   put that in "suggestions", not in "errors".
 - Report one conceptResult per expected concept.
 - For open writing, evaluate grammar, vocabulary and task completion at the given level.
+- If "response" is SPEAK, "studentAnswer" is a literal transcript of speech: ignore punctuation
+  and capitalization. If it differs from a correct answer only by a word that SOUNDS almost the
+  same (e.g. "sink" for "think", "berry" for "very", "ship" for "sheep"), treat it as a
+  pronunciation slip, not a grammar/vocabulary error: mark the concepts as correct and add one
+  error of type PRONUNCIATION_ERROR with that word.
 - If exercise.response is SPEAK, the answer is a literal speech-to-text transcript. Do not
   penalize missing punctuation or capitalization that cannot be heard; evaluate the spoken
   words, grammar, vocabulary and task completion.
