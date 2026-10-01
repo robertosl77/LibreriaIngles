@@ -417,7 +417,7 @@ const RESULT_LABELS: Record<string, string> = {
                 @if (!busy() && !allAnswered()) {
                   <span class="small missing">
                     @if (pendingSpeakingCount()) {
-                      {{ pendingSpeakingCount() }} grabación(es) sin confirmar ·
+                      {{ pendingSpeakingCount() }} grabación(es) sin guardar ·
                     }
                     Respondé todos los ejercicios para finalizar.
                     <button class="btn-link small" type="button" (click)="goToFirstMissing()">Ir al primero pendiente</button>
@@ -674,6 +674,13 @@ export class ClassComponent implements OnDestroy {
   async beginSpeaking(exerciseId: number): Promise<void> {
     if (this.formLocked()) return;
     const c = this.klass();
+    // Volver a grabar una respuesta ya guardada es señal de esfuerzo en Speaking (T-046 v2).
+    if (c && this.confirmedSpeaking().has(exerciseId) && this.editable()) {
+      this.api.recordSignal(c.id, exerciseId, { kind: 'retake' }).subscribe({
+        next: (response) => this.updateSignals(exerciseId, response.signals),
+        error: () => undefined
+      });
+    }
     this.confirmedSpeaking.update((current) => {
       const next = new Set(current);
       next.delete(exerciseId);
@@ -705,7 +712,7 @@ export class ClassComponent implements OnDestroy {
       await this.speakingAudio.put(c.id, c.currentAttempt, exercise.id, recording);
       this.confirmedSpeaking.update((current) => new Set(current).add(exercise.id));
       this.markSave(exercise.id, 'saved');
-      this.toast.success('Respuesta grabada en este dispositivo.');
+
     } catch (err) {
       this.markSave(exercise.id, 'error');
       this.toast.error(
@@ -845,6 +852,10 @@ export class ClassComponent implements OnDestroy {
       parts.push(
         `practicaste la pronunciación ${trials.length} ${trials.length === 1 ? 'vez' : 'veces'} (${trials[0]}% → ${trials[trials.length - 1]}%)`
       );
+    }
+    if (exercise.response === 'SPEAK' && s.speakRetakes) {
+      const takes = s.speakRetakes + 1;
+      parts.push(`grabaste tu respuesta ${takes} veces`);
     }
     if (!parts.length) return null;
     const text = parts.join(' · ');
