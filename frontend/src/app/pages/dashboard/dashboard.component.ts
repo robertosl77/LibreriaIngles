@@ -88,7 +88,7 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
                 <span class="ab-chip" [class]="statusInfo(ab.status).chip">{{ statusInfo(ab.status).label }}</span>
                 <strong class="ab-score">{{ ab.score === null ? '—' : ab.score + '%' }}</strong>
                 <span class="chevron" aria-hidden="true"></span>
-                <span class="bar ab-bar"><span class="ab-fill" [style.width.%]="ab.score ?? 0" [style.background-size]="fillSize(ab.score)"></span></span>
+                <span class="bar ab-bar"><span [class]="'ab-fill ' + band(ab.score)" [style.width.%]="ab.score ?? 0"></span></span>
                 <span class="muted small ab-meta">
                   {{ ab.evidenceCount }} evidencia(s)
                   @if (ab.trend) { · {{ trend[ab.trend] }} }
@@ -170,8 +170,11 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
     .weak .chip { white-space: normal; }
     .ab-score { min-width: 3.5rem; text-align: right; }
     .ab-bar { grid-column: 1 / -1; margin: 0.2rem 0 0; }
-    /* Degradé fijo al ancho total de la barra: el color del final indica cómo vas. */
-    .ab-fill { background: linear-gradient(90deg, #d0533f 0%, #e39a2d 45%, #c9b52f 65%, #2f9a62 100%) left / 100% 100% no-repeat; }
+    /* Color por tramo (0-25 rojo, 25-50 naranja, 50-75 azul, 75-100 verde), con degradé suave del mismo tono. */
+    .ab-fill.b-red { background: linear-gradient(90deg, #e8857a, #c8382b); }
+    .ab-fill.b-orange { background: linear-gradient(90deg, #f3b56b, #dd7a12); }
+    .ab-fill.b-blue { background: linear-gradient(90deg, #7fa5ec, #2f5fc9); }
+    .ab-fill.b-green { background: linear-gradient(90deg, #6fcf9b, #1f8a52); }
     .ab-meta { grid-column: 1 / -1; }
     .help-mark { color: var(--warn); font-weight: 600; }
     .chevron {
@@ -218,10 +221,10 @@ export class DashboardComponent implements OnInit {
     return this.status[status] ?? this.status.NOT_STARTED;
   }
 
-  /** El degradé ocupa todo el ancho de la barra aunque el relleno sea parcial. */
-  fillSize(score: number | null): string {
-    const pct = Math.max(score ?? 0, 1);
-    return `${(100 / pct) * 100}% 100%`;
+  /** Tramo de color de la barra según el puntaje. */
+  band(score: number | null): string {
+    const v = score ?? 0;
+    return v < 25 ? 'b-red' : v < 50 ? 'b-orange' : v < 75 ? 'b-blue' : 'b-green';
   }
 
   /** Los temas del currículum viven dentro de la habilidad de su área. */
