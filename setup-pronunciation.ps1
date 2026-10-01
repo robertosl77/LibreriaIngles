@@ -21,6 +21,18 @@ else {
 }
 $EspeakLibUrl = "$EspeakReleaseBase/$EspeakLibArchive"
 
+$ProjectPython = Join-Path $Root "backend\.venv\Scripts\python.exe"
+if (Test-Path $ProjectPython) {
+    $PythonExe = $ProjectPython
+}
+else {
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $pythonCommand) {
+        throw "No se encontro Python. Se esperaba backend\.venv\Scripts\python.exe o python en PATH."
+    }
+    $PythonExe = $pythonCommand.Source
+}
+
 function Download-File {
     param(
         [Parameter(Mandatory = $true)][string]$Url,
@@ -36,14 +48,11 @@ function Expand-TarGz {
         [Parameter(Mandatory = $true)][string]$Destination
     )
 
-    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
-    if (-not $tar) {
-        throw "No se encontro tar.exe en Windows; no se puede extraer eSpeak NG portable."
-    }
-
-    & $tar.Source -xzf $Archive -C $Destination
+    # Evitamos tar.exe de Windows: en algunos equipos corporativos falla con
+    # rutas extendidas (\\?\...) aun cuando la ruta real no sea demasiado larga.
+    & $PythonExe -c "import sys, tarfile; a=tarfile.open(sys.argv[1], 'r:gz'); a.extractall(sys.argv[2]); a.close()" $Archive $Destination
     if ($LASTEXITCODE -ne 0) {
-        throw "tar.exe fallo al extraer $Archive (codigo $LASTEXITCODE)."
+        throw "Python no pudo extraer $Archive (codigo $LASTEXITCODE)."
     }
 }
 
@@ -57,7 +66,12 @@ if (-not $Force -and $ffmpegReady -and $espeakReady) {
     exit 0
 }
 
-$Temp = Join-Path ([System.IO.Path]::GetTempPath()) ("libreria-ingles-pronunciation-" + [guid]::NewGuid().ToString("N"))
+# Usamos una ruta temporal corta dentro del repo para evitar limitaciones de
+# longitud/rutas extendidas de herramientas de Windows.
+$Temp = Join-Path $Root ".pronunciation-tmp"
+if (Test-Path $Temp) {
+    Remove-Item $Temp -Recurse -Force
+}
 New-Item -ItemType Directory -Path $Temp | Out-Null
 
 try {
@@ -112,9 +126,6 @@ try {
         }
         New-Item -ItemType Directory -Path $EspeakTarget -Force | Out-Null
 
-        # Copiamos todas las DLL del mismo directorio por si el build trae
-        # dependencias auxiliares. La DLL principal queda con el nombre que
-        # espera app/pronunciation.py.
         Get-ChildItem $espeakDll.Directory.FullName -Filter "*.dll" -File |
             Copy-Item -Destination $EspeakTarget -Force
         Copy-Item $espeakDll.FullName (Join-Path $EspeakTarget "libespeak-ng.dll") -Force
