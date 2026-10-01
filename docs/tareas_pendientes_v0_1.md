@@ -879,6 +879,7 @@ T-037 Bloquear el formulario al enviar la clase (bug, Claude)
 T-038 Publicación: servidor para backend con fonética + frontend (servidor pendiente)
 T-039 Motor de pronunciación preciso OpenPronounce (futuro, rama archivo/t-027-openpronounce: NO BORRAR)
 T-042 Calibrar la corrección de escritura libre según el nivel (Claude)
+T-043 Apelación con justificación escrita o grabada (Claude)
 ```
 
 Referencias: documento funcional v0.3 §4.1, §5, §8, §15, §16, §17, §17.1, §39, §41 (Audio), §42 (Audio).
@@ -1504,6 +1505,35 @@ Writing miente para abajo y desmotiva justo donde más hay que practicar.
 2. **Informe** con los casos injustos antes de cambiar nada.
 3. **Ajuste** (con OK): prompt del evaluador calibrado por nivel (qué es error en A1 y qué es
    sugerencia), estilo/naturalidad nunca descuentan, ortografía según T-021; tests con esos casos.
+
+---
+
+## T-043 — Apelación con justificación
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Responsable:** Claude  
+**Relación:** T-016 (campo "¿Por qué?" en todos los ejercicios: más amplio), T-034 (evidencias)
+
+Origen (Roberto, 2026-10-01): al apelar, la IA vuelve a corregir lo mismo sin información
+nueva y repite su criterio. La apelación debe permitir explicar por qué la respuesta está bien.
+
+```text
+"Creo que mi respuesta es correcta"
+   └─ el alumno justifica (opcional)
+        ├─ flojo en Writing                → la app sugiere justificar ESCRIBIENDO
+        └─ flojo en Speaking/Pronunciation → la app sugiere justificar GRABANDO (si hay IA con audio)
+        (siempre puede elegir la otra forma)
+   └─ IA re-corrige: respuesta + justificación como CONTEXTO (no se deja convencer por elocuencia)
+   └─ nota del ejercicio = solo si la respuesta es correcta
+   └─ justificación en inglés = evidencia aparte (Writing o Speaking/Pronunciation)
+```
+
+1. **Parte 1:** justificación escrita (sin costo extra: va en la misma llamada de la apelación).
+2. **Parte 2:** justificación grabada (1 llamada de audio extra por apelación; apelar es poco
+   frecuente) y sugerencia automática según la habilidad floja.
+3. Se mantiene: una apelación por intento; la regla de ortografía de T-021; si la IA acepta,
+   la respuesta queda como aceptada del ejercicio.
 
 ---
 
