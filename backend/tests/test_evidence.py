@@ -161,3 +161,107 @@ def test_signals_are_recorded_copied_and_drive_listening_score(client) -> None:
     assert listening["score"] is not None and listening["score"] < 100  # costó entender
     assert abilities["PRONUNCIATION"]["practiceTrials"] == 1
     assert all(a["status"] in {"NOT_STARTED", "LEARNING", "MASTERED", "NEEDS_REVIEW"} for a in abilities.values())
+
+
+# ------------------------------------------------------------------ asistencia continua
+
+
+def test_many_listens_or_slow_mark_listening_as_assisted() -> None:
+    once = _by_ability(attempt_evidence(_attempt(signals={"listenPlays": 2}), _exercise(presentation="LISTEN")))
+    many = _by_ability(attempt_evidence(_attempt(signals={"listenPlays": 3}), _exercise(presentation="LISTEN")))
+    slow = _by_ability(attempt_evidence(_attempt(signals={"listenPlays": 1, "listenSlowPlays": 1}),
+                                        _exercise(presentation="LISTEN")))
+    assert not once["LISTENING"].assisted
+    assert many["LISTENING"].assisted and slow["LISTENING"].assisted
+    assert not many["GRAMMAR"].assisted  # la gramática no recibió ayuda
+
+
+def test_continuous_practice_marks_pronunciation_without_lowering_score() -> None:
+    def pron(trials):
+        items = _by_ability(attempt_evidence(
+            _attempt(100, response="SPEAK", pronunciation={"score": 88},
+                     signals={"practiceScores": [60] * trials}),
+            _exercise()))
+        return items["PRONUNCIATION"]
+
+    assert not pron(2).assisted and pron(2).weight == 1.0
+    assert pron(3).assisted and pron(3).weight == 0.5
+    assert pron(3).score == 88  # practicar no castiga el puntaje
+
+
+def test_lesson_marks_every_evidence_as_assisted() -> None:
+    items = attempt_evidence(_attempt(100, assistance=Assistance.LESSON), _exercise(presentation="LISTEN"))
+    assert all(e.assisted for e in items)
+
+
+def test_recent_help_blocks_mastered() -> None:
+    from app.progress.service import _status
+
+    assert _status(95, 6) == "MASTERED"
+    assert _status(95, 6, assisted_recent=1) == "LEARNING"
+
+
+# ------------------------------------------------------------------ think / sink sin IA
+
+
+def test_spoken_sound_alike_is_pronunciation_error_not_content() -> None:
+    from app.classes.spoken import pronunciation_slips, sounds_alike
+
+    assert sounds_alike("think", "sink") and sounds_alike("three", "tree")
+    assert sounds_alike("very", "berry") and sounds_alike("ship", "sheep")
+    assert not sounds_alike("think", "drink")
+    assert pronunciation_slips(["I think so."], "i sink so") == [("sink", "think")]
+    assert pronunciation_slips(["I think so."], "I drink so") is None
+    assert pronunciation_slips(["He does not work."], "He do not work") is None
+
+
+def test_deterministic_spoken_answer_uses_pronunciation_rule() -> None:
+    from app.classes.evaluation import evaluate
+    from app.learning.models import EvaluationMode
+
+    exercise = NS(
+        id=None, exercise_type="short_answer", prompt="", evaluation_mode=EvaluationMode.DETERMINISTIC,
+        answer_key={"acceptedAnswers": ["I think so."]}, expected_concepts=["opinion"],
+    )
+    # Sin puntuación ni mayúsculas, como sale de una transcripción.
+    assert evaluate(None, None, exercise, "i think so", spoken=True).score == 100
+    slip = evaluate(None, None, exercise, "I sink, so", spoken=True)
+    assert slip.score == 100
+    assert slip.result["errors"][0]["type"] == "PRONUNCIATION_ERROR"
+    items = _by_ability(attempt_evidence(
+        _attempt(slip.score, response="SPEAK", pronunciation={"score": 92}, errors=slip.result["errors"]),
+        _exercise()))
+    assert items["GRAMMAR"].score == 100 and items["PRONUNCIATION"].score == 50
+
+
+def test_spoken_sink_through_full_class(client) -> None:
+    from app.learning.models import DraftAnswer, EvaluationMode
+
+    headers = _setup(client)
+    klass = client.post(f"{API}/classes", headers=headers).json()
+    with SessionLocal() as db:
+        exercises = db.scalars(select(Exercise).where(Exercise.class_session_id == klass["id"])).all()
+        for e in exercises:  # el resto, escrito
+            if e.response_mode == ResponseMode.SPEAK:
+                e.response_mode = ResponseMode.WRITE
+        target = next(e for e in exercises if e.exercise_type not in {"multiple_choice", "reading_multiple_choice"})
+        target.response_mode = ResponseMode.SPEAK
+        target.evaluation_mode = EvaluationMode.DETERMINISTIC
+        target.answer_key = {"acceptedAnswers": ["I think so."], "commonErrors": []}
+        target_id = target.id
+        db.add(DraftAnswer(class_session_id=klass["id"], exercise_id=target_id, answer_text="i sink so",
+                           pronunciation_result={"score": 90}))
+        answers = {
+            str(e.id): (e.answer_key.get("acceptedAnswers") or ["My name is Ana. I live in Rosario."])[0]
+            for e in exercises if e.id != target_id
+        }
+        db.commit()
+
+    assert client.post(f"{API}/classes/{klass['id']}/submit", json={"answers": answers}, headers=headers).status_code == 200
+    with SessionLocal() as db:
+        attempt = db.scalar(select(Attempt).where(Attempt.exercise_id == target_id))
+        assert attempt.score == 100
+        assert attempt.evaluation_result["errors"][0]["type"] == "PRONUNCIATION_ERROR"
+    abilities = {a["key"]: a for a in client.get(f"{API}/progress", headers=headers).json()["abilities"]}
+    assert abilities["PRONUNCIATION"]["score"] == 50
+    assert abilities["SPEAKING"]["score"] == 100

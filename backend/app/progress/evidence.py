@@ -10,7 +10,12 @@ a su manera (no se copia el mismo puntaje):
   (y un error de pronunciación tipo think/sink la limita).
 - Producir una oración escribiendo (rewrite, short_writing) también es evidencia
   de Writing, aunque el foco sea gramática.
-- Pedir lección (ayuda) reduce el peso de la evidencia: es señal de debilidad.
+- Pedir lección (ayuda) reduce el peso de la evidencia y la marca como asistida:
+  es señal de debilidad aunque la respuesta sea correcta.
+- Asistencia continua: escuchar muchas veces o en lento marca Listening como
+  asistido (además de bajar su puntaje); practicar la pronunciación más de
+  PRACTICE_FREE_TRIALS veces marca Pronunciation como asistida y pesa menos
+  (practicar no castiga el puntaje).
 
 Los parámetros están juntos para poder configurarlos más adelante (T-036).
 """
@@ -44,6 +49,8 @@ SLOW_PENALTY = 0.20  # Listening: usó modo lento
 LISTEN_FLOOR = 0.40  # Listening: aunque costó, entendió
 PRONUNCIATION_SLIP_CAP = 50  # palabra dicha como otra parecida (think → sink)
 SENTENCE_TYPES = {"rewrite", "short_writing"}
+LISTEN_FREE_PLAYS = 2  # más escuchas que esto (o usar lento) = asistencia continua
+PRACTICE_FREE_TRIALS = 2  # más prácticas que esto = asistencia continua
 
 
 @dataclass(frozen=True)
@@ -51,6 +58,7 @@ class Evidence:
     ability: str
     score: float
     weight: float
+    assisted: bool = False
 
 
 def listening_factor(signals: dict | None) -> float:
@@ -76,6 +84,7 @@ def attempt_evidence(attempt, exercise) -> list[Evidence]:
     score = float(attempt.score)
     assisted = (attempt.assistance or Assistance.NONE) != Assistance.NONE
     weight = ASSISTED_WEIGHT if assisted else 1.0
+    signals = attempt.signals or {}
     listened = bool(exercise.presentation_mode and exercise.presentation_mode.value == "LISTEN")
     spoken = bool(attempt.response_mode and attempt.response_mode.value == "SPEAK")
     area = AREA_TO_ABILITY.get(exercise.area or "")
@@ -83,18 +92,23 @@ def attempt_evidence(attempt, exercise) -> list[Evidence]:
     evidence: dict[str, Evidence] = {}
 
     if listened:
+        replays = int(signals.get("listenPlays") or 0) > LISTEN_FREE_PLAYS
+        slow = int(signals.get("listenSlowPlays") or 0) > 0
         evidence["LISTENING"] = Evidence(
-            "LISTENING", round(score * listening_factor(attempt.signals), 1), weight
+            "LISTENING",
+            round(score * listening_factor(signals), 1),
+            weight,
+            assisted or replays or slow,
         )
 
     # Foco principal (área). Lo escuchado no es lectura; lo hablado no es escritura.
     if area and area not in evidence:
         skip = (area == "READING" and listened) or (area == "WRITING" and spoken)
         if not skip:
-            evidence[area] = Evidence(area, score, weight)
+            evidence[area] = Evidence(area, score, weight, assisted)
 
     if spoken:
-        evidence["SPEAKING"] = Evidence("SPEAKING", score, weight)
+        evidence["SPEAKING"] = Evidence("SPEAKING", score, weight, assisted)
         pronunciation = (attempt.pronunciation_result or {}).get("score")
         if _has_pronunciation_slip(attempt.evaluation_result):
             pronunciation = min(
@@ -102,8 +116,14 @@ def attempt_evidence(attempt, exercise) -> list[Evidence]:
                 pronunciation if pronunciation is not None else PRONUNCIATION_SLIP_CAP,
             )
         if pronunciation is not None:
-            evidence["PRONUNCIATION"] = Evidence("PRONUNCIATION", float(pronunciation), weight)
+            practiced = len(signals.get("practiceScores") or []) > PRACTICE_FREE_TRIALS
+            evidence["PRONUNCIATION"] = Evidence(
+                "PRONUNCIATION",
+                float(pronunciation),
+                weight * (ASSISTED_WEIGHT if practiced else 1.0),
+                assisted or practiced,
+            )
     elif exercise.exercise_type in SENTENCE_TYPES and "WRITING" not in evidence:
-        evidence["WRITING"] = Evidence("WRITING", score, weight * SECONDARY_WEIGHT)
+        evidence["WRITING"] = Evidence("WRITING", score, weight * SECONDARY_WEIGHT, assisted)
 
     return list(evidence.values())

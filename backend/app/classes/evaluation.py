@@ -2,8 +2,9 @@
 
 persistir intento → normalizar →
   acceptedAnswers coincide  → RULE_MATCH
+  hablada, suena parecido   → correcto + PRONUNCIATION_ERROR (RULE_MATCH)
   commonErrors coincide     → COMMON_ERROR_MATCH
-  modo DETERMINISTIC        → incorrecto por regla (RULE_MATCH)
+  modo DETERMINISTIC        → incorrecto por regla (RULE_MATCH); hablada → IA
   caché de IA               → AI
   evaluación con IA         → AI  (si no hay IA: queda pendiente)
 
@@ -22,6 +23,7 @@ from app.ai.models import utcnow
 from app.ai.service import NoAIAvailable, run_json_task
 from app.classes.normalize import fill_blank_variants, normalize_answer
 from app.classes.prompts import EVALUATION_SYSTEM, evaluation_user_prompt
+from app.classes.spoken import normalize_spoken, pronunciation_slips
 from app.curriculum.service import find_skill
 from app.learning.models import (
     AIEvaluationCache,
@@ -60,11 +62,31 @@ def _result_label(score: float) -> str:
     return "partially_correct"
 
 
-def _accepted_normalized(exercise: Exercise) -> set[str]:
+def _accepted(exercise: Exercise) -> list[str]:
     accepted = list(exercise.answer_key.get("acceptedAnswers") or [])
     if exercise.exercise_type == "fill_blank":
         accepted += fill_blank_variants(exercise.prompt, accepted)
-    return {normalize_answer(a) for a in accepted if a}
+    return [a for a in accepted if a]
+
+
+def _accepted_normalized(exercise: Exercise, normalize=normalize_answer) -> set[str]:
+    return {normalize(a) for a in _accepted(exercise)}
+
+
+def _pronunciation_slip_result(exercise: Exercise, slips: list[tuple[str, str]]) -> dict:
+    """Dijo la respuesta correcta con una palabra mal pronunciada (think → sink)."""
+    result = _rule_correct(exercise)
+    result["errors"] = [
+        {
+            "type": "PRONUNCIATION_ERROR",
+            "fragment": said,
+            "correction": expected,
+            "explanation": f"Se entendió \"{said}\": cuidá la pronunciación de \"{expected}\".",
+        }
+        for said, expected in slips
+    ]
+    result["feedback"] = "Respuesta correcta; revisá la pronunciación de una palabra."
+    return result
 
 
 def _correct_answer(exercise: Exercise) -> str | None:
@@ -235,24 +257,37 @@ def _cache_put(db: Session, exercise: Exercise, normalized: str, result: dict) -
         pass
 
 
-def evaluate(db: Session, account: Account, exercise: Exercise, answer: str) -> Evaluation | None:
-    """Devuelve la evaluación, o None si hace falta IA y no hay ninguna disponible."""
-    normalized = normalize_answer(answer)
+def evaluate(
+    db: Session, account: Account, exercise: Exercise, answer: str, *, spoken: bool = False
+) -> Evaluation | None:
+    """Devuelve la evaluación, o None si hace falta IA y no hay ninguna disponible.
+
+    Con respuesta hablada (`spoken`) se compara la transcripción sin puntuación, y una
+    palabra que suena parecida a la esperada es error de pronunciación, no de contenido.
+    """
+    normalize = normalize_spoken if spoken else normalize_answer
+    normalized = normalize(answer)
 
     if not normalized:
         result = _rule_incorrect(exercise, "")
         return Evaluation(EvaluationSource.RULE_MATCH, result, 0.0)
 
     if exercise.evaluation_mode != EvaluationMode.AI:
-        if normalized in _accepted_normalized(exercise):
+        if normalized in _accepted_normalized(exercise, normalize):
             return Evaluation(EvaluationSource.RULE_MATCH, _rule_correct(exercise), 100.0)
+        if spoken:
+            slips = pronunciation_slips(_accepted(exercise), answer)
+            if slips:
+                result = _pronunciation_slip_result(exercise, slips)
+                return Evaluation(EvaluationSource.RULE_MATCH, result, score_from_result(result))
         for error in exercise.answer_key.get("commonErrors") or []:
-            if normalize_answer(error.get("answer")) == normalized:
+            if normalize(error.get("answer")) == normalized:
                 result = _common_error_result(exercise, error)
                 return Evaluation(
                     EvaluationSource.COMMON_ERROR_MATCH, result, score_from_result(result)
                 )
-        if exercise.evaluation_mode == EvaluationMode.DETERMINISTIC:
+        # Una transcripción puede diferir por cosas del habla: decide la IA si la hay.
+        if exercise.evaluation_mode == EvaluationMode.DETERMINISTIC and not spoken:
             return Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0)
 
     cached = _cache_get(db, exercise, normalized)
@@ -262,6 +297,8 @@ def evaluate(db: Session, account: Account, exercise: Exercise, answer: str) -> 
     try:
         result = evaluate_with_ai(db, account, exercise, answer)
     except NoAIAvailable:
+        if spoken and exercise.evaluation_mode == EvaluationMode.DETERMINISTIC:
+            return Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0)
         return None
     _cache_put(db, exercise, normalized, result)
     return Evaluation(EvaluationSource.AI, result, score_from_result(result))

@@ -35,8 +35,10 @@ def _confidence(count: float) -> str:
     return "low"
 
 
-def _status(score: float, count: float) -> str:
-    if score >= MASTERED_SCORE and count >= MASTERED_MIN_ATTEMPTS:
+def _status(score: float, count: float, assisted_recent: int = 0) -> str:
+    # Pedir ayuda es señal de debilidad aunque la respuesta sea correcta (T-034):
+    # con ayuda reciente no se considera dominado.
+    if score >= MASTERED_SCORE and count >= MASTERED_MIN_ATTEMPTS and not assisted_recent:
         return "MASTERED"
     if score < REVIEW_SCORE and count >= REVIEW_MIN_ATTEMPTS:
         return "NEEDS_REVIEW"
@@ -116,8 +118,8 @@ def recompute_skill(
     progress.score = score
     progress.attempt_count = count
     progress.confidence = _confidence(evidence)
-    progress.status = _status(score, evidence)
     progress.assisted_recent = sum(1 for w in weights[-RECENT_WINDOW:] if w < 1.0)
+    progress.status = _status(score, evidence, progress.assisted_recent)
     progress.trend = trend
     progress.last_practiced_at = rows[-1].evaluated_at if rows else None
     progress.updated_at = utcnow()
@@ -286,23 +288,21 @@ def ability_progress(db: Session, study_profile_id: int, level: str) -> list[dic
         .order_by(Attempt.evaluated_at, Attempt.id)
     ).all()
 
-    series: dict[str, tuple[list[float], list[float]]] = {key: ([], []) for key, _ in ABILITIES}
-    assisted: dict[str, int] = {key: 0 for key, _ in ABILITIES}
-    practice_trials = 0
+    series: dict[str, list] = {key: [] for key, _ in ABILITIES}
+    practice: list[float] = []
     for attempt, exercise in rows:
         for item in attempt_evidence(attempt, exercise):
-            series[item.ability][0].append(item.score)
-            series[item.ability][1].append(item.weight)
-        if (attempt.assistance or Assistance.NONE) != Assistance.NONE:
-            for item in attempt_evidence(attempt, exercise):
-                assisted[item.ability] += 1
-        practice_trials += len((attempt.signals or {}).get("practiceScores") or [])
+            series[item.ability].append(item)
+        practice += (attempt.signals or {}).get("practiceScores") or []
 
     result = []
     for key, name in ABILITIES:
-        scores, weights = series[key]
+        items = series[key]
+        scores = [e.score for e in items]
+        weights = [e.weight for e in items]
         count = len(scores)
         score = round(_ema(scores, weights), 1) if scores else None
+        assisted_recent = sum(1 for e in items[-RECENT_WINDOW:] if e.assisted)
         trend = None
         if count >= 4:
             delta = score - _ema(scores[:-3], weights[:-3])
@@ -312,12 +312,17 @@ def ability_progress(db: Session, study_profile_id: int, level: str) -> list[dic
             "name": name,
             "score": score,
             "evidenceCount": count,
-            "assistedCount": assisted[key],
+            "assistedCount": sum(1 for e in items if e.assisted),
+            # Señal de debilidad para el balanceo (etapa 3): ayuda en las últimas evidencias.
+            "assistedRecent": assisted_recent,
             "trend": trend,
-            "status": _status(score, sum(weights)) if scores else "NOT_STARTED",
+            "status": _status(score, sum(weights), assisted_recent) if scores else "NOT_STARTED",
         }
         if key == "PRONUNCIATION":
-            item["practiceTrials"] = practice_trials
+            # La práctica no pesa en el puntaje: se muestra su evolución aparte.
+            item["practiceTrials"] = len(practice)
+            item["practiceFirst"] = practice[0] if practice else None
+            item["practiceLast"] = practice[-1] if practice else None
         result.append(item)
     return result
 

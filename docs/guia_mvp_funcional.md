@@ -256,16 +256,23 @@ Un ejercicio genera **varias evidencias**, una por habilidad que toca, cada una 
 | Respondido hablando | Speaking | resultado del contenido |
 | Respondido hablando | Pronunciation | estimación final; una palabra dicha como otra parecida (think/sink) la limita a 50 % |
 | Escribió una oración (rewrite, short_writing) | Writing (señal secundaria, peso 0,5) | resultado |
-| Usó "Necesito lección" | todas sus evidencias | pesan la mitad (señal de debilidad) |
+| Usó "Necesito lección" | todas sus evidencias | pesan la mitad y quedan marcadas como asistidas |
+| Escuchó más de 2 veces o en lento | Listening | además del descuento, queda marcada como asistida |
+| Practicó la pronunciación más de 2 veces | Pronunciation | pesa la mitad y queda asistida; el puntaje no baja |
 
 - Lo escuchado no cuenta como Reading; lo hablado no cuenta como Writing.
 - **Señales** (`signals` en borrador e intento, migración `0010_answer_signals`): escuchas, escuchas en
   lento y prácticas de pronunciación, registradas con `POST /classes/{id}/exercises/{eid}/signals`
   mientras la clase está abierta. Se muestran en la corrección ("Escuchaste el audio 3 veces (1 en lento)").
-- Corrector: en respuestas habladas, una palabra que suena casi igual a la correcta se marca como
-  `PRONUNCIATION_ERROR` y no baja el tema.
-- `/progress` devuelve `abilities` (puntaje, evidencias, ayudas, tendencia, estado). El dashboard por
-  habilidad es la etapa 2.
+- **Ayuda = señal de debilidad:** con ayuda en las últimas 5 evidencias, una skill o habilidad no
+  puede quedar como dominada aunque el puntaje dé (`assistedRecent`, lo usará el balanceo de la etapa 3).
+- **Respuestas habladas** (`app/classes/spoken.py`): se compara la transcripción sin puntuación ni
+  mayúsculas. Si coincide con la respuesta salvo palabras que suenan parecido (think/sink, three/tree,
+  very/berry, ship/sheep…), el contenido es correcto y se marca `PRONUNCIATION_ERROR`, sin IA. Una
+  transcripción que no coincide va a la IA aunque el ejercicio sea determinístico (si no hay IA, incorrecta).
+  Los casos más difusos los resuelve la IA con la misma regla.
+- `/progress` devuelve `abilities` (puntaje, evidencias, ayudas, ayuda reciente, tendencia, estado y, en
+  Pronunciation, prácticas con su primer y último puntaje). El dashboard por habilidad es la etapa 2.
 - **Examen sin ayudas:** sin lección, 2 escuchas por audio (el contador sobrevive a recargar) y sin modo lento.
 
 # 7. Flujo técnico

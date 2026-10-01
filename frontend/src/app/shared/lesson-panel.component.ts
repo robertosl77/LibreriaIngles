@@ -60,7 +60,7 @@ import { Lesson } from '../core/models';
         @if (registered()) {
           <span class="muted small">
             Este ejercicio queda marcado como respondido con lección: suma práctica, pero cuenta
-            menos para el dominio del tema.
+            menos y el tema no se da por dominado hasta que lo resuelvas sin ayuda.
           </span>
         }
         <button class="btn btn-sm" type="button" (click)="closed.emit()">

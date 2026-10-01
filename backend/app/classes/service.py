@@ -244,7 +244,8 @@ def evaluate_pending(db: Session, account: Account, session: ClassSession) -> bo
         exercise = db.get(Exercise, attempt.exercise_id)
         # Si hace falta IA y no hay ninguna, evaluate devuelve None y el intento
         # queda pendiente; los que se resuelven por reglas se evalúan igual.
-        evaluation = evaluate(db, account, exercise, attempt.raw_answer)
+        spoken = bool(attempt.response_mode and attempt.response_mode.value == "SPEAK")
+        evaluation = evaluate(db, account, exercise, attempt.raw_answer, spoken=spoken)
         if evaluation is None:
             continue
         apply_evaluation(attempt, evaluation)
