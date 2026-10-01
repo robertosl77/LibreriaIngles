@@ -1435,7 +1435,8 @@ configuración paralela difícil de mantener.
 ## T-041 — Mostrar proveedor y modelo de IA usados en cada clase
 
 **Prioridad:** P3 — Baja  
-**Estado:** Pendiente
+**Estado:** En curso  
+**Responsable:** ChatGPT
 
 Objetivo: hacer visible qué conexión de IA y qué modelo se usaron realmente en la clase,
 tanto para dar trazabilidad como para evitar que textos como “generada con Google Gemini”
