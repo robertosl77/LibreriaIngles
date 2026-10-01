@@ -21,12 +21,22 @@ def test_normalize_validates_and_clamps() -> None:
         "phonemes": [{"phoneme": "θ", "word": "think", "score": -5}, "basura"],
         "fluency": "70",
     }
-    result = normalize_ai_pronunciation(raw, "I think so", "GEMINI")
+    result = normalize_ai_pronunciation(
+        raw,
+        "I think so",
+        "GEMINI",
+        model="gemini-2.5-flash",
+        connection="Gemini personal",
+        provider_label="Google Gemini",
+    )
     assert result["score"] == 100
     assert result["words"] == [{"word": "think", "score": 36}]
     assert result["phonemes"] == [{"phoneme": "θ", "word": "think", "score": 0}]
     assert result["fluency"] == 70
     assert result["provider"] == "GEMINI" and result["estimated"] is True
+    assert result["providerLabel"] == "Google Gemini"
+    assert result["model"] == "gemini-2.5-flash"
+    assert result["connection"] == "Gemini personal"
     assert result["assessedAt"]
 
 
@@ -98,4 +108,6 @@ def test_spoken_answer_gets_estimated_pronunciation_end_to_end(client) -> None:
     assert response.status_code == 200, response.text
     result = response.json()["pronunciationResult"]
     assert result["score"] == 80 and result["provider"] == "MOCK" and result["estimated"] is True
+    assert result["model"] == "mock"
+    assert result["connection"] == "Simulado"
     assert [w["word"] for w in result["words"]] == ["I", "think", "so"]
