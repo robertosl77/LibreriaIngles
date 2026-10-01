@@ -176,7 +176,7 @@ const RESULT_LABELS: Record<string, string> = {
           }
 
           @for (exercise of c.exercises; track exercise.id; let i = $index) {
-            <article class="card exercise" [class]="resultClass(exercise)" [class.form-locked]="formLocked()">
+            <article class="card exercise" [attr.id]="'ex-' + exercise.id" [class]="resultClass(exercise)" [class.form-locked]="formLocked()">
               <header class="exercise-head">
                 <span class="muted small">{{ i + 1 }}. {{ typeLabels[exercise.type] }}@if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }@if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> } · {{ exercise.skillName }}</span>
                 @if (editable() && saveState()[exercise.id]; as state) {
@@ -260,6 +260,7 @@ const RESULT_LABELS: Record<string, string> = {
                     [busy]="formLocked() || audioSavingId() === exercise.id"
                     [confirmed]="confirmedSpeaking().has(exercise.id)"
                     (recordingStarted)="beginSpeaking(exercise.id)"
+                    (pendingChange)="markPendingSpeaking(exercise.id, $event)"
                     (accepted)="confirmSpeaking(exercise, $event)"
                   />
                 } @else {
@@ -382,8 +383,19 @@ const RESULT_LABELS: Record<string, string> = {
 
           @if (editable()) {
             <div class="submit-bar">
-              <span class="muted small">{{ answeredCount() }}/{{ c.exercises.length }} respondidas</span>
-              <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="busy()">
+              <div class="submit-status">
+                <span class="muted small">{{ answeredCount() }}/{{ c.exercises.length }} respondidas</span>
+                @if (!busy() && !allAnswered()) {
+                  <span class="small missing">
+                    @if (pendingSpeakingCount()) {
+                      {{ pendingSpeakingCount() }} grabación(es) sin confirmar ·
+                    }
+                    Respondé todos los ejercicios para finalizar.
+                    <button class="btn-link small" type="button" (click)="goToFirstMissing()">Ir al primero pendiente</button>
+                  </span>
+                }
+              </div>
+              <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="busy() || !allAnswered()">
                 @if (busy()) { <span class="spinner"></span> Corrigiendo… } @else { {{ c.kind === 'EXAM' ? 'Finalizar examen' : 'Finalizar y comprobar' }} }
               </button>
             </div>
@@ -462,6 +474,8 @@ const RESULT_LABELS: Record<string, string> = {
     .score-card { display: flex; gap: 1.5rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
     .score-card p { margin: 0; }
     .history { display: flex; flex-direction: column; gap: 0.2rem; }
+    .submit-status { display: flex; flex-direction: column; gap: 0.15rem; }
+    .submit-status .missing { color: var(--warn); }
     .submit-bar {
       position: sticky; bottom: 0.8rem;
       display: flex; align-items: center; justify-content: space-between; gap: 1rem;
@@ -497,6 +511,11 @@ export class ClassComponent implements OnDestroy {
   readonly lessonLoading = signal<number | null>(null);
   readonly audioSavingId = signal<number | null>(null);
   readonly confirmedSpeaking = signal<Set<number>>(new Set());
+  /** Grabaciones hechas pero no confirmadas: no cuentan como respuesta. */
+  readonly pendingSpeaking = signal<Set<number>>(new Set());
+  readonly pendingSpeakingCount = computed(
+    () => [...this.pendingSpeaking()].filter((id) => !this.confirmedSpeaking().has(id)).length
+  );
 
   readonly editable = computed(() => {
     const status = this.klass()?.status;
@@ -514,6 +533,12 @@ export class ClassComponent implements OnDestroy {
         ? confirmed.has(exercise.id)
         : Boolean((answers[exercise.id] ?? '').trim())
     ).length;
+  });
+
+  /** Se puede finalizar recién cuando todos los ejercicios tienen respuesta (las habladas, confirmadas). */
+  readonly allAnswered = computed(() => {
+    const c = this.klass();
+    return !!c && c.exercises.length > 0 && this.answeredCount() === c.exercises.length;
   });
 
   private readonly edits = new Subject<{ exerciseId: number; answer: string; immediate: boolean }>();
@@ -571,6 +596,7 @@ export class ClassComponent implements OnDestroy {
     }
     this.answers.set(answers);
     this.confirmedSpeaking.set(new Set());
+    this.pendingSpeaking.set(new Set());
     if (detail.status === 'READY' || detail.status === 'IN_PROGRESS') {
       void this.restoreSpeakingAudio(detail);
     } else {
@@ -737,13 +763,38 @@ export class ClassComponent implements OnDestroy {
     }
   }
 
+  markPendingSpeaking(exerciseId: number, pending: boolean): void {
+    this.pendingSpeaking.update((current) => {
+      const next = new Set(current);
+      if (pending) next.add(exerciseId);
+      else next.delete(exerciseId);
+      return next;
+    });
+  }
+
+  goToFirstMissing(): void {
+    const c = this.klass();
+    if (!c) return;
+    const answers = this.answers();
+    const confirmed = this.confirmedSpeaking();
+    const missing = c.exercises.find((exercise) =>
+      exercise.response === 'SPEAK'
+        ? !confirmed.has(exercise.id)
+        : !(answers[exercise.id] ?? '').trim()
+    );
+    if (missing) {
+      document.getElementById('ex-' + missing.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
   async submit(): Promise<void> {
     const c = this.klass();
     if (!c || !this.editable() || this.busy()) return;
 
-    const unanswered = c.exercises.length - this.answeredCount();
-    if (unanswered > 0) {
-      this.toast.show(`Enviaste la clase con ${unanswered} ejercicio(s) sin responder.`);
+    if (!this.allAnswered()) {
+      this.toast.show('Respondé todos los ejercicios antes de finalizar.');
+      this.goToFirstMissing();
+      return;
     }
 
     this.busy.set(true);

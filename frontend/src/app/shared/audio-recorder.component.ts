@@ -45,6 +45,9 @@ export interface RecordedAudio {
             <span class="muted small">{{ elapsedSeconds() }} s</span>
           </div>
         } @else {
+          <p class="pending small" role="status">
+            Grabaste tu respuesta pero <strong>falta confirmarla</strong>: si no la confirmás, no se envía.
+          </p>
           <div class="row">
             <button class="btn btn-primary btn-sm" type="button" (click)="accept()" [disabled]="busy()">
               @if (busy()) { <span class="spinner"></span> Guardando… } @else { Confirmar respuesta }
@@ -59,6 +62,7 @@ export interface RecordedAudio {
     </div>
   `,
   styles: `
+    .pending { margin: 0; padding: 0.45rem 0.7rem; border-radius: 0.5rem; background: var(--warn-bg); color: var(--warn); }
     .recorder { gap: 0.55rem; padding: 0.7rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
     audio { width: min(100%, 32rem); height: 2.4rem; }
     .record-btn {
@@ -84,6 +88,8 @@ export class AudioRecorderComponent implements OnDestroy {
   readonly maxSeconds = input(60);
   readonly accepted = output<RecordedAudio>();
   readonly recordingStarted = output<void>();
+  /** true: hay una grabación hecha que todavía no se confirmó (no cuenta como respuesta). */
+  readonly pendingChange = output<boolean>();
 
   readonly recording = signal(false);
   readonly recordedUrl = signal<string | null>(null);
@@ -124,6 +130,7 @@ export class AudioRecorderComponent implements OnDestroy {
       this.recording.set(true);
       this.recorder.start(250);
       this.recordingStarted.emit();
+      this.pendingChange.emit(false);
       this.timerId = window.setInterval(() => {
         const elapsed = Date.now() - this.startedAt;
         this.elapsedSeconds.set(Math.min(this.maxSeconds(), Math.ceil(elapsed / 1000)));
@@ -177,6 +184,7 @@ export class AudioRecorderComponent implements OnDestroy {
     this.recordedUrl.set(URL.createObjectURL(this.blob));
     this.recording.set(false);
     this.stopTracks();
+    this.pendingChange.emit(true);
   }
 
   private preferredMimeType(): string {
