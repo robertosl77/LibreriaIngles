@@ -82,11 +82,11 @@ Return ONLY a JSON object:
   "result": "correct | partially_correct | incorrect",
   "scoreSuggested": 0-100,
   "conceptResults": [{"concept": "<expected concept>", "status": "correct|partially_correct|incorrect", "score": 0-100}],
-  "errors": [{"type": "GRAMMAR_ERROR|VOCABULARY_ERROR|SPELLING_ERROR|WORD_ORDER_ERROR",
+  "errors": [{"type": "GRAMMAR_ERROR|VOCABULARY_ERROR|SPELLING_ERROR|WORD_ORDER_ERROR|PRONUNCIATION_ERROR",
               "fragment": "wrong part", "correction": "fix", "explanation": "en español"}],
   "correctAnswer": "a correct version of the answer, or null for open writing",
   "feedback": "1-2 frases en español, dirigidas al alumno",
-  "suggestions": [{"type": "STYLE_SUGGESTION|NATURALNESS_SUGGESTION|SHORTER_ALTERNATIVE", "text": "en español"}]
+  "suggestions": [{"type": "STYLE_SUGGESTION|NATURALNESS_SUGGESTION|SHORTER_ALTERNATIVE|MECHANICS_NOTE", "text": "en español"}]
 }
 
 Rules:
@@ -95,7 +95,20 @@ Rules:
   grammatically correct and fulfils the task IS correct.
 - Never mark an answer incorrect only because a more natural alternative exists:
   put that in "suggestions", not in "errors".
-- Report one conceptResult per expected concept.
+- Report one conceptResult per expected concept, with "score" 0-100 reflecting HOW MUCH of
+  that concept the student controls: correct 85-100, partially_correct 35-84, incorrect 0-34.
+  One small slip in otherwise good use is partially_correct with a high score (70-84), not incorrect.
+- Grade each concept ONLY on mistakes about that concept. A preposition, vocabulary or
+  verb-pattern mistake (e.g. "at the morning", "like play") does not lower "present_simple_use"
+  if the present simple itself is used correctly.
+- Calibrate to the level. At A1-A2 penalize only what a learner of that level is expected to
+  control (to be, present simple forms, do/does, basic word order, a/an, plurals, basic
+  prepositions, like + -ing/to). Expressions beyond the level (idioms, phrasal verbs, more
+  natural wording) are "suggestions", never "errors".
+- Capitalization and punctuation in open writing ("i" for "I", missing final period) are NOT
+  grammar errors: add at most ONE suggestion of type MECHANICS_NOTE; never list each one.
+- Report each mistake pattern ONCE (if "like play", "like drink" and "like read" share the
+  same mistake, one error listing the fragments).
 - For open writing, evaluate grammar, vocabulary and task completion at the given level.
 - If "response" is SPEAK, "studentAnswer" is a literal transcript of speech: ignore punctuation
   and capitalization. If it differs from a correct answer only by a word that SOUNDS almost the
