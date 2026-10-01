@@ -23,6 +23,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("connection_id", sa.Integer(), nullable=True),
         sa.Column("account_id", sa.Integer(), nullable=False),
+        sa.Column("connection_name", sa.String(length=120), nullable=False),
+        sa.Column("owner_type", sa.String(length=20), nullable=False),
         sa.Column("action", sa.String(length=20), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(
