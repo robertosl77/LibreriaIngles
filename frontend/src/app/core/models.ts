@@ -164,6 +164,8 @@ export interface ClassDetail {
   id: number;
   kind: SessionKind;
   examResult: ExamResult | null;
+  /** Habilidades que esta clase refuerza (T-034) y por qué. */
+  focus: { key: string; name: string; reason: string }[];
   certificateCode: string | null;
   title: string | null;
   status: ClassStatus;

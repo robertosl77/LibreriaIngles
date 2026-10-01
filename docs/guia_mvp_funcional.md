@@ -282,6 +282,25 @@ Un ejercicio genera **varias evidencias**, una por habilidad que toca, cada una 
   si la habilidad es un área del currículum, sus temas y skills. Pronunciation muestra aparte la
   evolución de la práctica (no cambia el puntaje).
 - Se quitó "Por modalidad": lo escuchado y lo hablado ahora son Listening, Speaking y Pronunciation.
+
+## 6.7 Balanceo por habilidad (T-034, etapa 3)
+
+Al armar una clase, el motor mira las habilidades (`weak_abilities` en `classes/generation.py`):
+
+- **Débil**: estado Repasar, o menos de 70 % con al menos 2 evidencias, o ayuda en 2 o más de las
+  últimas evidencias (lección, escuchar varias veces o en lento, practicar mucho) aunque acierte.
+- Se refuerzan como máximo **2** por clase (la más necesitada primero); el resto sigue variado.
+  Speaking/Pronunciation solo si hay una IA con audio.
+- Cómo se refuerza:
+  - Grammar / Vocabulary / Reading / Writing / Listening: sus skills pesan el doble y la clase trae al
+    menos un ejercicio de esa área.
+  - Writing: además, esos ejercicios se escriben (no se pasan a hablados).
+  - Listening: al menos 2 ejercicios escuchados (normal: 1).
+  - Speaking / Pronunciation: al menos 2 respuestas habladas; si faltan tipos que se puedan hablar, se
+    cambia el tipo de un ejercicio cuya skill lo admita.
+- La clase muestra **"Esta clase refuerza: Writing · vas 40 %"** (campo `focus` de la clase).
+- Contenido A1 de escritura de oraciones: About me, Daily life (rutina), Short messages, Descriptions
+  (personas y lugares) y Sentence building (ordenar palabras), cada uno con su lección.
 - **Examen sin ayudas:** sin lección, 2 escuchas por audio (el contador sobrevive a recargar) y sin modo lento.
 
 # 7. Flujo técnico

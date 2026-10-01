@@ -172,6 +172,8 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
             if number != session.current_attempt or session.status == ClassSessionStatus.COMPLETED
         ],
         "examResult": session.exam_result,
+        # Balanceo por habilidad (T-034): qué refuerza esta clase y por qué.
+        "focus": (session.generation_request or {}).get("focus") or [],
         "certificateCode": _certificate_code(db, session),
         "notice": notice,
     }

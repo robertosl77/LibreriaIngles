@@ -984,6 +984,120 @@
         }
       ],
       "tip": "Asociá cada verbo con su ambiente: cook → kitchen, sleep → bedroom, wash → bathroom."
+    },
+    "a1.writing.daily_life.routine": {
+      "title": "Contar tu rutina",
+      "explanation": "Para hablar de lo que hacés siempre o seguido se usa el presente simple, con palabras de frecuencia y horarios.",
+      "rules": [
+        "Frecuencia antes del verbo: I usually / always / sometimes / never + verbo",
+        "Con he/she/it el verbo lleva -s: She gets up at 7.",
+        "Horarios: at 7 o'clock, in the morning, on Saturdays, after work"
+      ],
+      "examples": [
+        {
+          "en": "On Saturdays I usually get up late. I play football with my friends in the afternoon.",
+          "es": "Los sábados en general me levanto tarde. Juego al fútbol con mis amigos a la tarde."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "I go usually to the gym.",
+          "right": "I usually go to the gym.",
+          "why": "La palabra de frecuencia va antes del verbo."
+        },
+        {
+          "wrong": "In Saturdays I relax.",
+          "right": "On Saturdays I relax.",
+          "why": "Con días se usa 'on'."
+        }
+      ],
+      "tip": "Una acción por oración: más fácil de escribir bien."
+    },
+    "a1.writing.messages.short_messages": {
+      "title": "Mensajes cortos",
+      "explanation": "Un mensaje corto tiene saludo, lo que querés decir y un cierre. Oraciones simples y directas.",
+      "rules": [
+        "Saludo: Hi Tom! / Hello Mum,",
+        "Invitar: Do you want to come to the cinema on Saturday?",
+        "Avisar: I'm late. I'm on the bus. I arrive at 8.",
+        "Cierre: See you! / Love, Ana"
+      ],
+      "examples": [
+        {
+          "en": "Hi Tom! Do you want to go to the cinema on Saturday? The film starts at 7. See you!",
+          "es": "¡Hola Tom! ¿Querés ir al cine el sábado? La película empieza a las 7. ¡Nos vemos!"
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "You want come to the cinema?",
+          "right": "Do you want to come to the cinema?",
+          "why": "La pregunta lleva 'do' y 'want' va con 'to'."
+        },
+        {
+          "wrong": "I arrive in 8.",
+          "right": "I arrive at 8.",
+          "why": "Con la hora se usa 'at'."
+        }
+      ],
+      "tip": "Leé el pedido de nuevo antes de terminar: ¿dijiste todo lo que pedía?"
+    },
+    "a1.writing.descriptions.people_places": {
+      "title": "Describir personas y lugares",
+      "explanation": "Para describir usás 'to be' con adjetivos, 'have got' para rasgos y 'there is/are' para lo que hay en un lugar.",
+      "rules": [
+        "El adjetivo va antes del sustantivo: a big house, long hair",
+        "Personas: She is tall. He has got short hair.",
+        "Lugares: There is a small kitchen. There are two bedrooms."
+      ],
+      "examples": [
+        {
+          "en": "My best friend is Lucas. He is tall and he has got short black hair.",
+          "es": "Mi mejor amigo es Lucas. Es alto y tiene el pelo corto y negro."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "She has hair long.",
+          "right": "She has got long hair.",
+          "why": "El adjetivo va antes del sustantivo."
+        },
+        {
+          "wrong": "There is two bedrooms.",
+          "right": "There are two bedrooms.",
+          "why": "Con plural se usa 'there are'."
+        }
+      ],
+      "tip": "Los adjetivos no tienen plural: two big rooms, no 'bigs'."
+    },
+    "a1.writing.sentence_building.word_order": {
+      "title": "Armar oraciones",
+      "explanation": "El orden en inglés es fijo: sujeto + verbo + resto. En las preguntas, el auxiliar (do / does / is / are) va primero.",
+      "rules": [
+        "Afirmación: sujeto + verbo + resto → I work in an office.",
+        "Pregunta con do: Do + sujeto + verbo → Do you like pizza?",
+        "Pregunta con to be: Is / Are + sujeto → Is she from Spain?",
+        "Mayúscula al empezar; punto o signo de pregunta al final (solo al final)"
+      ],
+      "examples": [
+        {
+          "en": "She lives in Madrid. Does she live in Madrid?",
+          "es": "Ella vive en Madrid. ¿Ella vive en Madrid?"
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "I in an office work.",
+          "right": "I work in an office.",
+          "why": "El verbo va pegado al sujeto."
+        },
+        {
+          "wrong": "You like pizza?",
+          "right": "Do you like pizza?",
+          "why": "La pregunta necesita 'do'."
+        }
+      ],
+      "tip": "Primero encontrá el sujeto y el verbo; el resto se acomoda después."
     }
   }
 }

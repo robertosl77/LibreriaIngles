@@ -105,6 +105,17 @@ const RESULT_LABELS: Record<string, string> = {
             </div>
           }
 
+          @if (c.kind === 'CLASS' && c.focus.length) {
+            <section class="focus" aria-label="Qué refuerza esta clase">
+              <p class="focus-title">Esta clase refuerza</p>
+              <ul>
+                @for (f of c.focus; track f.key) {
+                  <li><strong>{{ f.name }}</strong><span class="muted">{{ ' · ' + f.reason }}</span></li>
+                }
+              </ul>
+            </section>
+          }
+
           @if (c.kind === 'EXAM' && editable()) {
             <p class="banner banner-info small">
               <strong>Examen de nivel {{ c.targetLevel }}.</strong> {{ c.exercises.length }} ejercicios de todas las
@@ -474,6 +485,12 @@ const RESULT_LABELS: Record<string, string> = {
     .exam-result.ok .verdict { color: var(--ok); }
     .area-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
     .modality { color: #2f4ab3; font-weight: 600; }
+    .focus {
+      border: 1px solid var(--warn-bg); background: #fffaf0; border-left: 4px solid var(--warn);
+      border-radius: 0.6rem; padding: 0.7rem 0.9rem;
+    }
+    .focus-title { margin: 0 0 0.3rem; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--warn); }
+    .focus ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.2rem; }
     .area-bars li { display: grid; grid-template-columns: minmax(7rem, 14rem) 1fr 3.5rem; align-items: center; gap: 0.8rem; }
     .area-bars strong { text-align: right; }
     .bar { position: relative; height: 0.6rem; border-radius: 999px; background: var(--info-bg); }
