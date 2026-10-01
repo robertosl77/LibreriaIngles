@@ -209,6 +209,7 @@ def access_connection_credential(
     El secreto nunca se escribe en logs ni en la auditoría.
     """
     connection = _get_owner_credential_connection(db, account, connection_id)
+    secret = decrypt_secret(connection.credentials_encrypted)
     db.add(
         AICredentialAuditEvent(
             connection_id=connection.id,
@@ -217,7 +218,7 @@ def access_connection_credential(
         )
     )
     db.commit()
-    return {"apiKey": decrypt_secret(connection.credentials_encrypted)}
+    return {"apiKey": secret}
 
 
 @router.get("/connections/{connection_id}/models")
