@@ -1,0 +1,7 @@
+{
+  "/api": {
+    "target": "http://virwin10119.pro.edenor:8000",
+    "secure": false,
+    "changeOrigin": true
+  }
+}
