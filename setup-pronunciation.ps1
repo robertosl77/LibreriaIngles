@@ -9,7 +9,17 @@ $FfmpegTarget = Join-Path $Root "ffmpeg"
 $EspeakTarget = Join-Path $Root "espeak-ng"
 
 $FfmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-$EspeakUrl = "https://github.com/espeak-ng/espeak-ng/releases/download/1.52.0/espeak-ng.msi"
+$EspeakReleaseBase = "https://github.com/thewh1teagle/espeakng-loader/releases/download/v0.1.0"
+$EspeakDataUrl = "$EspeakReleaseBase/espeak-ng-data.tar.gz"
+
+$architecture = $env:PROCESSOR_ARCHITECTURE
+if ($architecture -eq "ARM64") {
+    $EspeakLibArchive = "espeak-ng-libs-windows-arm64.tar.gz"
+}
+else {
+    $EspeakLibArchive = "espeak-ng-libs-windows-x86_64.tar.gz"
+}
+$EspeakLibUrl = "$EspeakReleaseBase/$EspeakLibArchive"
 
 function Download-File {
     param(
@@ -20,10 +30,26 @@ function Download-File {
     Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing
 }
 
+function Expand-TarGz {
+    param(
+        [Parameter(Mandatory = $true)][string]$Archive,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if (-not $tar) {
+        throw "No se encontro tar.exe en Windows; no se puede extraer eSpeak NG portable."
+    }
+
+    & $tar.Source -xzf $Archive -C $Destination
+    if ($LASTEXITCODE -ne 0) {
+        throw "tar.exe fallo al extraer $Archive (codigo $LASTEXITCODE)."
+    }
+}
+
 $ffmpegReady = Test-Path (Join-Path $FfmpegTarget "bin\ffmpeg.exe")
 $espeakReady =
     (Test-Path (Join-Path $EspeakTarget "libespeak-ng.dll")) -and
-    (Test-Path (Join-Path $EspeakTarget "espeak-ng.exe")) -and
     (Test-Path (Join-Path $EspeakTarget "espeak-ng-data"))
 
 if (-not $Force -and $ffmpegReady -and $espeakReady) {
@@ -56,35 +82,44 @@ try {
     }
 
     if ($Force -or -not $espeakReady) {
-        $espeakMsi = Join-Path $Temp "espeak-ng.msi"
+        $espeakLibs = Join-Path $Temp $EspeakLibArchive
+        $espeakDataArchive = Join-Path $Temp "espeak-ng-data.tar.gz"
         $espeakExtract = Join-Path $Temp "espeak"
         New-Item -ItemType Directory -Path $espeakExtract | Out-Null
-        Download-File -Url $EspeakUrl -OutFile $espeakMsi
 
-        Write-Host "Extrayendo eSpeak NG..."
-        & msiexec.exe /a $espeakMsi /qn "TARGETDIR=$espeakExtract"
-        if ($LASTEXITCODE -ne 0) {
-            throw "msiexec fallo al extraer eSpeak NG (codigo $LASTEXITCODE)."
-        }
+        Download-File -Url $EspeakLibUrl -OutFile $espeakLibs
+        Download-File -Url $EspeakDataUrl -OutFile $espeakDataArchive
 
-        $espeakDll = Get-ChildItem $espeakExtract -Recurse -Filter "libespeak-ng.dll" -File | Select-Object -First 1
+        Write-Host "Extrayendo eSpeak NG portable..."
+        Expand-TarGz -Archive $espeakLibs -Destination $espeakExtract
+        Expand-TarGz -Archive $espeakDataArchive -Destination $espeakExtract
+
+        $espeakDll = Get-ChildItem $espeakExtract -Recurse -File |
+            Where-Object { $_.Name -in @("libespeak-ng.dll", "espeak-ng.dll") } |
+            Select-Object -First 1
         if (-not $espeakDll) {
-            throw "No se encontro libespeak-ng.dll dentro del MSI extraido."
+            throw "No se encontro la DLL de eSpeak NG dentro del paquete portable."
         }
 
-        $sourceEspeak = $espeakDll.Directory.FullName
-        if (-not (Test-Path (Join-Path $sourceEspeak "espeak-ng.exe"))) {
-            throw "No se encontro espeak-ng.exe junto a libespeak-ng.dll."
-        }
-        if (-not (Test-Path (Join-Path $sourceEspeak "espeak-ng-data"))) {
-            throw "No se encontro espeak-ng-data junto a libespeak-ng.dll."
+        $espeakData = Get-ChildItem $espeakExtract -Recurse -Directory -Filter "espeak-ng-data" |
+            Select-Object -First 1
+        if (-not $espeakData) {
+            throw "No se encontro espeak-ng-data dentro del paquete portable."
         }
 
         if (Test-Path $EspeakTarget) {
             Remove-Item $EspeakTarget -Recurse -Force
         }
         New-Item -ItemType Directory -Path $EspeakTarget -Force | Out-Null
-        Copy-Item (Join-Path $sourceEspeak "*") $EspeakTarget -Recurse -Force
+
+        # Copiamos todas las DLL del mismo directorio por si el build trae
+        # dependencias auxiliares. La DLL principal queda con el nombre que
+        # espera app/pronunciation.py.
+        Get-ChildItem $espeakDll.Directory.FullName -Filter "*.dll" -File |
+            Copy-Item -Destination $EspeakTarget -Force
+        Copy-Item $espeakDll.FullName (Join-Path $EspeakTarget "libespeak-ng.dll") -Force
+        Copy-Item $espeakData.FullName (Join-Path $EspeakTarget "espeak-ng-data") -Recurse -Force
+
         Write-Host "eSpeak NG listo en root\espeak-ng."
     }
 
