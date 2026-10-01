@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.accounts.models import Account
 from app.ai.models import utcnow
-from app.ai.service import NoAIAvailable, run_json_task
+from app.ai.service import NoAIAvailable, connection_snapshot, run_json_task
 from app.classes.normalize import fill_blank_variants, normalize_answer
 from app.classes.prompts import EVALUATION_SYSTEM, evaluation_user_prompt
 from app.classes.spoken import normalize_spoken, pronunciation_slips
@@ -230,7 +230,10 @@ def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: 
             "answer": answer,
         },
     )
-    return _sanitize_ai_result(exercise, result.data)
+    sanitized = _sanitize_ai_result(exercise, result.data)
+    # Se guarda con la corrección (y en caché) el motor que realmente produjo
+    # el resultado; no depende de la configuración actual de la cuenta.
+    return {**sanitized, "ai": connection_snapshot(result.connection)}
 
 
 def _cache_get(db: Session, exercise: Exercise, normalized: str) -> dict | None:
