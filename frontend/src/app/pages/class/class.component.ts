@@ -24,6 +24,7 @@ import { ToastService } from '../../core/toast.service';
 import { AudioPlayerComponent } from '../../shared/audio-player.component';
 import { AudioRecorderComponent, RecordedAudio } from '../../shared/audio-recorder.component';
 import { LessonPanelComponent } from '../../shared/lesson-panel.component';
+import { PronunciationPracticeComponent } from '../../shared/pronunciation-practice.component';
 import { STATUS_LABELS, scoreChip, statusChip } from '../../shared/status';
 
 type SaveState = 'saving' | 'saved' | 'error';
@@ -53,6 +54,7 @@ const RESULT_LABELS: Record<string, string> = {
     DatePipe,
     NgTemplateOutlet,
     LessonPanelComponent,
+    PronunciationPracticeComponent,
     AudioPlayerComponent,
     AudioRecorderComponent
   ],
@@ -211,7 +213,7 @@ const RESULT_LABELS: Record<string, string> = {
               }
               <p class="question">{{ exercise.question }}</p>
 
-              @if (exercise.hasLesson) {
+              @if (exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
                 @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
                   <app-lesson-panel
                     [lesson]="lesson"
@@ -232,6 +234,20 @@ const RESULT_LABELS: Record<string, string> = {
                       <svg class="book" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5A2.5 2.5 0 0 1 4 20.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
                     }
                     <span>{{ editable() ? 'Necesito lección' : 'Ver lección del tema' }}</span>
+                  </button>
+                }
+              }
+
+              @if (editable() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
+                @if (openPronunciationPractice() === exercise.id) {
+                  <app-pronunciation-practice (closed)="closePronunciationPractice()" />
+                } @else {
+                  <button class="lesson-btn pronunciation-btn" type="button" (click)="togglePronunciationPractice(exercise.id)">
+                    <svg class="sound" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                      <path d="M4 10v4h4l5 4V6L8 10H4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                      <path d="M16 9.2a4 4 0 0 1 0 5.6M18.5 6.8a7 7 0 0 1 0 10.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                    <span>Practicar fonética</span>
                   </button>
                 }
               }
@@ -379,7 +395,10 @@ const RESULT_LABELS: Record<string, string> = {
     .lesson-btn:hover:not(:disabled) { background: #e6ecff; border-color: #9fb4f5; }
     .lesson-btn:focus-visible { outline: 2px solid #2f4ab3; outline-offset: 2px; }
     .lesson-btn:disabled { opacity: 0.6; cursor: wait; }
-    .lesson-btn .book { flex: none; }
+    .lesson-btn .book, .lesson-btn .sound { flex: none; }
+    .pronunciation-btn { color: #6b3aa5; background: #faf5ff; border-color: #dcc7f2; }
+    .pronunciation-btn:hover:not(:disabled) { background: #f4eaff; border-color: #c9a9e8; }
+    .pronunciation-btn:focus-visible { outline-color: #6b3aa5; }
     .chip-lesson { background: #f3f6ff; color: #2f4ab3; border: 1px solid #c9d6ff; }
     .head-chips { display: flex; gap: 0.4rem; margin-left: auto; flex-wrap: wrap; }
     .your-answer { margin: 0; display: flex; gap: 0.5rem; align-items: baseline; flex-wrap: wrap; }
@@ -435,6 +454,7 @@ export class ClassComponent implements OnDestroy {
   /** Lecciones ya cargadas, por skill: una sola llamada por tema. */
   readonly lessons = signal<Record<string, Lesson>>({});
   readonly openLesson = signal<number | null>(null);
+  readonly openPronunciationPractice = signal<number | null>(null);
   readonly lessonLoading = signal<number | null>(null);
   readonly transcribingId = signal<number | null>(null);
   readonly confirmedSpeaking = signal<Set<number>>(new Set());
@@ -510,6 +530,7 @@ export class ClassComponent implements OnDestroy {
     );
     this.saveState.set({});
     this.openLesson.set(null);
+    this.openPronunciationPractice.set(null);
     if (detail.notice) {
       this.toast.show(detail.notice);
     }
@@ -586,6 +607,15 @@ export class ClassComponent implements OnDestroy {
     this.openLesson.set(null);
   }
 
+  togglePronunciationPractice(exerciseId: number): void {
+    this.openLesson.set(null);
+    this.openPronunciationPractice.update((current) => current === exerciseId ? null : exerciseId);
+  }
+
+  closePronunciationPractice(): void {
+    this.openPronunciationPractice.set(null);
+  }
+
   /** "Necesito lección": se abre dentro del ejercicio; al cerrarla sigue respondiendo ahí. */
   async toggleLesson(exercise: Exercise): Promise<void> {
     const c = this.klass();
@@ -597,6 +627,7 @@ export class ClassComponent implements OnDestroy {
       this.openLesson.set(exercise.id);
       return;
     }
+    this.openPronunciationPractice.set(null);
     this.lessonLoading.set(exercise.id);
     try {
       const response = await firstValueFrom(this.api.lesson(c.id, exercise.id));
