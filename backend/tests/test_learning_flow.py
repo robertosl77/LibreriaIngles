@@ -139,6 +139,17 @@ def test_failover_uses_next_connection(client) -> None:
     klass = client.post(f"{API}/classes", headers=headers).json()
     assert klass["status"] == "READY"
     assert klass["generatedBy"] == "Backup"
+    assert klass["generationAi"] == {
+        "connectionId": klass["generationAi"]["connectionId"],
+        "connection": "Backup",
+        "provider": "MOCK",
+        "providerLabel": "Simulado (solo desarrollo)",
+        "model": "mock",
+    }
+
+    active = client.get(f"{API}/ai/active", headers=headers).json()
+    assert active["default"]["connection"] == "Backup"
+    assert active["default"]["model"] == "mock"
 
     connections = client.get(f"{API}/ai/connections", headers=headers).json()
     broken = next(c for c in connections if c["name"] == "Simulado")
