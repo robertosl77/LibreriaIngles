@@ -1435,7 +1435,7 @@ configuración paralela difícil de mantener.
 ## T-041 — Mostrar proveedor y modelo de IA usados en cada clase
 
 **Prioridad:** P3 — Baja  
-**Estado:** En curso  
+**Estado:** Resuelta (PR #16 a `develop`)  
 **Responsable:** ChatGPT
 
 Objetivo: hacer visible qué conexión de IA y qué modelo se usaron realmente en la clase,
@@ -1466,6 +1466,35 @@ Alcance:
 
 **Criterio:** distinguir claramente `proveedor/agente` (Gemini, OpenAI, etc.), `conexión`
 configurada y `modelo/motor` (por ejemplo `gemini-2.5-flash`).
+
+---
+
+## T-042 — Permitir al PLATFORM_OWNER revelar y copiar API keys administradas
+
+**Prioridad:** P3 — Baja  
+**Estado:** Pendiente
+
+Objetivo: permitir que únicamente el dueño de la plataforma (`PLATFORM_OWNER`) pueda revelar
+y copiar desde la interfaz una API key ya guardada cuando necesite reutilizarla o administrarla.
+
+Alcance y restricciones:
+
+1. **Solo PLATFORM_OWNER:** ningún usuario común, ADMIN de organización ni otra cuenta puede
+   recuperar una credencial ya persistida.
+2. **Solo conexiones que el owner puede administrar:** conexiones PLATFORM y, si corresponde,
+   conexiones ACCOUNT pertenecientes a su propia cuenta. Nunca permitir leer las BYOK de otros usuarios.
+3. **Acción explícita:** la key permanece enmascarada por defecto; botones `Mostrar` / `Copiar`
+   solicitan el secreto al backend únicamente al usarlos.
+4. **No exponerla en listados:** el endpoint normal de conexiones sigue devolviendo únicamente
+   `credentialHint`; la credencial completa debe tener un endpoint específico protegido por rol.
+5. **Auditoría:** registrar quién reveló/copió una credencial, qué conexión y cuándo, sin guardar
+   el valor de la key en logs.
+6. **Frontend:** evitar persistir el secreto en estado más tiempo del necesario; limpiar el valor
+   después de copiar/ocultar y no almacenarlo en localStorage/sessionStorage.
+
+**Criterio de seguridad:** esta capacidad es una excepción deliberada a la regla actual de que
+las API keys cifradas nunca regresan al navegador, y por eso debe quedar limitada al owner y a
+credenciales bajo su propia administración.
 
 ---
 
