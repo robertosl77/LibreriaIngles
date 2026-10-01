@@ -1,7 +1,10 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 
+import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
+import { ActiveAiConnections } from '../../core/models';
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
 
 @Component({
@@ -19,6 +22,24 @@ import { ConnectionsManagerComponent } from '../../shared/connections-manager.co
         </div>
       </div>
 
+      @if (active().default; as current) {
+        <p class="banner banner-info small">
+          En uso ahora: <strong>{{ current.connection }}</strong> ·
+          {{ current.providerLabel }} · motor <strong>{{ current.model }}</strong>
+          @if (active().audio; as audio) {
+            @if (audio.connectionId !== current.connectionId) {
+              <br />
+              Para audio: <strong>{{ audio.connection }}</strong> ·
+              {{ audio.providerLabel }} · motor <strong>{{ audio.model }}</strong>
+            }
+          }
+        </p>
+      } @else {
+        <p class="banner banner-info small">
+          No hay una conexión de IA disponible en este momento.
+        </p>
+      }
+
       @if (isOwner()) {
         <p class="banner banner-info small">
           Las conexiones de la plataforma, sus límites y el consumo se administran en el
@@ -26,11 +47,30 @@ import { ConnectionsManagerComponent } from '../../shared/connections-manager.co
         </p>
       }
 
-      <app-connections-manager scope="account" title="Tus conexiones" />
+      <app-connections-manager
+        scope="account"
+        title="Tus conexiones"
+        (changed)="refreshActive()"
+      />
     </main>
   `
 })
-export class AiSettingsComponent {
+export class AiSettingsComponent implements OnInit {
   private readonly auth = inject(AuthService);
+  private readonly api = inject(ApiService);
+
   readonly isOwner = computed(() => this.auth.me()?.account.isPlatformOwner ?? false);
+  readonly active = signal<ActiveAiConnections>({ default: null, audio: null });
+
+  async ngOnInit(): Promise<void> {
+    await this.refreshActive();
+  }
+
+  async refreshActive(): Promise<void> {
+    try {
+      this.active.set(await firstValueFrom(this.api.activeAiConnections()));
+    } catch {
+      this.active.set({ default: null, audio: null });
+    }
+  }
 }
