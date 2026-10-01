@@ -1,4 +1,4 @@
-"""T-042: acceso excepcional del PLATFORM_OWNER a API keys guardadas."""
+"""T-042: copia excepcional de API keys por PLATFORM_OWNER."""
 
 from sqlalchemy import select
 
@@ -42,7 +42,6 @@ def test_non_owner_cannot_copy_even_own_key(client) -> None:
 
     response = client.post(
         f"{API}/ai/connections/{connection_id}/credential/copy",
-        json={"action": "copy"},
         headers=user,
     )
     assert response.status_code == 403
@@ -60,22 +59,13 @@ def test_owner_can_copy_own_key_and_action_is_audited(client) -> None:
     assert "secret-owner-5678" not in listed.text
     assert listed.json()[0]["credentialHint"].endswith("5678")
 
-    copy = client.post(
+    copied = client.post(
         f"{API}/ai/connections/{connection_id}/credential/copy",
-        json={"action": "copy"},
         headers=owner,
     )
-    assert copy.status_code == 200
-    assert copy.headers["cache-control"] == "no-store"
-    assert copy.json() == {"apiKey": "secret-owner-5678"}
-
-    copy = client.post(
-        f"{API}/ai/connections/{connection_id}/credential/copy",
-        json={"action": "copy"},
-        headers=owner,
-    )
-    assert copy.status_code == 200
-    assert copy.json() == {"apiKey": "secret-owner-5678"}
+    assert copied.status_code == 200
+    assert copied.headers["cache-control"] == "no-store"
+    assert copied.json() == {"apiKey": "secret-owner-5678"}
 
     with SessionLocal() as db:
         rows = list(
@@ -91,7 +81,7 @@ def test_owner_can_copy_own_key_and_action_is_audited(client) -> None:
         assert all(row.owner_type == "ACCOUNT" for row in rows)
 
 
-def test_owner_can_retrieve_platform_key(client) -> None:
+def test_owner_can_copy_platform_key(client) -> None:
     owner = login(client, "owner@example.com")
     connection_id = _create_keyed_connection(
         client,
@@ -103,14 +93,13 @@ def test_owner_can_retrieve_platform_key(client) -> None:
 
     response = client.post(
         f"{API}/ai/connections/{connection_id}/credential/copy",
-        json={"action": "copy"},
         headers=owner,
     )
     assert response.status_code == 200
     assert response.json()["apiKey"] == "platform-secret-9012"
 
 
-def test_owner_cannot_retrieve_another_accounts_byok(client) -> None:
+def test_owner_cannot_copy_another_accounts_byok(client) -> None:
     other = login(client, "other@example.com")
     connection_id = _create_keyed_connection(
         client, other, name="Otra cuenta", key="other-secret-3456"
@@ -119,14 +108,13 @@ def test_owner_cannot_retrieve_another_accounts_byok(client) -> None:
 
     response = client.post(
         f"{API}/ai/connections/{connection_id}/credential/copy",
-        json={"action": "copy"},
         headers=owner,
     )
     assert response.status_code == 404
     assert "other-secret-3456" not in response.text
 
 
-def test_connection_without_key_cannot_be_copyed(client) -> None:
+def test_connection_without_key_cannot_be_copied(client) -> None:
     owner = login(client, "owner@example.com")
     response = client.post(
         f"{API}/ai/connections",
@@ -135,9 +123,8 @@ def test_connection_without_key_cannot_be_copyed(client) -> None:
     )
     assert response.status_code == 201
 
-    copy = client.post(
+    copied = client.post(
         f"{API}/ai/connections/{response.json()['id']}/credential/copy",
-        json={"action": "copy"},
         headers=owner,
     )
-    assert copy.status_code == 409
+    assert copied.status_code == 409
