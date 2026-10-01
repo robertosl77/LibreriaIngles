@@ -13,6 +13,7 @@ import {
   ConnectionScope,
   Dashboard,
   ExamStatus,
+  Exercise,
   LessonResponse,
   Me,
   ModelOption,
@@ -182,6 +183,18 @@ export class ApiService {
   /** Público: verificación del certificado por código. */
   certificate(code: string): Observable<Certificate> {
     return this.http.get<Certificate>(`${this.base}/certificates/${encodeURIComponent(code)}`);
+  }
+
+  /** Señal de la respuesta en curso (T-034): una escucha o un intento de práctica. */
+  recordSignal(
+    classId: number,
+    exerciseId: number,
+    signal: { kind: 'listen'; slow: boolean } | { kind: 'practice'; score: number }
+  ): Observable<{ exerciseId: number; signals: Exercise['signals'] }> {
+    return this.http.post<{ exerciseId: number; signals: Exercise['signals'] }>(
+      `${this.base}/classes/${classId}/exercises/${exerciseId}/signals`,
+      signal
+    );
   }
 
   /** "Necesito lección" (T-020): devuelve la lección y registra la ayuda si la clase está abierta. */

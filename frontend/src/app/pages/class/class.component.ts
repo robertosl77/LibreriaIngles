@@ -105,6 +105,17 @@ const RESULT_LABELS: Record<string, string> = {
             </div>
           }
 
+          @if (c.kind === 'CLASS' && c.focus.length) {
+            <section class="focus" aria-label="Qué refuerza esta clase">
+              <p class="focus-title">Esta clase refuerza</p>
+              <ul>
+                @for (f of c.focus; track f.key) {
+                  <li [class.topic]="f.kind === 'topic'"><strong>{{ f.name }}</strong><span class="muted">{{ ' · ' + f.reason }}</span></li>
+                }
+              </ul>
+            </section>
+          }
+
           @if (c.kind === 'EXAM' && editable()) {
             <p class="banner banner-info small">
               <strong>Examen de nivel {{ c.targetLevel }}.</strong> {{ c.exercises.length }} ejercicios de todas las
@@ -210,7 +221,10 @@ const RESULT_LABELS: Record<string, string> = {
                   [lang]="stimulus.lang"
                   [rate]="stimulus.rate"
                   [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
+                  [allowSlow]="c.kind !== 'EXAM'"
+                  [initialPlays]="exercise.signals.listenPlays ?? 0"
                   [disabled]="formLocked()"
+                  (played)="recordListen(exercise, $event.slow)"
                 />
               }
               <p class="question">{{ exercise.question }}</p>
@@ -242,7 +256,10 @@ const RESULT_LABELS: Record<string, string> = {
 
               @if (editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
                 @if (openPronunciationPractice() === exercise.id) {
-                  <app-pronunciation-practice (closed)="closePronunciationPractice()" />
+                  <app-pronunciation-practice
+                    (closed)="closePronunciationPractice()"
+                    (practiced)="recordPractice(exercise, $event.score)"
+                  />
                 } @else {
                   <button class="lesson-btn pronunciation-btn" type="button" (click)="togglePronunciationPractice(exercise.id)">
                     <svg class="sound" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -329,6 +346,9 @@ const RESULT_LABELS: Record<string, string> = {
                         </div>
                       }
                     </div>
+                  }
+                  @if (effortSummary(exercise); as effort) {
+                    <p class="small muted effort">{{ effort }}</p>
                   }
                   @if (exercise.presentation === 'LISTEN' && exercise.stimulus) {
                     <p class="small transcript"><span class="muted">El audio decía: </span><em lang="en">“{{ exercise.stimulus.text }}”</em></p>
@@ -465,6 +485,13 @@ const RESULT_LABELS: Record<string, string> = {
     .exam-result.ok .verdict { color: var(--ok); }
     .area-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
     .modality { color: #2f4ab3; font-weight: 600; }
+    .focus {
+      border: 1px solid var(--warn-bg); background: #fffaf0; border-left: 4px solid var(--warn);
+      border-radius: 0.6rem; padding: 0.7rem 0.9rem;
+    }
+    .focus-title { margin: 0 0 0.3rem; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--warn); }
+    .focus ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.2rem; }
+    .focus li.topic strong { font-weight: 600; }
     .area-bars li { display: grid; grid-template-columns: minmax(7rem, 14rem) 1fr 3.5rem; align-items: center; gap: 0.8rem; }
     .area-bars strong { text-align: right; }
     .bar { position: relative; height: 0.6rem; border-radius: 999px; background: var(--info-bg); }
@@ -761,6 +788,53 @@ export class ClassComponent implements OnDestroy {
     } finally {
       this.lessonLoading.set(null);
     }
+  }
+
+  /** Evidencia de Listening (T-034): cada escucha, y si fue en modo lento. */
+  recordListen(exercise: Exercise, slow: boolean): void {
+    const c = this.klass();
+    if (!c || !this.editable()) return;
+    this.api.recordSignal(c.id, exercise.id, { kind: 'listen', slow }).subscribe({
+      next: (response) => this.updateSignals(exercise.id, response.signals),
+      error: () => undefined
+    });
+  }
+
+  /** Evidencia de Pronunciation (T-034): cada intento de práctica. */
+  recordPractice(exercise: Exercise, score: number): void {
+    const c = this.klass();
+    if (!c || !this.editable()) return;
+    this.api.recordSignal(c.id, exercise.id, { kind: 'practice', score }).subscribe({
+      next: (response) => this.updateSignals(exercise.id, response.signals),
+      error: () => undefined
+    });
+  }
+
+  private updateSignals(exerciseId: number, signals: Exercise['signals']): void {
+    this.klass.update((detail) =>
+      detail
+        ? { ...detail, exercises: detail.exercises.map((e) => (e.id === exerciseId ? { ...e, signals } : e)) }
+        : detail
+    );
+  }
+
+  /** Resumen del esfuerzo, visible en la corrección. */
+  effortSummary(exercise: Exercise): string | null {
+    const s = exercise.signals ?? {};
+    const parts: string[] = [];
+    if (exercise.presentation === 'LISTEN' && s.listenPlays) {
+      const slow = s.listenSlowPlays ? ` (${s.listenSlowPlays} en lento)` : '';
+      parts.push(`Escuchaste el audio ${s.listenPlays} ${s.listenPlays === 1 ? 'vez' : 'veces'}${slow}`);
+    }
+    const trials = s.practiceScores ?? [];
+    if (trials.length) {
+      parts.push(
+        `practicaste la pronunciación ${trials.length} ${trials.length === 1 ? 'vez' : 'veces'} (${trials[0]}% → ${trials[trials.length - 1]}%)`
+      );
+    }
+    if (!parts.length) return null;
+    const text = parts.join(' · ');
+    return text.charAt(0).toUpperCase() + text.slice(1) + '.';
   }
 
   markPendingSpeaking(exerciseId: number, pending: boolean): void {

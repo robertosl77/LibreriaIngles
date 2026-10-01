@@ -244,6 +244,69 @@ Migración: `0007_modalities`.
   opciones sin repetir, sin "odd one out") y que todo tema tenga lección.
 - Efecto en el examen: la habilitación pide practicar el 70 % de 37 temas (26).
 
+## 6.5 Evidencias por habilidad (T-034, etapa 1)
+
+Un ejercicio genera **varias evidencias**, una por habilidad que toca, cada una medida a su manera
+(`backend/app/progress/evidence.py`):
+
+| Situación | Habilidad | Cómo se mide |
+|---|---|---|
+| Foco del ejercicio (su área) | Grammar / Vocabulary / Reading / Writing / Listening | resultado |
+| Presentado escuchando | Listening | resultado × esfuerzo: −15 % por escucha extra, −20 % si usó lento, piso 40 % |
+| Respondido hablando | Speaking | resultado del contenido |
+| Respondido hablando | Pronunciation | estimación final; una palabra dicha como otra parecida (think/sink) la limita a 50 % |
+| Ejercicio del área Writing (armar/componer oraciones) | Writing | resultado (reescribir una oración dada en gramática **no** cuenta: es Grammar) |
+| Usó "Necesito lección" | todas sus evidencias | pesan la mitad y quedan marcadas como asistidas |
+| Escuchó más de 2 veces o en lento | Listening | además del descuento, queda marcada como asistida |
+| Practicó la pronunciación más de 2 veces | Pronunciation | pesa la mitad y queda asistida; el puntaje no baja |
+
+- Lo escuchado no cuenta como Reading; lo hablado no cuenta como Writing.
+- **Señales** (`signals` en borrador e intento, migración `0010_answer_signals`): escuchas, escuchas en
+  lento y prácticas de pronunciación, registradas con `POST /classes/{id}/exercises/{eid}/signals`
+  mientras la clase está abierta. Se muestran en la corrección ("Escuchaste el audio 3 veces (1 en lento)").
+- **Ayuda = señal de debilidad:** con ayuda en las últimas 5 evidencias, una skill o habilidad no
+  puede quedar como dominada aunque el puntaje dé (`assistedRecent`, lo usará el balanceo de la etapa 3).
+- **Respuestas habladas** (`app/classes/spoken.py`): se compara la transcripción sin puntuación ni
+  mayúsculas. Si coincide con la respuesta salvo palabras que suenan parecido (think/sink, three/tree,
+  very/berry, ship/sheep…), el contenido es correcto y se marca `PRONUNCIATION_ERROR`, sin IA. Una
+  transcripción que no coincide va a la IA aunque el ejercicio sea determinístico (si no hay IA, incorrecta).
+  Los casos más difusos los resuelve la IA con la misma regla.
+- `/progress` devuelve `abilities` (puntaje, evidencias, ayudas, ayuda reciente, tendencia, estado y, en
+  Pronunciation, prácticas con su primer y último puntaje). Ya no devuelve `modalities`.
+
+## 6.6 Dashboard por habilidad (T-034, etapa 2)
+
+- Una tarjeta por habilidad (Grammar, Vocabulary, Listening, Speaking, Pronunciation, Reading, Writing)
+  con puntaje, estado, barra, evidencias, tendencia y la marca "N reciente(s) con ayuda".
+- Desplegable nativo (`<details>`): qué suma a esa habilidad, cuántas evidencias fueron con ayuda,
+  en Listening/Speaking/Pronunciation **de qué temas vino la evidencia** (`sources`) y, si la
+  habilidad es un área del currículum, sus temas y skills.
+- Color de la barra por tramo: 0-25 rojo, 25-50 naranja, 50-75 azul, 75-100 verde. Pronunciation muestra aparte la
+  evolución de la práctica (no cambia el puntaje).
+- Se quitó "Por modalidad": lo escuchado y lo hablado ahora son Listening, Speaking y Pronunciation.
+
+## 6.7 Balanceo por habilidad (T-034, etapa 3)
+
+Al armar una clase, el motor mira las habilidades (`weak_abilities` en `classes/generation.py`):
+
+- **Débil**: estado Repasar, o menos de 70 % con al menos 2 evidencias, o ayuda en 2 o más de las
+  últimas evidencias (lección, escuchar varias veces o en lento, practicar mucho) aunque acierte.
+- Se refuerzan como máximo **2** por clase (la más necesitada primero); el resto sigue variado.
+  Speaking/Pronunciation solo si hay una IA con audio.
+- Cómo se refuerza:
+  - Grammar / Vocabulary / Reading / Writing / Listening: sus skills pesan el doble y la clase trae al
+    menos un ejercicio de esa área.
+  - Writing: además, esos ejercicios se escriben (no se pasan a hablados).
+  - Listening: al menos 2 ejercicios escuchados (normal: 1).
+  - Speaking / Pronunciation: al menos 2 respuestas habladas; si faltan tipos que se puedan hablar, se
+    cambia el tipo de un ejercicio cuya skill lo admita.
+- La clase muestra **"Esta clase refuerza"** (campo `focus`): hasta 2 habilidades (`kind: ability`)
+  y hasta 2 temas flojos que entraron en la clase (`kind: topic`, ej. "Present Continuous ·
+  Preguntas · vas 0 % y usaste la lección hace poco").
+- Contenido A1 de escritura de oraciones: About me, Daily life (rutina), Short messages, Descriptions
+  (personas y lugares) y Sentence building (ordenar palabras), cada uno con su lección.
+- **Examen sin ayudas:** sin lección, 2 escuchas por audio (el contador sobrevive a recargar) y sin modo lento.
+
 # 7. Flujo técnico
 
 ```text

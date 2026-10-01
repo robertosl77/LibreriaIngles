@@ -1261,6 +1261,156 @@
               ]
             }
           ]
+        },
+        {
+          "key": "daily_life",
+          "name": "Daily life",
+          "skills": [
+            {
+              "key": "routine",
+              "name": "Contar tu rutina",
+              "objectives": ["escribir 2-3 oraciones sobre hábitos", "usar presente simple con expresiones de frecuencia y hora"],
+              "exerciseTypes": ["short_writing"],
+              "examples": [
+                {
+                  "type": "short_writing",
+                  "instruction": "Write 2 or 3 sentences.",
+                  "question": "What do you usually do on Saturdays?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["present_simple_use", "frequency_adverbs", "task_completion"]
+                },
+                {
+                  "type": "short_writing",
+                  "instruction": "Write 2 or 3 sentences.",
+                  "question": "What do you do after work or school?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["present_simple_use", "time_expressions", "task_completion"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "messages",
+          "name": "Short messages",
+          "skills": [
+            {
+              "key": "short_messages",
+              "name": "Mensajes cortos",
+              "objectives": ["escribir un mensaje breve a un amigo o familiar", "invitar, avisar o pedir algo con oraciones simples"],
+              "exerciseTypes": ["short_writing"],
+              "examples": [
+                {
+                  "type": "short_writing",
+                  "instruction": "Write 2 or 3 sentences.",
+                  "question": "Write a message to a friend. Invite them to the cinema on Saturday.",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["invitation", "time_expressions", "task_completion"]
+                },
+                {
+                  "type": "short_writing",
+                  "instruction": "Write 2 or 3 sentences.",
+                  "question": "Write a note to your family. You are late for dinner: say why and when you arrive.",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["present_continuous_use", "time_expressions", "task_completion"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "descriptions",
+          "name": "Descriptions",
+          "skills": [
+            {
+              "key": "people_places",
+              "name": "Describir personas y lugares",
+              "objectives": ["describir a una persona o un lugar con 2-3 oraciones", "usar to be, have got y there is/are con adjetivos"],
+              "exerciseTypes": ["short_writing"],
+              "examples": [
+                {
+                  "type": "short_writing",
+                  "instruction": "Write 2 or 3 sentences.",
+                  "question": "Describe your best friend: what does he or she look like?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["be_use", "have_got_use", "adjective_order", "task_completion"]
+                },
+                {
+                  "type": "short_writing",
+                  "instruction": "Write 2 or 3 sentences.",
+                  "question": "Describe your house or flat: how many rooms are there?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["there_is_are", "adjective_order", "task_completion"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "sentence_building",
+          "name": "Sentence building",
+          "skills": [
+            {
+              "key": "word_order",
+              "name": "Armar oraciones",
+              "objectives": ["ordenar palabras para formar una oración correcta", "escribir oraciones y preguntas completas con mayúscula y punto"],
+              "exerciseTypes": ["rewrite"],
+              "examples": [
+                {
+                  "type": "rewrite",
+                  "instruction": "Put the words in order to make a sentence.",
+                  "question": "work / I / in / an office",
+                  "acceptedAnswers": ["I work in an office."],
+                  "commonErrors": [
+                    {
+                      "answer": "I in an office work.",
+                      "feedback": "En inglés el verbo va después del sujeto: sujeto + verbo + resto.",
+                      "conceptResults": [
+                        {
+                          "concept": "word_order",
+                          "status": "incorrect"
+                        }
+                      ]
+                    }
+                  ],
+                  "expectedConcepts": ["word_order"]
+                },
+                {
+                  "type": "rewrite",
+                  "instruction": "Put the words in order to make a question.",
+                  "question": "you / do / like / pizza",
+                  "acceptedAnswers": ["Do you like pizza?"],
+                  "commonErrors": [
+                    {
+                      "answer": "You like pizza?",
+                      "feedback": "Las preguntas en presente simple llevan 'do' al principio.",
+                      "conceptResults": [
+                        {
+                          "concept": "question_word_order",
+                          "status": "incorrect"
+                        }
+                      ]
+                    }
+                  ],
+                  "expectedConcepts": ["question_word_order"]
+                },
+                {
+                  "type": "rewrite",
+                  "instruction": "Put the words in order to make a sentence.",
+                  "question": "is / from / she / Spain",
+                  "acceptedAnswers": ["She is from Spain.", "She's from Spain."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["word_order", "be_use"]
+                }
+              ]
+            }
+          ]
         }
       ]
     }
