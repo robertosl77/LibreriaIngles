@@ -304,9 +304,23 @@ export interface ExamCheck {
   detail: string;
 }
 
+export interface ExamProgress {
+  practiced: number;
+  total: number;
+  coveragePercent: number;
+  previewCoveragePercent: number;
+  requiredCoveragePercent: number;
+  previewNeeded: number;
+  requiredNeeded: number;
+  averageScore: number | null;
+  requiredAverageScore: number;
+}
+
 export interface ExamStatus {
   level: string | null;
   available: boolean;
+  showProposal?: boolean;
+  progress?: ExamProgress;
   eligible?: boolean;
   checks?: ExamCheck[];
   passed?: boolean;
