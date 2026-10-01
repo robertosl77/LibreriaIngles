@@ -4,6 +4,7 @@ persistir intento → normalizar →
   acceptedAnswers coincide  → RULE_MATCH
   hablada, suena parecido   → correcto + PRONUNCIATION_ERROR (RULE_MATCH)
   commonErrors coincide     → COMMON_ERROR_MATCH
+  escrita, tipeo menor      → parcial + SPELLING_ERROR (RULE_MATCH, T-021)
   modo DETERMINISTIC        → incorrecto por regla (RULE_MATCH); hablada → IA
   caché de IA               → AI
   evaluación con IA         → AI  (si no hay IA: queda pendiente)
@@ -23,6 +24,7 @@ from app.ai.models import utcnow
 from app.ai.service import NoAIAvailable, run_json_task
 from app.classes.normalize import fill_blank_variants, normalize_answer
 from app.classes.prompts import EVALUATION_SYSTEM, evaluation_user_prompt
+from app.classes.spelling import SPELLING_SCORE, spelling_slips
 from app.classes.spoken import normalize_spoken, pronunciation_slips
 from app.curriculum.service import find_skill
 from app.learning.models import (
@@ -33,6 +35,7 @@ from app.learning.models import (
     Exercise,
 )
 
+CHOICE_TYPES = {"multiple_choice", "reading_multiple_choice"}
 STATUS_SCORE = {"correct": 100.0, "partially_correct": 50.0, "incorrect": 0.0}
 ERROR_TYPES = {"GRAMMAR_ERROR", "VOCABULARY_ERROR", "SPELLING_ERROR", "WORD_ORDER_ERROR", "PRONUNCIATION_ERROR"}
 SUGGESTION_TYPES = {"STYLE_SUGGESTION", "NATURALNESS_SUGGESTION", "SHORTER_ALTERNATIVE"}
@@ -52,6 +55,18 @@ def score_from_result(result: dict) -> float:
     if concepts:
         return round(sum(STATUS_SCORE[c["status"]] for c in concepts) / len(concepts), 1)
     return STATUS_SCORE.get(result.get("result"), 0.0)
+
+
+def ai_score(exercise: Exercise, result: dict) -> float:
+    """Puntaje de una corrección de la IA. En ejercicios con respuesta cerrada, si el único
+    problema es ortografía, vale lo mismo que por regla (T-021): parcial, no 100 ni 0."""
+    score = score_from_result(result)
+    errors = result.get("errors") or []
+    closed = bool(exercise.answer_key.get("acceptedAnswers"))
+    if closed and errors and all(e.get("type") == "SPELLING_ERROR" for e in errors):
+        score = min(score, SPELLING_SCORE)
+        result["result"] = _result_label(score)
+    return score
 
 
 def _result_label(score: float) -> str:
@@ -122,6 +137,24 @@ def _rule_incorrect(exercise: Exercise, answer: str) -> dict:
     }
 
 
+def _spelling_result(exercise: Exercise, slips: list[tuple[str, str]]) -> dict:
+    """Concepto correcto escrito con un error de tipeo menor (taxy → taxi): parcial, nunca 0 %."""
+    result = _rule_correct(exercise)
+    result["result"] = _result_label(SPELLING_SCORE)
+    result["errors"] = [
+        {
+            "type": "SPELLING_ERROR",
+            "fragment": typed,
+            "correction": expected,
+            "explanation": "Ortografía.",
+        }
+        for typed, expected in slips
+    ]
+    words = ", ".join(f"\"{expected}\"" for _, expected in slips)
+    result["feedback"] = f"La respuesta es correcta, pero revisá la ortografía: {words}."
+    return result
+
+
 def _common_error_result(exercise: Exercise, error: dict) -> dict:
     listed = {
         c.get("concept"): c.get("status")
@@ -138,7 +171,7 @@ def _common_error_result(exercise: Exercise, error: dict) -> dict:
         for c, s in listed.items()
         if c not in (exercise.expected_concepts or [])
     ]
-    return {
+    result = {
         "result": "incorrect",
         "conceptResults": concepts,
         "errors": [
@@ -153,6 +186,9 @@ def _common_error_result(exercise: Exercise, error: dict) -> dict:
         "feedback": error.get("feedback") or "Revisá la respuesta.",
         "suggestions": [],
     }
+    # La etiqueta sigue al puntaje: un error común con conceptos parciales es "Parcial".
+    result["result"] = _result_label(score_from_result(result))
+    return result
 
 
 def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
@@ -286,13 +322,19 @@ def evaluate(
                 return Evaluation(
                     EvaluationSource.COMMON_ERROR_MATCH, result, score_from_result(result)
                 )
+        if not spoken and exercise.exercise_type not in CHOICE_TYPES:
+            slips = spelling_slips(_accepted(exercise), answer)
+            if slips:
+                return Evaluation(
+                    EvaluationSource.RULE_MATCH, _spelling_result(exercise, slips), SPELLING_SCORE
+                )
         # Una transcripción puede diferir por cosas del habla: decide la IA si la hay.
         if exercise.evaluation_mode == EvaluationMode.DETERMINISTIC and not spoken:
             return Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0)
 
     cached = _cache_get(db, exercise, normalized)
     if cached is not None:
-        return Evaluation(EvaluationSource.AI, cached, score_from_result(cached))
+        return Evaluation(EvaluationSource.AI, cached, ai_score(exercise, cached))
 
     try:
         result = evaluate_with_ai(db, account, exercise, answer)
@@ -301,7 +343,7 @@ def evaluate(
             return Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0)
         return None
     _cache_put(db, exercise, normalized, result)
-    return Evaluation(EvaluationSource.AI, result, score_from_result(result))
+    return Evaluation(EvaluationSource.AI, result, ai_score(exercise, result))
 
 
 def apply_evaluation(attempt: Attempt, evaluation: Evaluation) -> None:

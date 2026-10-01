@@ -606,8 +606,8 @@ Problemas:
 
 1. Lo importante (qué está mal) queda escondido; el orden no ayuda a ver la diferencia.
 2. La explicación se repite en feedback, respuesta correcta y línea de error.
-3. **Bug:** cuando la respuesta coincide con un *commonError*, la etiqueta queda siempre en
-   "Incorrecto" aunque el puntaje sea parcial (50 %). Debería decir "Parcial".
+3. ~~**Bug:** cuando la respuesta coincide con un *commonError*, la etiqueta queda siempre en
+   "Incorrecto" aunque el puntaje sea parcial (50 %). Debería decir "Parcial".~~ Resuelto en T-021.
 
 Propuesta de presentación:
 
@@ -673,7 +673,23 @@ T-017 (claridad de ejercicios).
 ## T-021 — Tolerancia a errores de ortografía menores
 
 **Prioridad:** P3 — Baja  
-**Estado:** Pendiente
+**Estado:** En curso · rama `feat/t-021-ortografia` (Claude)
+
+Resolución (detalle en `guia_mvp_funcional.md` §7):
+
+1. Comparación previa **sin IA** (`app/classes/spelling.py`): distancia de edición con
+   transposición; 1 cambio (2 en palabras de 8+ letras), hasta 2 palabras por respuesta.
+2. Ortografía menor = concepto correcto + `SPELLING_ERROR` → **Parcial 80 %**, nunca 0 %;
+   feedback coherente ("La respuesta es correcta, pero revisá la ortografía: …").
+3. No se perdonan errores reales: palabras de menos de 4 letras (in/on), terminaciones que son
+   gramática (-s/-es/-ies, -ed, -ing) ni otra palabra conocida ("sleep" por "sheep"). El
+   diccionario sale del currículo y las lecciones (sin las formas "wrong" de los ejemplos).
+4. Corrector IA: regla en el prompt (tipeo menor ≠ error de concepto; feedback coherente con el
+   resultado). En ejercicios cerrados, "solo ortografía" vale 80 % también por IA y en apelación
+   (la palabra mal escrita nunca entra como respuesta aceptada).
+5. Bug de T-019 resuelto acá: con un *commonError* parcial la etiqueta decía "Incorrecto"; ahora
+   sigue al puntaje ("Parcial").
+6. Pendiente: reforzar la ortografía si se repite (registrar como aspecto en el progreso).
 
 Caso detectado en prueba real (A1, *Completar · Daily life · Trabajos*):
 
@@ -861,7 +877,8 @@ T-035 Migración a Bootstrap con tema configurable por empresa
 T-036 Reglas de examen y aprendizaje configurables (owner / ADMIN)
 T-037 Bloquear el formulario al enviar la clase (bug, Claude)
 T-038 Publicación: servidor para backend con fonética + frontend (servidor pendiente)
-T-039 Motor de pronunciación preciso OpenPronounce (futuro, rama archivo/t-027-openpronounce)
+T-039 Motor de pronunciación preciso OpenPronounce (futuro, rama archivo/t-027-openpronounce: NO BORRAR)
+T-042 Calibrar la corrección de escritura libre según el nivel (Claude)
 ```
 
 Referencias: documento funcional v0.3 §4.1, §5, §8, §15, §16, §17, §17.1, §39, §41 (Audio), §42 (Audio).
@@ -1380,7 +1397,9 @@ fonética en un servicio aparte. Windows/local: OpenPronounce requiere espeak-ng
 ## T-039 — Motor de pronunciación preciso (OpenPronounce)
 
 **Prioridad:** P3 — Baja (futuro; requiere servidor con más recursos, ver T-038)  
-**Estado:** Pendiente · código guardado en la rama de archivo `archivo/t-027-openpronounce` (no borrar)
+**Estado:** Pendiente · código guardado en la rama de archivo `archivo/t-027-openpronounce`.
+**No borrar esa rama hasta implementar esta tarea** (decisión de Roberto, 2026-10-01): en las
+limpiezas de ramas quedan `main`, `develop` y esta.
 
 Decisión (2026-10-01): por defecto la pronunciación la estima la **IA en la misma llamada que
 transcribe** (rápida, sin instalaciones, publicable en Render gratis). OpenPronounce funcionó
@@ -1465,6 +1484,25 @@ Alcance:
 
 **Criterio:** distinguir claramente `proveedor/agente` (Gemini, OpenAI, etc.), `conexión`
 configurada y `modelo/motor` (por ejemplo `gemini-2.5-flash`).
+
+---
+
+## T-042 — Calibrar la corrección de escritura libre según el nivel
+
+**Prioridad:** P1 — Alta  
+**Estado:** Pendiente  
+**Responsable:** Claude  
+**Relación:** T-021 (ortografía), T-019 (presentación), T-034 (puntaje de Writing)
+
+Origen (Roberto, 2026-10-01): "siempre que tengo que escribir una sentencia la IA me machaca".
+Si la IA corrige las oraciones escritas con más exigencia que la del nivel, el puntaje de
+Writing miente para abajo y desmotiva justo donde más hay que practicar.
+
+1. **Diagnóstico con datos reales:** exportar los intentos de *short_writing* de Roberto y
+   revisarlos uno por uno: ¿errores reales de A1, o estilo/naturalidad contados como error?
+2. **Informe** con los casos injustos antes de cambiar nada.
+3. **Ajuste** (con OK): prompt del evaluador calibrado por nivel (qué es error en A1 y qué es
+   sugerencia), estilo/naturalidad nunca descuentan, ortografía según T-021; tests con esos casos.
 
 ---
 

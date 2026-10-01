@@ -324,6 +324,7 @@ POST /classes/{id}/submit
   └─ 2) evalúa cada intento:
         acceptedAnswers → RULE_MATCH
         commonErrors    → COMMON_ERROR_MATCH
+        tipeo menor     → parcial 80 % + SPELLING_ERROR (T-021, sin IA)
         opción múltiple → incorrecto por regla
         caché IA        → AI
         IA              → AI   (sin IA: queda pendiente)
@@ -332,6 +333,15 @@ POST /classes/{id}/submit
 
 El score lo calcula el backend a partir de los conceptos (correct = 100, partial = 50,
 incorrect = 0); las sugerencias de estilo no descuentan.
+
+**Ortografía menor (T-021, `app/classes/spelling.py`):** si una respuesta escrita coincide con
+una aceptada salvo 1-2 palabras con un tipeo mínimo ("taxy driver", "Wendesday", "freind"), el
+concepto cuenta como correcto, se marca `SPELLING_ERROR` y vale **80 %** ("Parcial", nunca 0 %).
+No se perdona si la palabra tiene menos de 4 letras (in/on, do/is), si el error está en una
+terminación que se enseña como gramática (-s/-es/-ies, -ed, -ing: "watchs"), ni si lo escrito
+es otra palabra que la app conoce ("sleep" por "sheep"). No aplica a respuestas habladas ni de
+opción múltiple. Si la IA corrige y el único problema es ortografía, en ejercicios cerrados
+también vale 80 % (y una apelación así nunca agrega la palabra mal escrita como aceptada).
 
 ---
 

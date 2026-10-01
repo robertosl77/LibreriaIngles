@@ -105,6 +105,12 @@ Rules:
 - If exercise.response is SPEAK, the answer is a literal speech-to-text transcript. Do not
   penalize missing punctuation or capitalization that cannot be heard; evaluate the spoken
   words, grammar, vocabulary and task completion.
+- Minor spelling (1-2 letters wrong in a recognizable word, e.g. "taxy" for "taxi", "freind"
+  for "friend") is NOT a concept error when the intended word is clear and is the right one:
+  keep the concept as correct and add one error of type SPELLING_ERROR with the fix. If the
+  student wrote a different real word ("on" for "in", "sleep" for "sheep"), that is a real
+  error, not spelling. Keep "feedback" consistent with the result: never call an answer
+  "almost correct" while marking its concepts incorrect.
 """
 
 
