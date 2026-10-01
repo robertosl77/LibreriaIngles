@@ -16,7 +16,8 @@ a su manera (no se copia el mismo puntaje):
 - Asistencia continua: escuchar muchas veces o en lento marca Listening como
   asistido (además de bajar su puntaje); practicar la pronunciación más de
   PRACTICE_FREE_TRIALS veces marca Pronunciation como asistida y pesa menos
-  (practicar no castiga el puntaje).
+  (practicar no castiga el puntaje). Regrabar la respuesta hablada más de una vez marca
+  Speaking como asistido, sin bajar la nota (T-046 v2).
 
 Los parámetros están juntos para poder configurarlos más adelante (T-036).
 """
@@ -50,6 +51,7 @@ LISTEN_FLOOR = 0.40  # Listening: aunque costó, entendió
 PRONUNCIATION_SLIP_CAP = 50  # palabra dicha como otra parecida (think → sink)
 LISTEN_FREE_PLAYS = 2  # más escuchas que esto (o usar lento) = asistencia continua
 PRACTICE_FREE_TRIALS = 2  # más prácticas que esto = asistencia continua
+SPEAK_FREE_RETAKES = 1  # regrabar más que esto = asistencia continua (T-046 v2)
 
 
 @dataclass(frozen=True)
@@ -107,7 +109,11 @@ def attempt_evidence(attempt, exercise) -> list[Evidence]:
             evidence[area] = Evidence(area, score, weight, assisted)
 
     if spoken:
-        evidence["SPEAKING"] = Evidence("SPEAKING", score, weight, assisted)
+        # Regrabar mucho = le costó decirlo: se marca, pero no baja la nota (T-046 v2).
+        retakes = int(signals.get("speakRetakes") or 0)
+        evidence["SPEAKING"] = Evidence(
+            "SPEAKING", score, weight, assisted or retakes > SPEAK_FREE_RETAKES
+        )
         pronunciation = (attempt.pronunciation_result or {}).get("score")
         if _has_pronunciation_slip(attempt.evaluation_result):
             pronunciation = min(

@@ -271,3 +271,29 @@ def test_spoken_sink_through_full_class(client) -> None:
     abilities = {a["key"]: a for a in client.get(f"{API}/progress", headers=headers).json()["abilities"]}
     assert abilities["PRONUNCIATION"]["score"] == 50
     assert abilities["SPEAKING"]["score"] == 100
+
+
+# ------------------------------------------------------------------ regrabar (T-046 v2)
+
+
+def test_retakes_mark_speaking_assisted_without_lowering_score() -> None:
+    def speaking(retakes):
+        items = _by_ability(attempt_evidence(
+            _attempt(100, response="SPEAK", pronunciation={"score": 80}, signals={"speakRetakes": retakes}),
+            _exercise()))
+        return items["SPEAKING"]
+
+    assert not speaking(0).assisted and not speaking(1).assisted
+    assert speaking(2).assisted
+    assert speaking(2).score == 100 and speaking(2).weight == 1.0
+
+
+def test_retake_signal_is_recorded(client) -> None:
+    headers = _setup(client)
+    klass = client.post(f"{API}/classes", headers=headers).json()
+    eid = klass["exercises"][0]["id"]
+    url = f"{API}/classes/{klass['id']}/exercises/{eid}/signals"
+    for _ in range(2):
+        body = client.post(url, json={"kind": "retake"}, headers=headers).json()
+    assert body["signals"]["speakRetakes"] == 2
+    assert client.post(url, json={"kind": "otra"}, headers=headers).status_code == 422

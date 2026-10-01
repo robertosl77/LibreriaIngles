@@ -152,7 +152,7 @@ export interface Exercise {
   pronunciationResult: PronunciationResult | null;
   assistance: Assistance;
   /** Señales de la respuesta (T-034): escuchas, uso de lento, prácticas de pronunciación. */
-  signals: { listenPlays?: number; listenSlowPlays?: number; practiceScores?: number[] };
+  signals: { listenPlays?: number; listenSlowPlays?: number; practiceScores?: number[]; speakRetakes?: number };
   hasLesson: boolean;
   result: ExerciseResult | null;
 }

@@ -196,7 +196,7 @@ export class ApiService {
   recordSignal(
     classId: number,
     exerciseId: number,
-    signal: { kind: 'listen'; slow: boolean } | { kind: 'practice'; score: number }
+    signal: { kind: 'listen'; slow: boolean } | { kind: 'practice'; score: number } | { kind: 'retake' }
   ): Observable<{ exerciseId: number; signals: Exercise['signals'] }> {
     return this.http.post<{ exerciseId: number; signals: Exercise['signals'] }>(
       `${this.base}/classes/${classId}/exercises/${exerciseId}/signals`,

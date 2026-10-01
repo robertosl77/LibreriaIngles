@@ -32,7 +32,7 @@ class AnswerRequest(BaseModel):
 class SignalRequest(BaseModel):
     """Señal de la respuesta en curso (T-034)."""
 
-    kind: str = Field(pattern="^(listen|practice)$")
+    kind: str = Field(pattern="^(listen|practice|retake)$")
     slow: bool = False
     score: int | None = Field(default=None, ge=0, le=100)
 
@@ -412,6 +412,7 @@ def record_signal(
             listen_play=payload.kind == "listen",
             slow=payload.slow,
             practice_score=payload.score if payload.kind == "practice" else None,
+            retake=payload.kind == "retake",
         )
     except service.ClassStateError as exc:
         raise _conflict(exc)

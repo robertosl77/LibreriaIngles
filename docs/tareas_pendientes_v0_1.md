@@ -1679,6 +1679,16 @@ Grabar → hablar → corta solo (más rápido) → queda como respuesta ✓
 3. "Volver a grabar" se registra como señal (como las escuchas extra en Listening) y aparece en
    el resumen de esfuerzo; muchas regrabaciones marcan Speaking como asistido.
 
+Resolución:
+
+1. Silencio para cortar: 1,8 s → **1,0 s** (`AUTO_STOP_SILENCE_MS`). Prueba con audio simulado
+   (1,5 s de voz + silencio): corta y guarda en ~2,9 s desde "Grabar" (antes ~3,7 s).
+2. Sin "Confirmar respuesta": al cortar (solo o con "Detener") la grabación se guarda sola en el
+   dispositivo y cuenta como respondida. Si el guardado falla, aparece "Reintentar".
+3. "Volver a grabar" sobre una respuesta ya guardada registra la señal `speakRetakes`
+   (`POST …/signals` con `kind: "retake"`); el resumen de esfuerzo muestra "grabaste tu respuesta
+   N veces". Más de 1 regrabación marca Speaking como asistido, sin bajar la nota.
+
 ---
 
 # 3. Orden sugerido de trabajo

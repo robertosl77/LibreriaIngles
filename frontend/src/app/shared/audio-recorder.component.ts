@@ -5,7 +5,9 @@ export interface RecordedAudio {
   durationMs: number;
 }
 
-const AUTO_STOP_SILENCE_MS = 1800;
+// T-046 v2: ~1 s de silencio después de hablar (antes 1,8 s: se sentía lento).
+// Una pausa normal entre palabras es más corta, así que no corta a mitad de la frase.
+const AUTO_STOP_SILENCE_MS = 1000;
 const MIN_VOICE_MS = 180;
 const MIN_VOICE_RMS = 0.018;
 const MAX_NOISE_SAMPLE_RMS = 0.03;
@@ -33,7 +35,7 @@ const NOISE_MULTIPLIER = 2.2;
           } @else if (confirmed()) {
             <span class="confirmed small"><strong>✓ Respuesta grabada</strong></span>
             <button class="btn btn-sm" type="button" (click)="start()" [disabled]="busy()">
-              Grabar de nuevo
+              Volver a grabar
             </button>
           } @else {
             <button class="record-btn" type="button" (click)="start()" [disabled]="busy()">
@@ -42,7 +44,7 @@ const NOISE_MULTIPLIER = 2.2;
             </button>
             <span class="muted small">
               @if (autoStopAvailable()) {
-                Se detiene tras ~2 s de silencio · máximo {{ maxSeconds() }} segundos.
+                Se detiene sola cuando terminás de hablar · máximo {{ maxSeconds() }} segundos.
               } @else {
                 Máximo {{ maxSeconds() }} segundos.
               }
@@ -51,33 +53,26 @@ const NOISE_MULTIPLIER = 2.2;
         </div>
       } @else {
         <audio [src]="recordedUrl()" controls></audio>
-        @if (confirmed()) {
-          <div class="row">
+        <div class="row">
+          @if (confirmed()) {
             <span class="confirmed small"><strong>✓ Respuesta grabada</strong></span>
-            <button class="btn btn-sm" type="button" (click)="start()" [disabled]="busy()">
-              Grabar de nuevo
-            </button>
-            <span class="muted small">{{ elapsedSeconds() }} s</span>
-          </div>
-        } @else {
-          <p class="pending small" role="status">
-            Grabaste tu respuesta pero <strong>falta confirmarla</strong>: si no la confirmás, no se envía.
-          </p>
-          <div class="row">
-            <button class="btn btn-primary btn-sm" type="button" (click)="accept()" [disabled]="busy()">
-              @if (busy()) { <span class="spinner"></span> Guardando… } @else { Confirmar respuesta }
-            </button>
-            <button class="btn btn-sm" type="button" (click)="start()" [disabled]="busy()">
-              Volver a grabar
-            </button>
-            <span class="muted small">{{ elapsedSeconds() }} s</span>
-          </div>
-        }
+          } @else if (busy()) {
+            <span class="small muted"><span class="spinner"></span> Guardando…</span>
+          } @else {
+            <!-- Solo si falló el guardado automático. -->
+            <span class="pending small">No se pudo guardar la grabación.</span>
+            <button class="btn btn-sm" type="button" (click)="accept()">Reintentar</button>
+          }
+          <button class="btn btn-sm" type="button" (click)="start()" [disabled]="busy()">
+            Volver a grabar
+          </button>
+          <span class="muted small">{{ elapsedSeconds() }} s</span>
+        </div>
       }
     </div>
   `,
   styles: `
-    .pending { margin: 0; padding: 0.45rem 0.7rem; border-radius: 0.5rem; background: var(--warn-bg); color: var(--warn); }
+    .pending { color: var(--bad); }
     .recorder { gap: 0.55rem; padding: 0.7rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
     audio { width: min(100%, 32rem); height: 2.4rem; }
     .record-btn {
@@ -103,7 +98,7 @@ export class AudioRecorderComponent implements OnDestroy {
   readonly maxSeconds = input(60);
   readonly accepted = output<RecordedAudio>();
   readonly recordingStarted = output<void>();
-  /** true: hay una grabación hecha que todavía no se confirmó (no cuenta como respuesta). */
+  /** true: hay una grabación hecha que todavía no se guardó (no cuenta como respuesta). */
   readonly pendingChange = output<boolean>();
 
   readonly recording = signal(false);
@@ -216,6 +211,9 @@ export class AudioRecorderComponent implements OnDestroy {
     this.recording.set(false);
     this.stopTracks();
     this.pendingChange.emit(true);
+    // T-046 v2: lo grabado ES la respuesta (se transcribe y corrige al enviar la clase):
+    // se guarda solo, sin "Confirmar respuesta".
+    this.accept();
   }
 
   private startVoiceDetection(): void {
