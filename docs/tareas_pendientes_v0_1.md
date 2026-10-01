@@ -1495,7 +1495,8 @@ configurada y `modelo/motor` (por ejemplo `gemini-2.5-flash`).
 ## T-042 — Permitir al PLATFORM_OWNER revelar y copiar API keys administradas
 
 **Prioridad:** P3 — Baja  
-**Estado:** Pendiente
+**Estado:** En curso  
+**Responsable:** ChatGPT
 
 Objetivo: permitir que únicamente el dueño de la plataforma (`PLATFORM_OWNER`) pueda revelar
 y copiar desde la interfaz una API key ya guardada cuando necesite reutilizarla o administrarla.
