@@ -1587,6 +1587,40 @@ nueva y repite su criterio. La apelación debe permitir explicar por qué la res
 
 ---
 
+## T-045 — Presentar el examen de nivel solo cuando el alumno esté cerca de habilitarlo
+
+**Prioridad:** P2 — Media  
+**Estado:** En curso  
+**Responsable:** ChatGPT
+
+Problema detectado en prueba real: con muy poca práctica el inicio ya muestra el bloque
+de examen y puede marcar en verde el requisito de promedio (por ejemplo, 83,3 % después
+de una sola clase), aunque todavía falta mucha cobertura del nivel. El dato es correcto
+como promedio de lo practicado, pero la presentación resulta engañosa.
+
+Solución acordada:
+
+1. **Lejos del examen:** no mostrar el bloque de examen mientras la cobertura del nivel sea
+   menor al 60 %.
+2. **Cerca del examen (60 % a <70 % de cobertura):** mostrar un bloque de anticipación,
+   por ejemplo `Te estás acercando al examen A1`, con:
+   - progreso de cobertura hacia el 70 % requerido;
+   - promedio actual como información (`Vas bien: 83,3 %`) si alcanza el 70 %, pero sin
+     presentarlo como requisito formal ya cumplido;
+   - sin botón para rendir todavía.
+3. **Desde 70 % de cobertura:** mostrar el bloque formal de examen con ambos requisitos:
+   cobertura ≥70 % y promedio ≥70 %, cada uno con su estado real.
+4. **Habilitación:** el examen solo puede iniciarse cuando se cumplen ambos requisitos;
+   esta regla de backend se mantiene.
+5. **Datos explícitos:** el frontend no debe inferir porcentajes leyendo textos de `detail`;
+   el estado del examen debe exponer cobertura, cantidad practicada, total y umbrales necesarios.
+
+**Criterio UX:** evitar que un alumno que recién empieza reciba señales prematuras de que
+ya está en condiciones de rendir, sin ocultar que su rendimiento actual viene bien cuando
+realmente se está acercando al requisito.
+
+---
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
