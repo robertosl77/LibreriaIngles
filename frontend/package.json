@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "ng serve",
-    "start:remote": "ng serve --host 0.0.0.0 --port 8081 --disable-host-check",
+    "start:remote": "ng serve --configuration remote",
     "start:vm": "ng serve --proxy-config proxy.vm.conf.json",
     "build": "ng build"
   },
@@ -19,9 +19,12 @@
     "zone.js": "^0.15.0"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "^21.2.24",
+    "@angular/build": "^21.2.24",
     "@angular/cli": "^21.2.24",
     "@angular/compiler-cli": "^21.2.25",
     "typescript": "~5.9.3"
+  },
+  "overrides": {
+    "piscina": "5.3.2"
   }
 }
