@@ -66,6 +66,7 @@ def test_owner_can_reveal_and_copy_own_key_and_actions_are_audited(client) -> No
         headers=owner,
     )
     assert reveal.status_code == 200
+    assert reveal.headers["cache-control"] == "no-store"
     assert reveal.json() == {"apiKey": "secret-owner-5678"}
 
     copy = client.post(
@@ -86,6 +87,8 @@ def test_owner_can_reveal_and_copy_own_key_and_actions_are_audited(client) -> No
         )
         assert [row.action for row in rows] == ["REVEAL", "COPY"]
         assert all(row.account_id is not None for row in rows)
+        assert all(row.connection_name == "Owner personal" for row in rows)
+        assert all(row.owner_type == "ACCOUNT" for row in rows)
 
 
 def test_owner_can_retrieve_platform_key(client) -> None:
