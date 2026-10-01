@@ -676,7 +676,7 @@ T-017 (claridad de ejercicios).
 ## T-021 — Tolerancia a errores de ortografía menores
 
 **Prioridad:** P3 — Baja  
-**Estado:** Resuelta (PR a `develop`) · Claude
+**Estado:** Resuelta (PR #17 a `develop`) · Claude
 
 Resolución (detalle en `guia_mvp_funcional.md` §7):
 
