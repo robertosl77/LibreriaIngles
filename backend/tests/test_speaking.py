@@ -57,7 +57,7 @@ def test_audio_is_transcribed_to_draft_and_never_persisted(client, monkeypatch) 
         exercise = next(
             item
             for item in exercises
-            if item.exercise_type in {"fill_blank", "rewrite", "short_writing"}
+            if item.exercise_type in {"fill_blank", "rewrite", "short_writing", "conversation"}
         )
         exercise.response_mode = ResponseMode.SPEAK
         expected = (
