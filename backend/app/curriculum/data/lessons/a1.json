@@ -11,34 +11,14 @@
         "Contracciones: I'm, you're, he's, she's, it's, we're, they're"
       ],
       "examples": [
-        {
-          "en": "I am a student.",
-          "es": "Soy estudiante."
-        },
-        {
-          "en": "My sister is a nurse.",
-          "es": "Mi hermana es enfermera."
-        },
-        {
-          "en": "We are from Argentina.",
-          "es": "Somos de Argentina."
-        },
-        {
-          "en": "The books are on the table.",
-          "es": "Los libros están sobre la mesa."
-        }
+        {"en": "I am a student.", "es": "Soy estudiante."},
+        {"en": "My sister is a nurse.", "es": "Mi hermana es enfermera."},
+        {"en": "We are from Argentina.", "es": "Somos de Argentina."},
+        {"en": "The books are on the table.", "es": "Los libros están sobre la mesa."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "My sister are a nurse.",
-          "right": "My sister is a nurse.",
-          "why": "'My sister' es singular (= she), va con 'is'."
-        },
-        {
-          "wrong": "I is happy.",
-          "right": "I am happy.",
-          "why": "Con 'I' siempre va 'am'."
-        }
+        {"wrong": "My sister are a nurse.", "right": "My sister is a nurse.", "why": "'My sister' es singular (= she), va con 'is'."},
+        {"wrong": "I is happy.", "right": "I am happy.", "why": "Con 'I' siempre va 'am'."}
       ],
       "tip": "Reemplazá el sujeto por un pronombre (my sister → she, my parents → they) y elegí la forma."
     },
@@ -52,30 +32,13 @@
         "También vale: he's not, they're not"
       ],
       "examples": [
-        {
-          "en": "I am not tired. / I'm not tired.",
-          "es": "No estoy cansado."
-        },
-        {
-          "en": "She isn't at school.",
-          "es": "Ella no está en la escuela."
-        },
-        {
-          "en": "They aren't at home.",
-          "es": "No están en casa."
-        }
+        {"en": "I am not tired. / I'm not tired.", "es": "No estoy cansado."},
+        {"en": "She isn't at school.", "es": "Ella no está en la escuela."},
+        {"en": "They aren't at home.", "es": "No están en casa."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "They don't are at home.",
-          "right": "They aren't at home.",
-          "why": "Con 'to be' la negación es solo 'not', sin 'don't'."
-        },
-        {
-          "wrong": "She not is here.",
-          "right": "She is not here.",
-          "why": "'not' va después del verbo, no antes."
-        }
+        {"wrong": "They don't are at home.", "right": "They aren't at home.", "why": "Con 'to be' la negación es solo 'not', sin 'don't'."},
+        {"wrong": "She not is here.", "right": "She is not here.", "why": "'not' va después del verbo, no antes."}
       ],
       "tip": "Si la oración tiene am / is / are, la negación se arma pegándole 'not' a ese verbo."
     },
@@ -88,30 +51,13 @@
         "Respuestas cortas: Yes, she is. / No, she isn't."
       ],
       "examples": [
-        {
-          "en": "Are you ready?",
-          "es": "¿Estás listo?"
-        },
-        {
-          "en": "Is he your brother?",
-          "es": "¿Él es tu hermano?"
-        },
-        {
-          "en": "Where are they?",
-          "es": "¿Dónde están?"
-        }
+        {"en": "Are you ready?", "es": "¿Estás listo?"},
+        {"en": "Is he your brother?", "es": "¿Él es tu hermano?"},
+        {"en": "Where are they?", "es": "¿Dónde están?"}
       ],
       "commonMistakes": [
-        {
-          "wrong": "You are ready?",
-          "right": "Are you ready?",
-          "why": "En inglés la pregunta cambia el orden; no alcanza con la entonación."
-        },
-        {
-          "wrong": "Do you are ready?",
-          "right": "Are you ready?",
-          "why": "Con 'to be' no se usa 'do'."
-        }
+        {"wrong": "You are ready?", "right": "Are you ready?", "why": "En inglés la pregunta cambia el orden; no alcanza con la entonación."},
+        {"wrong": "Do you are ready?", "right": "Are you ready?", "why": "Con 'to be' no se usa 'do'."}
       ],
       "tip": "Buscá el am / is / are de la oración y pasalo adelante del sujeto."
     },
@@ -126,35 +72,14 @@
         "have → has"
       ],
       "examples": [
-        {
-          "en": "She works in a hospital.",
-          "es": "Ella trabaja en un hospital."
-        },
-        {
-          "en": "My dad watches TV at night.",
-          "es": "Mi papá mira televisión a la noche."
-        },
-        {
-          "en": "They live in Córdoba.",
-          "es": "Ellos viven en Córdoba."
-        }
+        {"en": "She works in a hospital.", "es": "Ella trabaja en un hospital."},
+        {"en": "My dad watches TV at night.", "es": "Mi papá mira televisión a la noche."},
+        {"en": "They live in Córdoba.", "es": "Ellos viven en Córdoba."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "He work every day.",
-          "right": "He works every day.",
-          "why": "Con he / she / it falta la -s."
-        },
-        {
-          "wrong": "They works here.",
-          "right": "They work here.",
-          "why": "La -s va solo con he / she / it, no con they."
-        },
-        {
-          "wrong": "She studys English.",
-          "right": "She studies English.",
-          "why": "Consonante + y cambia a -ies."
-        }
+        {"wrong": "He work every day.", "right": "He works every day.", "why": "Con he / she / it falta la -s."},
+        {"wrong": "They works here.", "right": "They work here.", "why": "La -s va solo con he / she / it, no con they."},
+        {"wrong": "She studys English.", "right": "She studies English.", "why": "Consonante + y cambia a -ies."}
       ],
       "tip": "Preguntate: ¿el sujeto es una sola persona o cosa que no soy yo ni vos? Entonces lleva -s."
     },
@@ -167,35 +92,14 @@
         "La -s pasa a 'does': ya no va en el verbo"
       ],
       "examples": [
-        {
-          "en": "I don't like coffee.",
-          "es": "No me gusta el café."
-        },
-        {
-          "en": "David doesn't drink coffee in the morning.",
-          "es": "David no toma café a la mañana."
-        },
-        {
-          "en": "They don't work on Sundays.",
-          "es": "No trabajan los domingos."
-        }
+        {"en": "I don't like coffee.", "es": "No me gusta el café."},
+        {"en": "David doesn't drink coffee in the morning.", "es": "David no toma café a la mañana."},
+        {"en": "They don't work on Sundays.", "es": "No trabajan los domingos."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "She doesn't drinks coffee.",
-          "right": "She doesn't drink coffee.",
-          "why": "Después de 'doesn't' el verbo va en forma base, sin -s."
-        },
-        {
-          "wrong": "He don't work here.",
-          "right": "He doesn't work here.",
-          "why": "Con he / she / it se usa 'doesn't'."
-        },
-        {
-          "wrong": "I not like tea.",
-          "right": "I don't like tea.",
-          "why": "En presente simple hace falta el auxiliar 'don't'."
-        }
+        {"wrong": "She doesn't drinks coffee.", "right": "She doesn't drink coffee.", "why": "Después de 'doesn't' el verbo va en forma base, sin -s."},
+        {"wrong": "He don't work here.", "right": "He doesn't work here.", "why": "Con he / she / it se usa 'doesn't'."},
+        {"wrong": "I not like tea.", "right": "I don't like tea.", "why": "En presente simple hace falta el auxiliar 'don't'."}
       ],
       "tip": "La -s aparece una sola vez: o en el verbo (she works) o en el auxiliar (she doesn't work)."
     },
@@ -209,35 +113,14 @@
         "Respuestas cortas: Yes, I do. / No, she doesn't."
       ],
       "examples": [
-        {
-          "en": "Do you speak English?",
-          "es": "¿Hablás inglés?"
-        },
-        {
-          "en": "Does your brother play football?",
-          "es": "¿Tu hermano juega al fútbol?"
-        },
-        {
-          "en": "Where does she work?",
-          "es": "¿Dónde trabaja ella?"
-        }
+        {"en": "Do you speak English?", "es": "¿Hablás inglés?"},
+        {"en": "Does your brother play football?", "es": "¿Tu hermano juega al fútbol?"},
+        {"en": "Where does she work?", "es": "¿Dónde trabaja ella?"}
       ],
       "commonMistakes": [
-        {
-          "wrong": "Does she works here?",
-          "right": "Does she work here?",
-          "why": "Con 'does' el verbo va en forma base."
-        },
-        {
-          "wrong": "Do he like pizza?",
-          "right": "Does he like pizza?",
-          "why": "Con he / she / it se usa 'does'."
-        },
-        {
-          "wrong": "You like pizza?",
-          "right": "Do you like pizza?",
-          "why": "La pregunta necesita el auxiliar 'do'."
-        }
+        {"wrong": "Does she works here?", "right": "Does she work here?", "why": "Con 'does' el verbo va en forma base."},
+        {"wrong": "Do he like pizza?", "right": "Does he like pizza?", "why": "Con he / she / it se usa 'does'."},
+        {"wrong": "You like pizza?", "right": "Do you like pizza?", "why": "La pregunta necesita el auxiliar 'do'."}
       ],
       "tip": "Si el verbo no es 'to be' ni 'can', la pregunta necesita do / does al principio."
     },
@@ -252,35 +135,14 @@
         "Palabras típicas: now, right now, at the moment"
       ],
       "examples": [
-        {
-          "en": "I am reading a book now.",
-          "es": "Ahora estoy leyendo un libro."
-        },
-        {
-          "en": "She is writing an email.",
-          "es": "Ella está escribiendo un mail."
-        },
-        {
-          "en": "The children are running in the park.",
-          "es": "Los chicos están corriendo en el parque."
-        }
+        {"en": "I am reading a book now.", "es": "Ahora estoy leyendo un libro."},
+        {"en": "She is writing an email.", "es": "Ella está escribiendo un mail."},
+        {"en": "The children are running in the park.", "es": "Los chicos están corriendo en el parque."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "She writing an email.",
-          "right": "She is writing an email.",
-          "why": "Falta el verbo 'to be' (is)."
-        },
-        {
-          "wrong": "He is writeing.",
-          "right": "He is writing.",
-          "why": "Los verbos terminados en -e pierden la e antes de -ing."
-        },
-        {
-          "wrong": "They are runing.",
-          "right": "They are running.",
-          "why": "'run' duplica la n."
-        }
+        {"wrong": "She writing an email.", "right": "She is writing an email.", "why": "Falta el verbo 'to be' (is)."},
+        {"wrong": "He is writeing.", "right": "He is writing.", "why": "Los verbos terminados en -e pierden la e antes de -ing."},
+        {"wrong": "They are runing.", "right": "They are running.", "why": "'run' duplica la n."}
       ],
       "tip": "Dos piezas siempre: am / is / are + verbo con -ing. Si falta una, está incompleto."
     },
@@ -293,30 +155,13 @@
         "Respuestas cortas: Yes, I am. / No, they aren't."
       ],
       "examples": [
-        {
-          "en": "Are you watching TV?",
-          "es": "¿Estás mirando la tele?"
-        },
-        {
-          "en": "Is it raining?",
-          "es": "¿Está lloviendo?"
-        },
-        {
-          "en": "What is he cooking?",
-          "es": "¿Qué está cocinando?"
-        }
+        {"en": "Are you watching TV?", "es": "¿Estás mirando la tele?"},
+        {"en": "Is it raining?", "es": "¿Está lloviendo?"},
+        {"en": "What is he cooking?", "es": "¿Qué está cocinando?"}
       ],
       "commonMistakes": [
-        {
-          "wrong": "You are watching TV?",
-          "right": "Are you watching TV?",
-          "why": "El verbo 'to be' va antes del sujeto."
-        },
-        {
-          "wrong": "Do you watching TV?",
-          "right": "Are you watching TV?",
-          "why": "Con -ing el auxiliar es am / is / are, no 'do'."
-        }
+        {"wrong": "You are watching TV?", "right": "Are you watching TV?", "why": "El verbo 'to be' va antes del sujeto."},
+        {"wrong": "Do you watching TV?", "right": "Are you watching TV?", "why": "Con -ing el auxiliar es am / is / are, no 'do'."}
       ],
       "tip": "Armá la afirmación (you are watching) y mové 'are' al principio."
     },
@@ -330,35 +175,14 @@
         "Nunca lleva -s ni 'to': he can play (no 'cans', no 'can to play')"
       ],
       "examples": [
-        {
-          "en": "I can speak two languages.",
-          "es": "Sé hablar dos idiomas."
-        },
-        {
-          "en": "My brother can't swim.",
-          "es": "Mi hermano no sabe nadar."
-        },
-        {
-          "en": "Can you play the guitar?",
-          "es": "¿Sabés tocar la guitarra?"
-        }
+        {"en": "I can speak two languages.", "es": "Sé hablar dos idiomas."},
+        {"en": "My brother can't swim.", "es": "Mi hermano no sabe nadar."},
+        {"en": "Can you play the guitar?", "es": "¿Sabés tocar la guitarra?"}
       ],
       "commonMistakes": [
-        {
-          "wrong": "She can plays tennis.",
-          "right": "She can play tennis.",
-          "why": "Después de 'can' el verbo va en forma base."
-        },
-        {
-          "wrong": "He cans swim.",
-          "right": "He can swim.",
-          "why": "'can' no cambia con he / she / it."
-        },
-        {
-          "wrong": "I can to drive.",
-          "right": "I can drive.",
-          "why": "'can' no lleva 'to'."
-        }
+        {"wrong": "She can plays tennis.", "right": "She can play tennis.", "why": "Después de 'can' el verbo va en forma base."},
+        {"wrong": "He cans swim.", "right": "He can swim.", "why": "'can' no cambia con he / she / it."},
+        {"wrong": "I can to drive.", "right": "I can drive.", "why": "'can' no lleva 'to'."}
       ],
       "tip": "'can' funciona como 'puedo / sabés' y el verbo que sigue queda intacto."
     },
@@ -372,30 +196,13 @@
         "Pregunta: Is there...? / Are there...?"
       ],
       "examples": [
-        {
-          "en": "There is a park near my house.",
-          "es": "Hay un parque cerca de mi casa."
-        },
-        {
-          "en": "There are three bedrooms.",
-          "es": "Hay tres dormitorios."
-        },
-        {
-          "en": "Is there any milk?",
-          "es": "¿Hay leche?"
-        }
+        {"en": "There is a park near my house.", "es": "Hay un parque cerca de mi casa."},
+        {"en": "There are three bedrooms.", "es": "Hay tres dormitorios."},
+        {"en": "Is there any milk?", "es": "¿Hay leche?"}
       ],
       "commonMistakes": [
-        {
-          "wrong": "There is two chairs.",
-          "right": "There are two chairs.",
-          "why": "'two chairs' es plural."
-        },
-        {
-          "wrong": "It has a park near here.",
-          "right": "There is a park near here.",
-          "why": "'hay' no se traduce con 'have'."
-        }
+        {"wrong": "There is two chairs.", "right": "There are two chairs.", "why": "'two chairs' es plural."},
+        {"wrong": "It has a park near here.", "right": "There is a park near here.", "why": "'hay' no se traduce con 'have'."}
       ],
       "tip": "Mirá la palabra que sigue: una cosa → is; varias → are."
     },
@@ -408,35 +215,14 @@
         "Solo con sustantivos singulares contables"
       ],
       "examples": [
-        {
-          "en": "She is an engineer.",
-          "es": "Ella es ingeniera."
-        },
-        {
-          "en": "I have a dog.",
-          "es": "Tengo un perro."
-        },
-        {
-          "en": "It takes an hour.",
-          "es": "Lleva una hora."
-        }
+        {"en": "She is an engineer.", "es": "Ella es ingeniera."},
+        {"en": "I have a dog.", "es": "Tengo un perro."},
+        {"en": "It takes an hour.", "es": "Lleva una hora."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "a apple",
-          "right": "an apple",
-          "why": "'apple' empieza con sonido vocal."
-        },
-        {
-          "wrong": "an university",
-          "right": "a university",
-          "why": "'university' empieza con sonido 'iu' (consonante)."
-        },
-        {
-          "wrong": "She is engineer.",
-          "right": "She is an engineer.",
-          "why": "Con profesiones en singular el inglés usa a / an."
-        }
+        {"wrong": "a apple", "right": "an apple", "why": "'apple' empieza con sonido vocal."},
+        {"wrong": "an university", "right": "a university", "why": "'university' empieza con sonido 'iu' (consonante)."},
+        {"wrong": "She is engineer.", "right": "She is an engineer.", "why": "Con profesiones en singular el inglés usa a / an."}
       ],
       "tip": "Decilo en voz alta: si el primer sonido es vocal, va 'an'."
     },
@@ -449,35 +235,14 @@
         "his = de él; her = de ella"
       ],
       "examples": [
-        {
-          "en": "This is my brother.",
-          "es": "Este es mi hermano."
-        },
-        {
-          "en": "Maria loves her job.",
-          "es": "María ama su trabajo."
-        },
-        {
-          "en": "Tom and Ana live with their parents.",
-          "es": "Tom y Ana viven con sus padres."
-        }
+        {"en": "This is my brother.", "es": "Este es mi hermano."},
+        {"en": "Maria loves her job.", "es": "María ama su trabajo."},
+        {"en": "Tom and Ana live with their parents.", "es": "Tom y Ana viven con sus padres."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "Maria loves his job.",
-          "right": "Maria loves her job.",
-          "why": "El poseedor es María (she) → her."
-        },
-        {
-          "wrong": "They love they house.",
-          "right": "They love their house.",
-          "why": "'they' es sujeto; el posesivo es 'their'."
-        },
-        {
-          "wrong": "The dog is in it's bed.",
-          "right": "The dog is in its bed.",
-          "why": "'it's' = it is; el posesivo es 'its'."
-        }
+        {"wrong": "Maria loves his job.", "right": "Maria loves her job.", "why": "El poseedor es María (she) → her."},
+        {"wrong": "They love they house.", "right": "They love their house.", "why": "'they' es sujeto; el posesivo es 'their'."},
+        {"wrong": "The dog is in it's bed.", "right": "The dog is in its bed.", "why": "'it's' = it is; el posesivo es 'its'."}
       ],
       "tip": "Preguntate '¿de quién?': el posesivo concuerda con ese dueño."
     },
@@ -490,35 +255,14 @@
         "in + meses, años, estaciones y partes del día: in June, in 2024, in summer, in the morning"
       ],
       "examples": [
-        {
-          "en": "The class starts at 9 o'clock.",
-          "es": "La clase empieza a las 9."
-        },
-        {
-          "en": "I play football on Saturdays.",
-          "es": "Juego al fútbol los sábados."
-        },
-        {
-          "en": "My birthday is in October.",
-          "es": "Mi cumpleaños es en octubre."
-        }
+        {"en": "The class starts at 9 o'clock.", "es": "La clase empieza a las 9."},
+        {"en": "I play football on Saturdays.", "es": "Juego al fútbol los sábados."},
+        {"en": "My birthday is in October.", "es": "Mi cumpleaños es en octubre."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "in Monday",
-          "right": "on Monday",
-          "why": "Los días van con 'on'."
-        },
-        {
-          "wrong": "on the morning",
-          "right": "in the morning",
-          "why": "Las partes del día van con 'in' (excepto 'at night')."
-        },
-        {
-          "wrong": "in 8 o'clock",
-          "right": "at 8 o'clock",
-          "why": "Las horas van con 'at'."
-        }
+        {"wrong": "in Monday", "right": "on Monday", "why": "Los días van con 'on'."},
+        {"wrong": "on the morning", "right": "in the morning", "why": "Las partes del día van con 'in' (excepto 'at night')."},
+        {"wrong": "in 8 o'clock", "right": "at 8 o'clock", "why": "Las horas van con 'at'."}
       ],
       "tip": "Pensalo como un embudo: in (mes/año) → on (día) → at (hora)."
     },
@@ -534,34 +278,14 @@
         "Orden: Wh- + auxiliar (is / do / does / can) + sujeto + ..."
       ],
       "examples": [
-        {
-          "en": "Where do you live?",
-          "es": "¿Dónde vivís?"
-        },
-        {
-          "en": "Who is your teacher?",
-          "es": "¿Quién es tu profesor?"
-        },
-        {
-          "en": "When is your birthday?",
-          "es": "¿Cuándo es tu cumpleaños?"
-        },
-        {
-          "en": "How old are you?",
-          "es": "¿Cuántos años tenés?"
-        }
+        {"en": "Where do you live?", "es": "¿Dónde vivís?"},
+        {"en": "Who is your teacher?", "es": "¿Quién es tu profesor?"},
+        {"en": "When is your birthday?", "es": "¿Cuándo es tu cumpleaños?"},
+        {"en": "How old are you?", "es": "¿Cuántos años tenés?"}
       ],
       "commonMistakes": [
-        {
-          "wrong": "Where you live?",
-          "right": "Where do you live?",
-          "why": "Falta el auxiliar 'do'."
-        },
-        {
-          "wrong": "What is your birthday? (pidiendo la fecha)",
-          "right": "When is your birthday?",
-          "why": "Para preguntar por el momento se usa 'when'."
-        }
+        {"wrong": "Where you live?", "right": "Where do you live?", "why": "Falta el auxiliar 'do'."},
+        {"wrong": "What is your birthday? (pidiendo la fecha)", "right": "When is your birthday?", "why": "Para preguntar por el momento se usa 'when'."}
       ],
       "tip": "Mirá la respuesta esperada: un lugar → where; una persona → who; una fecha u hora → when."
     },
@@ -575,35 +299,14 @@
         "do homework (hacer la tarea), go to bed (acostarse)"
       ],
       "examples": [
-        {
-          "en": "I get up at 7 and have breakfast.",
-          "es": "Me levanto a las 7 y desayuno."
-        },
-        {
-          "en": "She goes to work by bus.",
-          "es": "Va al trabajo en colectivo."
-        },
-        {
-          "en": "We go to bed at 11.",
-          "es": "Nos acostamos a las 11."
-        }
+        {"en": "I get up at 7 and have breakfast.", "es": "Me levanto a las 7 y desayuno."},
+        {"en": "She goes to work by bus.", "es": "Va al trabajo en colectivo."},
+        {"en": "We go to bed at 11.", "es": "Nos acostamos a las 11."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "I take breakfast.",
-          "right": "I have breakfast.",
-          "why": "Las comidas van con 'have'."
-        },
-        {
-          "wrong": "I go to the home.",
-          "right": "I go home.",
-          "why": "'go home' no lleva 'to' ni 'the'."
-        },
-        {
-          "wrong": "I make my homework.",
-          "right": "I do my homework.",
-          "why": "Con 'homework' se usa 'do'."
-        }
+        {"wrong": "I take breakfast.", "right": "I have breakfast.", "why": "Las comidas van con 'have'."},
+        {"wrong": "I go to the home.", "right": "I go home.", "why": "'go home' no lleva 'to' ni 'the'."},
+        {"wrong": "I make my homework.", "right": "I do my homework.", "why": "Con 'homework' se usa 'do'."}
       ],
       "tip": "Aprendé las expresiones completas (have breakfast, go to bed), no las palabras sueltas."
     },
@@ -618,30 +321,13 @@
         "wife / husband (esposa / esposo)"
       ],
       "examples": [
-        {
-          "en": "My mother's sister is my aunt.",
-          "es": "La hermana de mi mamá es mi tía."
-        },
-        {
-          "en": "I have two cousins.",
-          "es": "Tengo dos primos."
-        },
-        {
-          "en": "My parents live in Rosario.",
-          "es": "Mis padres viven en Rosario."
-        }
+        {"en": "My mother's sister is my aunt.", "es": "La hermana de mi mamá es mi tía."},
+        {"en": "I have two cousins.", "es": "Tengo dos primos."},
+        {"en": "My parents live in Rosario.", "es": "Mis padres viven en Rosario."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "My fathers live in Rosario.",
-          "right": "My parents live in Rosario.",
-          "why": "'padres' (mamá y papá) es 'parents'."
-        },
-        {
-          "wrong": "I have two brothers (siendo hermano y hermana).",
-          "right": "I have a brother and a sister.",
-          "why": "'brothers' son solo varones; en general se dice 'siblings'."
-        }
+        {"wrong": "My fathers live in Rosario.", "right": "My parents live in Rosario.", "why": "'padres' (mamá y papá) es 'parents'."},
+        {"wrong": "I have two brothers (siendo hermano y hermana).", "right": "I have a brother and a sister.", "why": "'brothers' son solo varones; en general se dice 'siblings'."}
       ],
       "tip": "Ojo con los falsos amigos: 'parents' son los padres, no los parientes (relatives)."
     },
@@ -656,30 +342,13 @@
         "Comidas del día: breakfast, lunch, dinner"
       ],
       "examples": [
-        {
-          "en": "I have bread and coffee for breakfast.",
-          "es": "Desayuno pan y café."
-        },
-        {
-          "en": "Carrots and potatoes are vegetables.",
-          "es": "Las zanahorias y las papas son verduras."
-        },
-        {
-          "en": "Would you like some water?",
-          "es": "¿Querés agua?"
-        }
+        {"en": "I have bread and coffee for breakfast.", "es": "Desayuno pan y café."},
+        {"en": "Carrots and potatoes are vegetables.", "es": "Las zanahorias y las papas son verduras."},
+        {"en": "Would you like some water?", "es": "¿Querés agua?"}
       ],
       "commonMistakes": [
-        {
-          "wrong": "a bread",
-          "right": "some bread / a piece of bread",
-          "why": "'bread' es incontable en inglés."
-        },
-        {
-          "wrong": "I eat milk.",
-          "right": "I drink milk.",
-          "why": "Las bebidas van con 'drink'."
-        }
+        {"wrong": "a bread", "right": "some bread / a piece of bread", "why": "'bread' es incontable en inglés."},
+        {"wrong": "I eat milk.", "right": "I drink milk.", "why": "Las bebidas van con 'drink'."}
       ],
       "tip": "En los ejercicios de 'la que no pertenece', buscá la categoría que comparten las demás (fruta, verdura, bebida)."
     },
@@ -694,30 +363,13 @@
         "shop assistant → shop; police officer; engineer; farmer → farm"
       ],
       "examples": [
-        {
-          "en": "A taxi driver drives a taxi.",
-          "es": "Un taxista maneja un taxi."
-        },
-        {
-          "en": "She is a nurse. She works in a hospital.",
-          "es": "Es enfermera. Trabaja en un hospital."
-        },
-        {
-          "en": "My uncle is an engineer.",
-          "es": "Mi tío es ingeniero."
-        }
+        {"en": "A taxi driver drives a taxi.", "es": "Un taxista maneja un taxi."},
+        {"en": "She is a nurse. She works in a hospital.", "es": "Es enfermera. Trabaja en un hospital."},
+        {"en": "My uncle is an engineer.", "es": "Mi tío es ingeniero."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "He is doctor.",
-          "right": "He is a doctor.",
-          "why": "La profesión en singular lleva a / an."
-        },
-        {
-          "wrong": "taxy driver",
-          "right": "taxi driver",
-          "why": "En inglés se escribe 'taxi'."
-        }
+        {"wrong": "He is doctor.", "right": "He is a doctor.", "why": "La profesión en singular lleva a / an."},
+        {"wrong": "taxy driver", "right": "taxi driver", "why": "En inglés se escribe 'taxi'."}
       ],
       "tip": "Relacioná cada profesión con su lugar o su acción: drive → driver, teach → teacher."
     },
@@ -731,17 +383,10 @@
         "4. Descartá opciones que el texto no dice, aunque suenen lógicas."
       ],
       "examples": [
-        {
-          "en": "Text: 'Tom works in a bank. He starts at 9.' Q: When does Tom start work? → at 9",
-          "es": "La palabra 'start' de la pregunta aparece en el texto: ahí está la respuesta."
-        }
+        {"en": "Text: 'Tom works in a bank. He starts at 9.' Q: When does Tom start work? → at 9", "es": "La palabra 'start' de la pregunta aparece en el texto: ahí está la respuesta."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "Elegir una opción porque es verdadera en la vida real.",
-          "right": "Elegir lo que dice el texto.",
-          "why": "La respuesta tiene que estar respaldada por el texto."
-        }
+        {"wrong": "Elegir una opción porque es verdadera en la vida real.", "right": "Elegir lo que dice el texto.", "why": "La respuesta tiene que estar respaldada por el texto."}
       ],
       "tip": "Las preguntas suelen seguir el orden del texto."
     },
@@ -755,27 +400,12 @@
         "Cada oración: sujeto + verbo + resto, con mayúscula inicial y punto final"
       ],
       "examples": [
-        {
-          "en": "My name is Ana. I am 30 years old. I live in Buenos Aires and I work in an office.",
-          "es": "Me llamo Ana. Tengo 30 años. Vivo en Buenos Aires y trabajo en una oficina."
-        }
+        {"en": "My name is Ana. I am 30 years old. I live in Buenos Aires and I work in an office.", "es": "Me llamo Ana. Tengo 30 años. Vivo en Buenos Aires y trabajo en una oficina."}
       ],
       "commonMistakes": [
-        {
-          "wrong": "I have 30 years.",
-          "right": "I am 30 years old.",
-          "why": "La edad se dice con 'to be'."
-        },
-        {
-          "wrong": "My name Ana.",
-          "right": "My name is Ana.",
-          "why": "Falta el verbo 'is'."
-        },
-        {
-          "wrong": "I am live in Rosario.",
-          "right": "I live in Rosario.",
-          "why": "No se mezcla 'am' con otro verbo en presente simple."
-        }
+        {"wrong": "I have 30 years.", "right": "I am 30 years old.", "why": "La edad se dice con 'to be'."},
+        {"wrong": "My name Ana.", "right": "My name is Ana.", "why": "Falta el verbo 'is'."},
+        {"wrong": "I am live in Rosario.", "right": "I live in Rosario.", "why": "No se mezcla 'am' con otro verbo en presente simple."}
       ],
       "tip": "Mejor oraciones cortas y correctas que una larga con errores."
     },
@@ -1468,7 +1098,8 @@
         }
       ],
       "tip": "Primero encontrá el sujeto y el verbo; el resto se acomoda después."
-    },
+    }
+  ,
     "a1.writing.orthography.capitalization": {
       "title": "Mayúsculas básicas",
       "explanation": "En inglés, las oraciones empiezan con mayúscula. El pronombre 'I' y los nombres propios también se escriben con mayúscula.",
