@@ -1,6 +1,7 @@
 """Alta e ingreso de cuentas personales."""
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select
@@ -124,7 +125,19 @@ def login_personal(
             account.display_name = display_name
         account.status = AccountStatus.ACTIVE
 
+    first_login = account.first_login_at is None
+    now = datetime.now(timezone.utc)
+    if first_login:
+        account.first_login_at = now
+    account.last_login_at = now
+
     _apply_platform_role(account)
     _ensure_profile(db, account)
+
+    # T-004 etapa 2: el login es un evento del motor de campañas. El beneficio queda otorgado
+    # antes de emitir la sesión; nunca_recibió(campaña) vuelve el proceso idempotente.
+    from app.campaigns.service import evaluate_login_campaigns
+
+    evaluate_login_campaigns(db, account, first_login=first_login)
     db.commit()
     return account
