@@ -1876,7 +1876,7 @@ Problemas:
 ## T-048 — Conversation A1 + ortografía transversal y evaluación integrada
 
 **Prioridad:** P1 — Alta  
-**Estado:** En curso · ChatGPT  
+**Estado:** Resuelta (PR #25 a `develop`) · ChatGPT  
 **Responsable:** ChatGPT  
 **Relación:** T-019 (modalidades), T-020 (lección), T-021/T-043 (mecánica de escritura), T-024 (examen), T-034 (evidencias por habilidad)
 
