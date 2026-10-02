@@ -2126,6 +2126,7 @@ Además: el paso 2 de "Primeros pasos" en Inicio debe reflejar la decisión (hoy
 se muestra como opcional).
 
 ---
+
 ## T-055 — Pantalla "IA" según el servicio: no ofrecer configurar keys que no se usan
 
 **Prioridad:** P2 — Media (antes de otorgar servicios Plataforma a usuarios reales)  
