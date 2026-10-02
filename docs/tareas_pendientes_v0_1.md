@@ -2024,6 +2024,63 @@ el flujo normal de Inicio.
 
 ---
 
+
+## T-053 — Dashboard de consumo de IA por cliente según modalidad de API
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Relación:** T-004 (membresías / modalidades BYOK, plataforma e híbrida), T-006 (portal del cliente),
+T-041 (proveedor y modelo usados), T-049 (tokens y costo por uso de IA)
+
+El PLATFORM_OWNER ya dispone de un panel con métricas de uso de IA, gráfico diario y ranking de
+cuentas que consumen IA de plataforma. Cada cliente debe disponer de una vista equivalente, pero
+**limitada a sus propios datos** y adaptada a la modalidad de API que tenga configurada.
+
+Objetivo: incorporar en el portal de cada cliente un dashboard de consumo de IA que permita entender
+cuánto está usando, de dónde sale ese consumo y cómo evoluciona en el tiempo.
+
+Criterios:
+
+1. **Aislamiento por cliente / tenant.**
+   - Nunca mostrar consumo global de la plataforma ni datos de otros clientes.
+   - En organizaciones con varios usuarios, las métricas y rankings internos deben limitarse a las
+     cuentas pertenecientes a ese mismo cliente.
+2. **Información distinta según modalidad de IA.**
+   - **BYOK / APIs propias:** mostrar requests y tokens consumidos por las conexiones propias del
+     cliente, discriminando cuando sea útil por proveedor/modelo.
+   - **IA de plataforma:** mostrar requests y tokens consumidos contra las conexiones de la
+     plataforma y la información económica o de cuota que corresponda al plan.
+   - **Híbrido:** separar claramente consumo propio y consumo de plataforma, tanto en los totales
+     como en la evolución diaria.
+3. **Gráfico temporal.**
+   - Incluir una vista por día similar al panel del PLATFORM_OWNER.
+   - El gráfico debe reflejar las métricas relevantes para la modalidad del cliente y permitir
+     distinguir origen del consumo cuando sea híbrido.
+4. **Detalle de tokens.**
+   - Adjuntar una tabla o desglose diario con tokens consumidos.
+   - Cuando T-049 esté disponible, reutilizar sus datos de input/output tokens, proveedor, modelo,
+     operación y costo estimado, sin guardar ni mostrar prompts o respuestas.
+5. **Resumen de consumo.**
+   - Mostrar totales recientes (por ejemplo requests, errores, tokens y consumo de plataforma)
+     usando etiquetas comprensibles para el cliente.
+   - No mostrar tarjetas sin sentido para una modalidad concreta; adaptar u ocultar métricas que no
+     apliquen.
+6. **Ranking / segundo bloque del panel.**
+   - Para clientes con múltiples cuentas, reutilizar el concepto de “cuentas que más usan IA”, pero
+     únicamente dentro de su organización.
+   - En cuentas personales o cuando no aporte información, ocultar ese bloque o reemplazarlo por un
+     desglose más útil de proveedor/modelo.
+7. **Permisos y tests.**
+   - Validar backend y frontend para impedir acceso cruzado entre clientes.
+   - Cubrir BYOK, plataforma e híbrido, incluyendo clientes personales y organizaciones con varios
+     usuarios.
+
+**Criterio de aceptación:** cada cliente puede entrar a su portal y entender su consumo de IA por día
+y en tokens, con una presentación coherente con su modalidad BYOK/plataforma/híbrida y sin acceso a
+datos de terceros.
+
+---
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
