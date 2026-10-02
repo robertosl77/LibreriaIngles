@@ -38,9 +38,20 @@ def _account_id(client, owner, email: str) -> int:
 
 
 def _grant(client, owner, email: str, service_id: int, days: int | None = None) -> dict:
+    benefit_response = client.post(
+        f"{API}/platform/benefits",
+        json={
+            "name": f"Manual test {email} {service_id} {days}",
+            "serviceId": service_id,
+            "durationDays": days,
+            "active": True,
+        },
+        headers=owner,
+    )
+    assert benefit_response.status_code == 201, benefit_response.text
     response = client.post(
-        f"{API}/platform/accounts/{_account_id(client, owner, email)}/service",
-        json={"serviceId": service_id, "days": days},
+        f"{API}/platform/accounts/{_account_id(client, owner, email)}/benefit",
+        json={"benefitId": benefit_response.json()["id"]},
         headers=owner,
     )
     assert response.status_code == 200, response.text
@@ -79,6 +90,52 @@ def test_portal_is_only_for_platform_owner(client) -> None:
         "INDIVIDUAL_PLATFORM",
         "INDIVIDUAL_HYBRID",
     }
+
+
+def test_service_does_not_define_duration_and_manual_grant_uses_benefit(client) -> None:
+    owner = login(client, OWNER)
+    created = client.post(
+        f"{API}/platform/services",
+        json={
+            "name": "Servicio sin vigencia",
+            "source": "PLATFORM",
+            "dailyRequestLimit": 25,
+            "description": "La vigencia no pertenece al servicio.",
+            "active": True,
+        },
+        headers=owner,
+    )
+    assert created.status_code == 201, created.text
+    assert "durationDays" not in created.json()
+
+    alice = _student(client, "benefit-only@example.com")
+    benefit = client.post(
+        f"{API}/platform/benefits",
+        json={
+            "name": "Plataforma 12 días",
+            "serviceId": created.json()["id"],
+            "durationDays": 12,
+            "active": True,
+        },
+        headers=owner,
+    )
+    assert benefit.status_code == 201, benefit.text
+
+    granted = client.post(
+        f"{API}/platform/accounts/{_account_id(client, owner, "benefit-only@example.com")}/benefit",
+        json={"benefitId": benefit.json()["id"]},
+        headers=owner,
+    )
+    assert granted.status_code == 200, granted.text
+    assert granted.json()["service"]["origin"] == "MANUAL"
+    assert granted.json()["service"]["expiresAt"] is not None
+
+    legacy = client.post(
+        f"{API}/platform/accounts/{_account_id(client, owner, "benefit-only@example.com")}/service",
+        json={"serviceId": created.json()["id"], "days": 99},
+        headers=owner,
+    )
+    assert legacy.status_code == 405
 
 
 def test_source_decides_which_keys_are_used(client) -> None:

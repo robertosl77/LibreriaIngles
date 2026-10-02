@@ -208,10 +208,17 @@ def test_existing_same_service_adds_days_but_different_service_does_not_replace(
         row for row in client.get(f"{API}/platform/accounts", headers=owner).json()
         if row["email"] == "existing@example.com"
     )
+    base_benefit = _benefit(
+        client,
+        owner,
+        services["INDIVIDUAL_PLATFORM"]["id"],
+        name="Base 10",
+        days=10,
+    )
     granted = client.post(
-        f"{API}/platform/accounts/{account['id']}/service",
+        f"{API}/platform/accounts/{account['id']}/benefit",
         headers=owner,
-        json={"serviceId": services["INDIVIDUAL_PLATFORM"]["id"], "days": 10},
+        json={"benefitId": base_benefit["id"]},
     )
     assert granted.status_code == 200
     before = datetime.fromisoformat(granted.json()["service"]["expiresAt"].replace("Z", "+00:00"))
