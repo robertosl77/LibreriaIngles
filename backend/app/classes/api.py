@@ -2,8 +2,14 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
+from app.accounts.models import Account
 from app.ai.models import AIConnection
-from app.ai.service import NoAIAvailable, connection_snapshot, transcribe_audio
+from app.ai.service import (
+    NoAIAvailable,
+    connection_snapshot,
+    public_trace,
+    transcribe_audio,
+)
 from app.classes import generation, service
 from app.pronunciation import normalize_ai_pronunciation
 from app.core.deps import CurrentStudy, DbSession
@@ -52,7 +58,7 @@ def _conflict(exc: Exception) -> HTTPException:
     return HTTPException(status.HTTP_409_CONFLICT, str(exc))
 
 
-def _result_payload(attempt: Attempt, exercise: Exercise) -> dict | None:
+def _result_payload(db, attempt: Attempt, exercise: Exercise, viewer) -> dict | None:
     if attempt.score is None:
         return None
     result = attempt.evaluation_result or {}
@@ -66,7 +72,7 @@ def _result_payload(attempt: Attempt, exercise: Exercise) -> dict | None:
         "conceptResults": result.get("conceptResults") or [],
         "secondarySkillResults": result.get("secondarySkillResults") or [],
         "evaluationSource": attempt.evaluation_source.value if attempt.evaluation_source else None,
-        "ai": result.get("ai"),
+        "ai": public_trace(db, result.get("ai"), viewer),
         "appeal": result.get("appeal"),
         "canAppeal": attempt.score < 100
         and attempt.appealed_at is None
@@ -94,6 +100,8 @@ def _stimulus(exercise: Exercise) -> dict | None:
 
 
 def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
+    # Quien ve la clase es su dueño: se le ocultan los datos de conexiones de plataforma (T-055).
+    viewer = db.get(Account, session.account_id) if session.account_id else None
     exercises = service.exercises_of(db, session)
     drafts = service.drafts_of(db, session)
     attempts = service.attempts_of(db, session)
@@ -131,7 +139,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                     else (draft.audio_duration_ms if draft else None)
                 ),
                 "pronunciationResult": (
-                    attempt.pronunciation_result
+                    public_trace(db, attempt.pronunciation_result, viewer)
                     if attempt and attempt.score is not None
                     else None
                 ),
@@ -145,7 +153,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 ),
                 "hasLesson": session.kind == SessionKind.CLASS
                 and get_lesson(exercise.skill_key) is not None,
-                "result": _result_payload(attempt, exercise) if attempt else None,
+                "result": _result_payload(db, attempt, exercise, viewer) if attempt else None,
             }
         )
 
@@ -159,6 +167,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
         # Compatibilidad con clases previas a T-041: no es histórico, pero al
         # menos muestra la configuración actual de la conexión si sigue viva.
         generation_ai = connection_snapshot(connection)
+    generation_ai = public_trace(db, generation_ai, viewer)
 
     return {
         "id": session.id,
@@ -334,15 +343,19 @@ async def transcribe_answer_audio(
             detail += " " + "; ".join(exc.errors)
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
 
-    ai = connection_snapshot(result.connection)
+    raw_ai = connection_snapshot(result.connection)
+    ai = public_trace(db, raw_ai, study.account)
     pronunciation_result = normalize_ai_pronunciation(
         result.pronunciation,
         result.text,
-        ai["provider"],
-        model=ai["model"],
-        connection=ai["connection"],
-        provider_label=ai["providerLabel"],
+        raw_ai["provider"],
+        model=raw_ai["model"],
+        connection=raw_ai["connection"],
+        provider_label=raw_ai["providerLabel"],
     )
+    if pronunciation_result is not None:
+        # T-055: se guarda el origen para poder ocultar la conexión de plataforma al mostrarla.
+        pronunciation_result["ownerType"] = raw_ai["ownerType"]
 
     try:
         draft = service.save_draft(
@@ -362,10 +375,10 @@ async def transcribe_answer_audio(
         "transcript": result.text,
         "durationMs": duration_ms,
         "savedAt": draft.updated_at,
-        "provider": result.connection.name,
+        "provider": ai["connection"],
         "ai": ai,
         "switched": result.switched,
-        "pronunciationResult": pronunciation_result,
+        "pronunciationResult": public_trace(db, pronunciation_result, study.account),
     }
 
 

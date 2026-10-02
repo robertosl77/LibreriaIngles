@@ -17,6 +17,7 @@ from app.ai.service import (
     active_connection,
     check_connection,
     connection_snapshot,
+    public_trace,
     provider_for,
     successful_requests,
 )
@@ -239,8 +240,8 @@ def active_connections(account: CurrentAccount, db: DbSession) -> dict:
     default = active_connection(db, account)
     audio = active_connection(db, account, audio=True)
     return {
-        "default": connection_snapshot(default) if default else None,
-        "audio": connection_snapshot(audio) if audio else None,
+        "default": public_trace(db, connection_snapshot(default), account) if default else None,
+        "audio": public_trace(db, connection_snapshot(audio), account) if audio else None,
     }
 
 

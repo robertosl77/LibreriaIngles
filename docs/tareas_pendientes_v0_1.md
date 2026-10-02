@@ -2153,7 +2153,7 @@ se muestra como opcional).
 ## T-055 — Pantalla "IA" según el servicio: no ofrecer configurar keys que no se usan
 
 **Prioridad:** P2 — Media (antes de otorgar servicios Plataforma a usuarios reales)  
-**Estado:** Pendiente (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
+**Estado:** Resuelta (PR #30 a `develop`) · Claude (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
 **Relación:** T-004 (membresías: servicio = vínculo + fuente de IA, bandera `ownKeys`
 required / optional / unused), T-054 (Híbrido sin keys propias), T-005 (keys de la empresa)
 
@@ -2177,11 +2177,27 @@ Híbrido      (optional)  → "Tu servicio" + Tus conexiones + Agregar conexión
 
 Criterios:
 - Con Plataforma no se ve el alta de conexiones; si el alumno ya tenía keys propias cargadas,
-  se avisa que quedan guardadas pero sin uso mientras dure el servicio (no se borran: al
-  vencer vuelve a usarlas).
+  las sigue viendo y administrando (editar/pausar/eliminar), con aviso de que quedan sin uso
+  mientras dure el servicio (no se borran: al vencer vuelve a usarlas).
 - "En uso ahora" solo nombra conexiones **propias**; si la que se usa es de plataforma o de
   empresa, dice genéricamente "IA de Librería Inglés" / "IA de tu empresa".
 - La API tampoco expone nombre/modelo de conexiones de plataforma a cuentas que no son el dueño.
+
+Hecho:
+
+```text
+Backend   public_trace(): toda traza de IA de plataforma sale como "IA de Librería Inglés"
+          (sin connectionId ni motor) para quien no es el dueño:
+          /ai/active · clase (generada por, generationAi) · corrección de cada ejercicio
+          · transcripción y pronunciación · mensajes de error ("Gemini interna: sin cuota")
+          Las trazas nuevas guardan ownerType; las viejas se resuelven por connectionId.
+          /me → ai.own cuenta las propias guardadas aunque el servicio no las use.
+Pantalla  IA con Plataforma: título "IA" + "Tu servicio", sin "Agregar conexión".
+          Si nunca cargó keys: no ve conexiones. Si ya tenía (pedido de Roberto): ve
+          "Tus conexiones guardadas" y puede editarlas, pausarlas o eliminarlas; aviso de que
+          no se usan mientras dure el servicio y vuelven a usarse al vencer.
+          Híbrido y Propias keys: como antes. "· motor X" solo si hay motor.
+```
 
 ---
 
@@ -2421,6 +2437,51 @@ Las campañas precargadas:
 **Criterio de aceptación:** el sistema puede ejecutar campañas tanto por eventos como por una
 programación independiente y configurable, y una empresa nueva recibe campañas de ejemplo inactivas
 que muestran al ADMIN cómo configurarlas dentro de su propio tenant.
+
+---
+
+## T-060 — Plataforma sin IA disponible: detectar el "fuera de servicio" y compensar al cliente
+
+**Prioridad:** P2 — Media (antes de cobrar o de otorgar Plataforma a muchos usuarios)  
+**Estado:** Para analizar / diseñar (pedido de Roberto, 2026-10-02)  
+**Relación:** T-004 (servicios y campañas: la compensación se otorga como una campaña),
+T-059 (scheduler de campañas), T-047 (avisos claros cuando no hay IA), T-049 (tokens y costo),
+T-051 (emails), T-053 (dashboard de consumo por cliente)
+
+Situación: un alumno con servicio **Plataforma** (o Híbrido cuando fallan sus keys) depende de las
+conexiones de sr.macros. Si **todas** las conexiones de plataforma quedan sin cuota, caídas o con
+key inválida, el alumno no puede generar clases y sus respuestas abiertas quedan "Esperando
+corrección", mientras **su servicio sigue corriendo** (los días se consumen igual).
+
+Comportamiento actual (ya probado en tests):
+
+```text
+Generar clase      → GENERATION_FAILED "No hay conexiones de IA disponibles"
+Corregir           → lo automático se corrige; lo abierto queda "Esperando corrección"
+                     y se reintenta al volver a entrar (si hay IA)
+Mensajes           → no nombran la conexión de plataforma (T-055)
+Registro           → cada fallo queda en ai_usage_events con su error_code
+```
+
+Qué falta:
+
+1. **Detectar el incidente**: registrar un "fuera de servicio de plataforma" cuando no queda ninguna
+   conexión de plataforma utilizable (inicio, fin, duración, causa: QUOTA / DOWN / AUTH…), y qué
+   cuentas con servicio Plataforma/Híbrido quedaron afectadas (intentaron usar IA y no pudieron).
+2. **Avisar**:
+   - a sr.macros (portal, y email con T-051) apenas empieza, para que reponga cuota o cambie de key;
+   - al alumno, con un mensaje claro ("La IA de Librería Inglés no está disponible en este
+     momento; tu trabajo queda guardado") en vez del error genérico (T-047).
+3. **Compensar al cliente** (devolución): por el tiempo fuera de servicio, extender la vigencia del
+   servicio o acreditar días/topes extra. Se otorga como una **campaña de compensación** (T-004
+   etapa 2 + scheduler de T-059), automática o aprobada por sr.macros desde el portal.
+
+Preguntas abiertas:
+- ¿Desde cuánto tiempo fuera de servicio corresponde compensar (ej. ≥ 1 h)?
+- ¿Compensar solo a quien intentó usar la IA durante el incidente, o a todos los que tenían el
+  servicio vigente?
+- ¿Compensación automática o propuesta para que sr.macros la apruebe?
+- ¿Qué se devuelve: horas/días de vigencia, tope extra, o crédito (cuando haya pagos)?
 
 ---
 

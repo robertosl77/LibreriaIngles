@@ -39,6 +39,7 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
   template: `
     <section class="card">
       <h2>{{ title() }}</h2>
+      @if (note()) { <p class="muted small note">{{ note() }}</p> }
       @if (loading()) {
         <p class="muted"><span class="spinner"></span></p>
       } @else if (connections().length === 0) {
@@ -159,6 +160,7 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
       }
     </section>
 
+    @if (allowCreate()) {
     <section class="card">
       <h2>Agregar conexión</h2>
       <form class="stack" (ngSubmit)="create()">
@@ -214,9 +216,11 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
         </div>
       </form>
     </section>
+    }
   `,
   styles: `
     :host { display: contents; }
+    .note { margin: -0.4rem 0 0.8rem; }
     .conn { align-items: flex-start; flex-wrap: wrap; }
     .conn-main { display: flex; flex-direction: column; gap: 0.35rem; flex: 1; min-width: 240px; }
     .conn-actions { justify-content: flex-end; }
@@ -246,6 +250,9 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
 export class ConnectionsManagerComponent implements OnInit {
   readonly scope = input<ConnectionScope>('account');
   readonly title = input('Tus conexiones');
+  /** false: solo se administran las existentes (ej. servicio Plataforma, T-055). */
+  readonly allowCreate = input(true);
+  readonly note = input<string | null>(null);
   readonly changed = output<void>();
 
   private readonly api = inject(ApiService);

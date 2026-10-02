@@ -151,6 +151,11 @@ Menú **Plataforma** → `/app/plataforma`.
   el servicio anterior. Al vencer, la cuenta vuelve a *Individual · propias keys* y ve un aviso
   durante 14 días. El tope diario cuenta pedidos exitosos a cualquier conexión de plataforma en
   las últimas 24 h; el alumno ve el % usado en *Tu servicio* (IA e Inicio).
+- **Privacidad de las conexiones de plataforma (T-055):** el alumno nunca ve nombre, proveedor
+  ni motor de una conexión de plataforma: en IA, en la clase, en cada corrección y en los
+  errores figura como *IA de Librería Inglés*. Con servicio *Plataforma*, el menú IA no ofrece
+  cargar keys nuevas; si ya tenía, las ve como "Tus conexiones guardadas" (puede editarlas o
+  borrarlas) y quedan sin uso hasta que venza el servicio.
 
 Migraciones: `0003_platform_ai_usage`, `0004_usage_model` y `0012_services`.
 

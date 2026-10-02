@@ -1,6 +1,7 @@
 """T-006: gestión de IA de plataforma, límites de consumo y registro de uso."""
 
 import pytest
+from app.ai.service import PLATFORM_LABEL
 from conftest import login
 
 API = "/api/v1"
@@ -85,8 +86,12 @@ def test_total_limit_falls_back_to_next_connection(client, membership) -> None:
         headers=owner,
     )
     student = _student(client, "alice@example.com")
-    assert client.post(f"{API}/classes", headers=student).json()["generatedBy"] == "Plataforma"
-    assert client.post(f"{API}/classes", headers=student).json()["generatedBy"] == "Respaldo"
+    for _ in range(2):
+        created = client.post(f"{API}/classes", headers=student).json()
+        assert created["generatedBy"] == PLATFORM_LABEL  # el alumno no ve qué conexión fue
+    # El dueño sí: la primera alcanzó su límite y la segunda clase salió por "Respaldo".
+    listed = client.get(f"{API}/ai/connections?scope=platform", headers=owner).json()
+    assert {c["name"]: c["usage24h"] for c in listed} == {"Plataforma": 1, "Respaldo": 1}
 
 
 def test_limit_can_be_changed_and_cleared(client) -> None:
