@@ -104,6 +104,11 @@ import { ToastService } from '../core/toast.service';
                     <span class="chip chip-bad">{{ area.name }} {{ area.score }}%</span>
                   }
                 }
+                @for (dimension of last.dimensions ?? []; track dimension.key) {
+                  @if (!dimension.passed) {
+                    <span class="chip chip-bad">{{ dimension.name }} {{ dimension.score }}%</span>
+                  }
+                }
               </p>
             }
 
@@ -116,7 +121,7 @@ import { ToastService } from '../core/toast.service';
               <p class="muted">
                 Tu práctica muestra que estás listo. Son {{ s.rules?.exercises }} ejercicios de todas
                 las áreas, sin lecciones. Para aprobar: {{ s.rules?.passScore }}% en total y al menos
-                {{ s.rules?.areaMinScore }}% en cada área.
+                {{ s.rules?.areaMinScore }}% en cada área y en Ortografía.
               </p>
             } @else {
               <p class="muted small">Para habilitar el examen necesitás cumplir ambos requisitos:</p>
