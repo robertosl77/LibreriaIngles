@@ -94,7 +94,7 @@ def test_spoken_answer_gets_estimated_pronunciation_end_to_end(client) -> None:
     with SessionLocal() as db:
         exercise = next(
             e for e in db.scalars(select(Exercise).where(Exercise.class_session_id == klass["id"]))
-            if e.exercise_type in {"fill_blank", "rewrite", "short_writing"}
+            if e.exercise_type in {"fill_blank", "rewrite", "short_writing", "conversation"}
         )
         exercise.response_mode = ResponseMode.SPEAK
         exercise_id = exercise.id
