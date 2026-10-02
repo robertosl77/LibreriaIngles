@@ -291,15 +291,25 @@ propio detalle; en híbrido, es la base de lo que se le factura. Necesario antes
 1. **Nombres y catálogo de servicios → panel de sr.macros.** El catálogo (filas × columnas) se
    configura en un panel del dueño, que permite agregar combinaciones nuevas a futuro y ponerles
    nombre. Nombres iniciales: **Individual** y **Corporativa**.
-2. **Usuarios que ya existen** al activar la etapa 1: *a definir* (ver explicación en el chat:
-   hoy no tienen membresía; al encender las membresías quedarían bloqueados si no reciben una).
-3. **Bienvenida → panel de sr.macros** (configurable). Valor inicial: **3 días corridos**. Tope de
-   pedidos: *a definir*.
-4. **Retención al año de vencida y avisos** → tarea aparte de fidelización (**T-049**).
-5. **Invitación = link.** Etapa 2 genera un link que sr.macros copia y manda como quiera
+2. **Usuarios que ya existen** al activar la etapa 1 (ej. robertosl77): se tratan **igual que
+   una membresía vencida**: entran, ven clases, resultados, progreso, historial y certificados,
+   pero no pueden crear clases ni exámenes hasta tener una membresía (sr.macros se la asigna desde
+   su panel). No se borra nada ni hay que reconfigurar las API keys.
+3. **Bienvenida → panel de sr.macros** (configurable). Valor inicial: **3 días corridos**.
+4. **Tope de consumo por TOKENS por día** (no por cantidad de pedidos), configurable por servicio
+   en el panel de sr.macros. Aplica a la bienvenida y a **todo lo que use las keys de la
+   plataforma** (servicio plataforma y la parte de plataforma del híbrido): el precio del servicio
+   tiene que cubrir el gasto de tokens. Frena abusos y bots.
+   - Depende de T-048 (registro de tokens). Hasta tenerlo, tope provisorio por cantidad de pedidos.
+   - Al alumno se le muestra en porcentaje ("usaste el 80 % de tu IA de hoy"), no en tokens.
+   - El tope se controla al **crear** una clase: una clase empezada se puede terminar y corregir
+     aunque se pase un poco, para no dejarla a medias.
+5. **Retención:** al año de vencida se **borra todo** (sin anonimizar). Avisos previos y
+   fidelización → tarea aparte (**T-049**).
+6. **Invitación = link.** Etapa 2 genera un link que sr.macros copia y manda como quiera
    (WhatsApp, etc.). El envío masivo por email es otra tarea (**T-050**); el email también
    llevará el mismo link.
-6. **Dos membresías a la vez** (ej. pagó su individual hasta el 15/10 y el 01/10 su empresa lo
+7. **Dos membresías a la vez** (ej. pagó su individual hasta el 15/10 y el 01/10 su empresa lo
    invita a una corporativa):
    - Si el alumno **mantiene separados** su estudio personal y el corporativo → siguen las dos,
      cada una con sus clases y su progreso.
@@ -308,7 +318,7 @@ propio detalle; en híbrido, es la base de lo que se le factura. Necesario antes
      cuenta, visible en la página, y puede usarlo más adelante o regalarlo a un amigo
      (es una invitación por los días que le quedaban).
    - Requiere definir el flujo "¿unificás tu estudio personal con el de tu empresa?" (etapa 4).
-7. **Tabla de precios por modelo** (para estimar costo con los tokens): la mantiene sr.macros en
+8. **Tabla de precios por modelo** (para estimar costo con los tokens): la mantiene sr.macros en
    su portal. Más adelante (T-048).
 
 ---
@@ -1877,9 +1887,8 @@ modelo), pero **sin tokens** y solo lo ve sr.macros.
 
 Ideas anotadas para no perderlas (Roberto, 2026-10-01):
 
-1. **Retención:** los datos de una membresía vencida se guardan 1 año. Al cumplirse, definir si se
-   borran o se **anonimizan** (se quita lo que identifica a la persona —email, nombre— y se
-   conservan solo estadísticas sin dueño, para métricas de la app).
+1. **Retención:** los datos de una membresía vencida se guardan 1 año. Al cumplirse **se borra
+   todo** (decisión de Roberto: no se anonimiza).
 2. **Aviso antes de perder los datos:** email un mes antes ("tus datos pueden perderse").
 3. **Campañas de fidelización:** ej. "dejaste de pagar hace 3 meses → 20 % de descuento".
 
