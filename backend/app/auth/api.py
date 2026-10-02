@@ -5,8 +5,8 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
 from app.accounts.models import AuthMethod, PlatformRole
-from app.ai.models import AIConnection, AIConnectionOwnerType, utcnow
-from app.ai.service import LIMIT_WINDOW, ai_sources, candidate_connections, platform_requests
+from app.ai.models import AIConnection, AIConnectionOwnerType
+from app.ai.service import ai_sources, candidate_connections
 from app.auth import service
 from app.core.config import settings
 from app.core.deps import CurrentStudy, DbSession
@@ -122,10 +122,6 @@ def _me_payload(study, db) -> dict:
         # El dueño no tiene servicio: usa sus keys y las de la plataforma (T-004: "empresa dueña").
         service_payload.update(
             name="Dueño de la plataforma", source="HYBRID", ownKeys="optional", granted=False
-        )
-    if service.daily_request_limit is not None:
-        service_payload["platformRequests24h"] = platform_requests(
-            db, account.id, since=utcnow() - LIMIT_WINDOW
         )
     return {
         "account": {
