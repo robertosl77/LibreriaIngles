@@ -167,97 +167,115 @@ No eliminar el modelo PLATFORM/HYBRID; solamente evitar que se active antes de i
 
 ---
 
-## T-004 — Membresías: qué tiene cada usuario, con qué IA y hasta cuándo
+## T-004 — Membresías, servicios, campañas e invitaciones
 
 **Prioridad:** P1 — Alta (antes de publicar la app o cobrar)  
-**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · implementación por etapas  
+**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · implementación por etapas, no iniciada  
 **Responsable:** Claude  
 **Relación:** T-003 (cada usuario usa solo su IA propia: hoy decide `platform_ai_allowed()`),
 T-005 (conexiones de IA de una organización), T-006 (portal del dueño con las keys de
-plataforma), T-048 (registro de tokens y costo por uso)
+plataforma), T-048 (tokens y costo por uso), T-049 (fidelización), T-050 (emails)
 
-Base existente sin usar (migración inicial): tablas `plans` (con `ai_source` BYOK / PLATFORM /
-HYBRID), `subscriptions` (cuenta u organización, estado, fechas), `organizations`,
-`memberships` (ADMIN/STUDENT) e `invitations`. No hay que inventar el modelo: hay que encenderlo.
+Base existente sin usar (migración inicial): tablas `plans` (`ai_source` BYOK / PLATFORM / HYBRID),
+`subscriptions` (cuenta u organización, estado, fechas), `organizations`, `memberships`
+(ADMIN/STUDENT) e `invitations`. Se reutilizan; los nombres de tablas pueden ajustarse.
 
-### 1. El modelo: cinco cosas separadas
+### 1. El modelo
 
 ```text
-QUÉ tenés        → MEMBRESÍA   individual | corporativa
-CON QUÉ IA       → FUENTE      BYOK | PLATAFORMA | HÍBRIDO
-CÓMO te llegó    → ORIGEN      bienvenida | invitación | pago (futuro)
-HASTA CUÁNDO     → VIGENCIA    desde → hasta (nada es para siempre)
-CUÁNTO           → COSTO       (futuro) por servicio + uso variable
+VÍNCULO      (no se elige: se deduce)
+   ¿vino invitado por una empresa?  sí → CORPORATIVO (empresa X)
+                                    no → PERSONAL (cliente independiente, "sin empresa")
+
+FUENTE DE IA (lo único que elige la persona)
+   BYOK        → sus propias keys (corporativo: las keys que carga la empresa)
+   PLATAFORMA  → las keys de sr.macros
+   HÍBRIDO     → las propias primero; si fallan de fondo, las de sr.macros
+
+SERVICIO     = vínculo + fuente + vigencia + tope de tokens + costo (futuro)
+
+OTORGAMIENTO (cómo alguien recibe un servicio)
+   PAGO        → lo contrata el cliente (futuro)
+   INVITACIÓN  → a una persona puntual, por link
+   CAMPAÑA     → automático a un grupo (ej. "todos los que se registren desde hoy")
 ```
 
-**Servicio = cruce de fila (membresía) y columna (fuente).** Cada celda tendrá su costo:
+- **La membresía no se elige.** Personal o corporativa se deduce de si la persona vino por una
+  empresa. Es un ordenamiento interno de configuraciones, no una opción para el usuario.
+- **Hoy (sin pagos):** vínculo + fuente y ya funciona. **Con pagos:** triple restricción
+  vínculo × fuente × pago (el pago habilita el servicio por un período, ej. mensual).
+- Analogías: AWS (base fija + uso variable) y el celular (cuenta controlada / línea libre).
+
+### 2. Servicios (catálogo configurable por sr.macros)
+
+Cada combinación vínculo × fuente es un servicio que después tendrá su costo:
 
 ```text
                 │ BYOK              │ PLATAFORMA          │ HÍBRIDO
-                │ (keys propias)    │ (keys de sr.macros) │ (propias → si fallan, sr.macros)
-────────────────┼───────────────────┼─────────────────────┼──────────────────────────────
-INDIVIDUAL      │ servicio A        │ servicio B          │ servicio C
-CORPORATIVA     │ servicio D        │ servicio E          │ servicio F
+────────────────┼───────────────────┼─────────────────────┼──────────────────────
+PERSONAL        │ servicio A        │ servicio B          │ servicio C
+CORPORATIVO     │ servicio D        │ servicio E          │ servicio F
 ```
 
-- **BYOK individual:** las keys que carga la persona.
-- **BYOK corporativa:** las keys que carga **la empresa** para todos sus empleados (la empresa
-  paga la capacitación, no el empleado) → requiere T-005.
-- **PLATAFORMA:** las keys de sr.macros (portal T-006). Costo futuro: cuota mensual fija estimada
-  para no perder con los tokens.
-- **HÍBRIDO:** primero las propias (o las de la empresa); si fallan, las de sr.macros. Costo
-  futuro: base + **uso a demanda** de sr.macros, detallado como en una factura (modelo AWS /
-  "línea libre" del celular).
+- **Panel de servicios de sr.macros:** crear/editar servicios (nombre, vínculo, fuente, duración,
+  tope de tokens por día, costo futuro). Permite agregar combinaciones nuevas más adelante.
+  Nombres iniciales: **Individual** y **Corporativa**.
+- **Costos (futuro):** PLATAFORMA = cuota fija estimada para cubrir los tokens; HÍBRIDO = base +
+  uso a demanda de sr.macros, detallado como factura (T-048).
+- **BYOK corporativo:** las keys las carga la empresa (paga la capacitación, no el empleado) →
+  requiere T-005.
 
-### 2. Membresía (lo que tiene cada persona)
+### 3. Campañas (sr.macros otorga un servicio automáticamente a un grupo)
 
 ```text
-membresía = servicio (fila + columna) + vigencia (desde → hasta) + estado + origen + quién paga
+CAMPAÑA
+  servicio     → uno del catálogo (ej. PERSONAL + PLATAFORMA, sin costo, 3 días, tope chico)
+  para quién   → ej. personas registradas a partir de que se activa la campaña
+  estado       → activa / pausada / terminada
 ```
 
-- **Vigencia = duración del servicio** (no historial de pagos). Ej.: arranca el 07/10 con una
-  invitación de 7 días → último día 14/10. Una membresía paga es mensual: 07/10 → 07/11.
-- **Quién paga:** individual → la persona; corporativa → la empresa.
-- **Sin pago, se corta:** individual o corporativa, al vencer sin pagar se termina el servicio
-  (como un plan mensual). Débito automático: se verá con los pagos.
-- El historial de pagos/cancelaciones es otra cosa, para cuando existan los pagos.
-- `sr.macros` (PLATFORM_OWNER) no vence nunca.
+- **Panel de campañas de sr.macros.** Una campaña se alimenta de un servicio del catálogo.
+- **La bienvenida es la primera campaña** (no algo fijo en el código): PERSONAL + PLATAFORMA,
+  sin costo, **3 días corridos**, con tope de tokens. Deja probar la app sin saber qué es una API
+  key. Como PedidosYa: cupones a todos al principio; después solo para fidelizar (T-049).
 
-### 3. Invitación (servicio aparte que otorga una membresía)
+### 4. Invitaciones (sr.macros o una empresa otorgan un servicio a una persona)
 
 ```text
 INVITACIÓN
-  quién invita  → sr.macros | una empresa (futuro: un usuario con invitaciones de regalo)
-  qué otorga    → fila (individual / corporativa) + columna (BYOK / plataforma / híbrido)
-  duración      → los días que elija quien invita (7, 30, 90…)
-  costo         → sin costo (cortesía) | tarifa del servicio (cuando haya pagos)
+  quién invita  → sr.macros | una empresa (futuro: usuarios con invitaciones de regalo)
+  servicio      → uno del catálogo (vínculo + fuente + días + costo)
+  cómo llega    → un LINK que se copia y se manda como quiera (WhatsApp, etc.)
+                  el envío por email (T-050) llevará el mismo link
 
-Ej.: sr.macros → amigo:    INDIVIDUAL + PLATAFORMA, 30 días, sin costo
-     Empresa X → empleado:  CORPORATIVA + HÍBRIDO, mensual, la paga la empresa
+Ej.: sr.macros → amigo:    PERSONAL + PLATAFORMA, 30 días, sin costo
+     Empresa X → empleado:  CORPORATIVO + HÍBRIDO, mensual, la paga la empresa
 ```
 
-La invitación **no es** una membresía: es el medio para otorgarla.
+La invitación no es una membresía: es el medio para otorgar un servicio. La corporativa llega al
+email corporativo (unir cuentas personal/corporativa de una misma persona, por ejemplo por DNI,
+queda por ver).
 
-### 4. Bienvenida (primera vez que alguien entra)
-
-La bienvenida es un servicio que se otorga automáticamente al primer ingreso:
+### 5. Estructura: sr.macros como "empresa dueña"
 
 ```text
-nuevo usuario → BIENVENIDA: INDIVIDUAL + PLATAFORMA, pocos días (ej. 3), tope chico de uso
-                (ej. 20 pedidos) → prueba la app sin saber qué es una API key
-             → al vencer: contrata el servicio que corresponda (fila + columna)
+Librería Inglés (sr.macros, OWNER)  → servicios, campañas, invitaciones, keys de plataforma
+Empresa X (ADMIN / STUDENT)         → invitaciones a empleados, keys de la empresa (T-005)
+Cliente personal                    → "sin empresa" (NO es miembro de Librería Inglés:
+                                       un ADMIN ve la actividad de sus miembros y eso no aplica)
 ```
 
-Solo la bienvenida usa plataforma con tope; después rige el servicio elegido. Motivo: cargar una
-API key es una barrera enorme para un alumno común; BYOK queda como servicio para técnicos.
+### 6. Vigencia y vencimiento
 
-### 5. Al vencer
+- **Vigencia = duración del servicio otorgado** (invitación de 7 días: 07/10 → 14/10; pago
+  mensual: 07/10 → 07/11). El historial de pagos es otra cosa (con los pagos).
+- **Al vencer:** puede **ver** clases, resultados, progreso, historial y certificados; **no puede
+  crear** clases ni exámenes hasta renovar.
+- **Retención:** al año de vencida **se borra todo** (avisos previos: T-049).
+- **Usuarios que ya existen** (ej. robertosl77): son PERSONAL + BYOK → siguen funcionando, sin
+  borrar nada ni reconfigurar keys. sr.macros (OWNER) no vence nunca.
 
-- Puede **ver** su progreso, historial y certificados; **no puede crear clases nuevas** hasta
-  renovar (no se secuestran sus datos).
-- Los datos se conservan **1 año** después del vencimiento, no para siempre.
-
-### 6. Híbrido: cuándo salta a las keys de sr.macros
+### 7. Híbrido: cuándo salta a las keys de sr.macros
 
 ```text
 falla temporal (caída, red, rate limit)  → NO salta: reintenta con las propias al rato
@@ -268,58 +286,53 @@ siempre:
   · cada 10-15 min se prueban (ping) las propias para volver a ellas cuando respondan
 ```
 
-### 7. Consumo de tokens (T-048)
+### 8. Topes y frenos (para no perder plata ni sufrir abusos)
 
-Se registra en **todas** las configuraciones (BYOK, plataforma e híbrido): cuándo, proveedor,
-modelo, operación (generar clase, corregir ejercicio, transcribir…) y tokens. El cliente ve su
-propio detalle; en híbrido, es la base de lo que se le factura. Necesario antes de vender híbrido.
+1. **Tope de TOKENS por día** (no por cantidad de pedidos), configurable por servicio. Aplica a
+   todo lo que usa las keys de sr.macros: campañas (bienvenida), servicio plataforma y la parte de
+   plataforma del híbrido. Depende de T-048; hasta tenerlo, tope provisorio por pedidos.
+2. **Generar una clase ya gasta tokens del tope:** crear clases y no terminarlas consume el tope
+   igual (se frena solo).
+3. **Máximo de clases abiertas a la vez** (ej. 3, configurable): para crear otra, terminá o
+   descartá una.
+4. El tope se controla al **crear**: una clase ya generada se puede terminar y corregir aunque se
+   pase un poco (es acotado: ~6 ejercicios).
+5. Al alumno se le muestra en porcentaje ("usaste el 80 % de tu IA de hoy"), nunca en tokens.
 
-### 8. Etapas (de a una)
+### 9. Consumo de tokens (T-048)
+
+Se registra en **todas** las fuentes: cuándo, proveedor, modelo, operación y tokens. El cliente ve
+su propio detalle; en híbrido es la base de la factura. La tabla de precios por modelo la mantiene
+sr.macros en su portal (más adelante).
+
+### 10. Dos vínculos a la vez (personal pagado + corporativo nuevo)
+
+Ej.: pagó su individual hasta el 15/10 y el 01/10 su empresa lo invita.
+
+- **Mantiene separados** su estudio personal y el corporativo → siguen los dos, cada uno con sus
+  clases y su progreso.
+- **Unifica** su estudio → manda el corporativo y los días pagados que le quedaban se convierten
+  en un **código de crédito** (cupón): queda guardado y visible en su cuenta; puede usarlo más
+  adelante o regalarlo a un amigo (es una invitación por esos días).
+
+### 11. Etapas (de a una, cada una con su OK)
 
 ```text
-1. Membresía con vigencia + bienvenida + qué pasa al vencer       (sin pagos)
-   · platform_ai_allowed() pasa a mirar la membresía efectiva
-   · portal de sr.macros: ver y extender membresías a mano
-2. Invitaciones de sr.macros (individual, fuente, días, sin costo)
-3. Registro de tokens y costo por uso (T-048)                       ← antes de vender híbrido
-4. Corporativa (con T-005: keys de la empresa) e invitaciones de empresa
-5. Pagos (otro origen de membresía; débito automático a definir)
+1. Servicios: catálogo + panel de sr.macros; vínculo y fuente efectivos;
+   platform_ai_allowed() pasa a mirar el servicio vigente; vencimiento en solo lectura
+2. Campañas: panel + bienvenida (3 días, plataforma, tope provisorio por pedidos)
+3. Invitaciones de sr.macros por link
+4. Tokens y costo por uso (T-048) → topes por tokens, frenos de clases abiertas, detalle al cliente
+5. Corporativo: empresas, keys de la empresa (T-005), invitaciones de empresa, unificar/separar
+6. Pagos (otro otorgamiento; débito automático a definir)
 ```
 
-### 9. Decisiones y pendientes (Roberto, 2026-10-01)
+### 12. Pendiente de definir más adelante
 
-1. **Nombres y catálogo de servicios → panel de sr.macros.** El catálogo (filas × columnas) se
-   configura en un panel del dueño, que permite agregar combinaciones nuevas a futuro y ponerles
-   nombre. Nombres iniciales: **Individual** y **Corporativa**.
-2. **Usuarios que ya existen** al activar la etapa 1 (ej. robertosl77): se tratan **igual que
-   una membresía vencida**: entran, ven clases, resultados, progreso, historial y certificados,
-   pero no pueden crear clases ni exámenes hasta tener una membresía (sr.macros se la asigna desde
-   su panel). No se borra nada ni hay que reconfigurar las API keys.
-3. **Bienvenida → panel de sr.macros** (configurable). Valor inicial: **3 días corridos**.
-4. **Tope de consumo por TOKENS por día** (no por cantidad de pedidos), configurable por servicio
-   en el panel de sr.macros. Aplica a la bienvenida y a **todo lo que use las keys de la
-   plataforma** (servicio plataforma y la parte de plataforma del híbrido): el precio del servicio
-   tiene que cubrir el gasto de tokens. Frena abusos y bots.
-   - Depende de T-048 (registro de tokens). Hasta tenerlo, tope provisorio por cantidad de pedidos.
-   - Al alumno se le muestra en porcentaje ("usaste el 80 % de tu IA de hoy"), no en tokens.
-   - El tope se controla al **crear** una clase: una clase empezada se puede terminar y corregir
-     aunque se pase un poco, para no dejarla a medias.
-5. **Retención:** al año de vencida se **borra todo** (sin anonimizar). Avisos previos y
-   fidelización → tarea aparte (**T-049**).
-6. **Invitación = link.** Etapa 2 genera un link que sr.macros copia y manda como quiera
-   (WhatsApp, etc.). El envío masivo por email es otra tarea (**T-050**); el email también
-   llevará el mismo link.
-7. **Dos membresías a la vez** (ej. pagó su individual hasta el 15/10 y el 01/10 su empresa lo
-   invita a una corporativa):
-   - Si el alumno **mantiene separados** su estudio personal y el corporativo → siguen las dos,
-     cada una con sus clases y su progreso.
-   - Si **unifica** su estudio → manda la corporativa y los días ya pagados de la individual se
-     convierten en un **código de crédito** (como un cupón de compensación): queda guardado en su
-     cuenta, visible en la página, y puede usarlo más adelante o regalarlo a un amigo
-     (es una invitación por los días que le quedaban).
-   - Requiere definir el flujo "¿unificás tu estudio personal con el de tu empresa?" (etapa 4).
-8. **Tabla de precios por modelo** (para estimar costo con los tokens): la mantiene sr.macros en
-   su portal. Más adelante (T-048).
+- Nombres comerciales definitivos de los servicios.
+- Tope inicial de la bienvenida (tokens/día) y máximo de clases abiertas.
+- Unión de cuentas personal/corporativa de una misma persona (¿por DNI?).
+- Débito automático y medios de pago.
 
 ---
 
