@@ -172,6 +172,10 @@ function numberOrNull(value: unknown): number | null {
                   @if (a.service.granted) {
                     <button class="btn btn-sm btn-danger" type="button" (click)="revoke(a)" [disabled]="busyId() === a.id">Quitar</button>
                   }
+                  @if (a.devPurgeAllowed) {
+                    <button class="btn btn-sm btn-danger" type="button" (click)="purge(a)"
+                      [disabled]="busyId() === a.id">Eliminar cuenta (DEV)</button>
+                  }
                 }
               </div>
               @if (grantingId() === a.id) {
@@ -340,6 +344,27 @@ export class ServicesAdminComponent implements OnInit {
       this.replace(await firstValueFrom(this.api.revokeService(a.id)));
       this.toast.success('Servicio quitado.');
       await this.afterChange(a);
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    } finally {
+      this.busyId.set(null);
+    }
+  }
+
+  async purge(a: PlatformAccount): Promise<void> {
+    const confirmed = confirm(
+      'DEV: ¿Eliminar completamente ' + a.email + '?\n\n' +
+      'Se borrarán cuenta, perfil, clases, progreso, intentos, IA, campañas recibidas y servicios. ' +
+      'Esta acción no se puede deshacer.'
+    );
+    if (!confirmed) return;
+
+    this.busyId.set(a.id);
+    try {
+      await firstValueFrom(this.api.devPurgePlatformAccount(a.id));
+      this.accounts.update((list) => list.filter((item) => item.id !== a.id));
+      this.toast.success(a.email + ' fue eliminada completamente.');
+      await this.loadServices();
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {

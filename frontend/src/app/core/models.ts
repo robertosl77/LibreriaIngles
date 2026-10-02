@@ -68,6 +68,7 @@ export interface PlatformAccount {
   isPlatformOwner: boolean;
   createdAt: string;
   firstLoginAt: string | null;
+  devPurgeAllowed: boolean;
   ownConnections: number;
   platformRequests24h: number;
   service: ServiceStatus;

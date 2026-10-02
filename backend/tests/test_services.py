@@ -210,3 +210,76 @@ def test_platform_errors_do_not_name_platform_connections(client) -> None:
     failed = _new_class(client, alice)
     assert failed["status"] == "GENERATION_FAILED"
     assert "Gemini interna" not in failed["generationError"]
+
+
+def test_dev_purge_account_removes_personal_history_and_never_owner(client) -> None:
+    from sqlalchemy import select
+
+    from app.accounts.models import Account
+    from app.campaigns.models import CampaignGrant
+    from app.db import SessionLocal
+    from app.study_profiles.models import AccountStudyProfile, StudyProfile
+    from app.subscriptions.models import Subscription
+
+    owner = login(client, OWNER)
+    client.get(f"{API}/platform/services", headers=owner)
+
+    with SessionLocal() as db:
+        owner_account = db.scalar(select(Account).where(Account.email == OWNER))
+        assert owner_account is not None
+        owner_id = owner_account.id
+    blocked = client.delete(f"{API}/platform/accounts/{owner_id}/dev-purge", headers=owner)
+    assert blocked.status_code == 409
+
+    campaigns = client.get(f"{API}/platform/campaigns", headers=owner).json()
+    welcome = next(row for row in campaigns if row["code"] == "WELCOME_PLATFORM")
+    assert client.post(
+        f"{API}/platform/campaigns/{welcome['id']}/activate", headers=owner
+    ).status_code == 200
+
+    user_headers = login(client, "purge-me@example.com")
+    assert client.get(f"{API}/me", headers=user_headers).json()["service"]["origin"] == "CAMPAIGN"
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "purge-me@example.com"))
+        assert account is not None
+        account_id = account.id
+        profile_id = db.scalar(
+            select(AccountStudyProfile.study_profile_id).where(
+                AccountStudyProfile.account_id == account_id
+            )
+        )
+        assert profile_id is not None
+        assert db.scalar(
+            select(CampaignGrant.id).where(CampaignGrant.account_id == account_id)
+        ) is not None
+        assert db.scalar(
+            select(Subscription.id).where(Subscription.account_id == account_id)
+        ) is not None
+
+    response = client.delete(f"{API}/platform/accounts/{account_id}/dev-purge", headers=owner)
+    assert response.status_code == 204, response.text
+
+    with SessionLocal() as db:
+        assert db.get(Account, account_id) is None
+        assert db.get(StudyProfile, profile_id) is None
+        assert db.scalar(
+            select(AccountStudyProfile.account_id).where(
+                AccountStudyProfile.account_id == account_id
+            )
+        ) is None
+        assert db.scalar(
+            select(CampaignGrant.id).where(CampaignGrant.account_id == account_id)
+        ) is None
+        assert db.scalar(
+            select(Subscription.id).where(Subscription.account_id == account_id)
+        ) is None
+
+
+def test_dev_account_purge_flag_is_disabled_in_qa_and_production() -> None:
+    from app.core.config import Settings
+
+    assert Settings(app_env="local").dev_account_purge_allowed is True
+    assert Settings(app_env="test").dev_account_purge_allowed is True
+    assert Settings(app_env="qa").dev_account_purge_allowed is False
+    assert Settings(app_env="production").dev_account_purge_allowed is False

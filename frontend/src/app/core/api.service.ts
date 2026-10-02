@@ -279,6 +279,10 @@ export class ApiService {
     return this.http.delete<PlatformAccount>(`${this.base}/platform/accounts/${accountId}/service`);
   }
 
+  devPurgePlatformAccount(accountId: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/platform/accounts/${accountId}/dev-purge`);
+  }
+
   // Campañas (T-004 etapa 2)
   platformCampaigns(): Observable<PlatformCampaign[]> {
     return this.http.get<PlatformCampaign[]>(`${this.base}/platform/campaigns`);
