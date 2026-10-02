@@ -2472,16 +2472,43 @@ Qué falta:
    - a sr.macros (portal, y email con T-051) apenas empieza, para que reponga cuota o cambie de key;
    - al alumno, con un mensaje claro ("La IA de Librería Inglés no está disponible en este
      momento; tu trabajo queda guardado") en vez del error genérico (T-047).
-3. **Compensar al cliente** (devolución): por el tiempo fuera de servicio, extender la vigencia del
-   servicio o acreditar días/topes extra. Se otorga como una **campaña de compensación** (T-004
-   etapa 2 + scheduler de T-059), automática o aprobada por sr.macros desde el portal.
+3. **Compensar al cliente** (devolución), **automáticamente**, como una **campaña de
+   compensación** (T-004 etapa 2 + scheduler de T-059).
 
-Preguntas abiertas:
-- ¿Desde cuánto tiempo fuera de servicio corresponde compensar (ej. ≥ 1 h)?
-- ¿Compensar solo a quien intentó usar la IA durante el incidente, o a todos los que tenían el
-  servicio vigente?
-- ¿Compensación automática o propuesta para que sr.macros la apruebe?
-- ¿Qué se devuelve: horas/días de vigencia, tope extra, o crédito (cuando haya pagos)?
+Definiciones de Roberto (2026-10-02):
+
+```text
+¿A quién se compensa?   POR PEDIDO: solo a quien hizo un pedido a la IA de plataforma
+                        (generar clase, examen, corregir, transcribir…) y falló porque no
+                        había ninguna conexión de plataforma disponible.
+¿Quién decide?          AUTOMÁTICO. sr.macros no gestiona compensaciones a mano.
+```
+
+⚠️ **A analizar — ¿desde cuándo y hasta cuándo cuenta el fuera de servicio?**
+
+```text
+Desde   el primer pedido que falla (el fallo del pedido abre el incidente)
+Hasta   ⚠️ NO puede ser "el próximo pedido OK" del alumno: si se queda sin IA y no vuelve
+        en una semana, el sistema contaría toda esa semana como fuera de servicio.
+Idea    un proceso batch (scheduler, ver T-059) que pruebe periódicamente las conexiones
+        de plataforma (health check) y, apenas una vuelve a responder, CIERRA el incidente
+        y corta la compensación. La duración real = apertura → reactivación detectada.
+```
+
+A definir: cada cuánto prueba el batch, si los health checks consumen cuota del proveedor,
+y si el incidente es global (toda la plataforma) o por fuente/servicio.
+
+⚠️ **A analizar — ¿qué se devuelve?**
+
+Si se copia el modelo de consumo por pedidos (T-004 tope diario; T-049 tokens/costo), la
+compensación podría ser:
+
+- tiempo de vigencia extra (horas/días),
+- pedidos/tope extra,
+- **cupón** (código canjeable, como la conversión de días a crédito de T-004 §10),
+- **dinero en cuenta** (cuando existan pagos, T-004 etapa 6).
+
+Queda abierto cuál (o cuáles) y cómo se calcula el monto en cada caso.
 
 ---
 
