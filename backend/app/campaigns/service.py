@@ -87,28 +87,15 @@ def _within_window(campaign: Campaign, now: datetime) -> bool:
     return (starts is None or starts <= now) and (ends is None or now < ends)
 
 
-def _first_login_matches(db: Session, campaign: Campaign, account: Account) -> bool:
-    """FIRST_LOGIN se decide con hechos persistidos y no con un boolean efímero del request.
+def _first_login_matches(campaign: Campaign, account: Account) -> bool:
+    """FIRST_LOGIN pertenece al período de activación actual.
 
-    Para campañas que ya estaban activas antes de que existiera activated_at, el backfill pudo
-    quedar más tarde que el inicio real. Un beneficio ya otorgado es evidencia inequívoca de que la
-    campaña estaba activa en ese momento, por lo que usamos el grant más antiguo como piso histórico
-    conservador."""
+    Al pausar y reactivar, activated_at se reinicia: una cuenta cuyo primer login ocurrió
+    durante la pausa no puede volverse elegible retroactivamente.
+    """
     first_login = _as_utc(account.first_login_at)
     activated = _as_utc(campaign.activated_at)
-    first_grant = _as_utc(
-        db.scalar(
-            select(CampaignGrant.applied_at)
-            .where(CampaignGrant.campaign_id == campaign.id)
-            .order_by(CampaignGrant.applied_at.asc(), CampaignGrant.id.asc())
-            .limit(1)
-        )
-    )
-    activation_floor = activated
-    if first_grant is not None and (activation_floor is None or first_grant < activation_floor):
-        activation_floor = first_grant
-
-    if first_login is None or activation_floor is None or first_login < activation_floor:
+    if first_login is None or activated is None or first_login < activated:
         return False
 
     starts = _as_utc(campaign.starts_at)
@@ -118,7 +105,6 @@ def _first_login_matches(db: Session, campaign: Campaign, account: Account) -> b
     if ends is not None and first_login >= ends:
         return False
     return True
-
 
 def _compare_number(actual: int | float, operator: str, expected: int | float) -> bool:
     if operator == "EQ":
@@ -180,7 +166,11 @@ def _rule_matches(db: Session, account: Account, rule: dict, now: datetime) -> b
 def _available_for_account(
     db: Session, campaign: Campaign, account: Account, *, now: datetime
 ) -> bool:
-    if campaign.status != CampaignStatus.ACTIVE or not _within_window(campaign, now):
+    if (
+        campaign.deleted_at is not None
+        or campaign.status != CampaignStatus.ACTIVE
+        or not _within_window(campaign, now)
+    ):
         return False
     if not _scope_matches(db, campaign, account):
         return False
@@ -196,7 +186,7 @@ def eligible(db: Session, campaign: Campaign, account: Account, *, now: datetime
     now = now or utcnow()
     if not _available_for_account(db, campaign, account, now=now):
         return False
-    if campaign.trigger == CampaignTrigger.FIRST_LOGIN and not _first_login_matches(db, campaign, account):
+    if campaign.trigger == CampaignTrigger.FIRST_LOGIN and not _first_login_matches(campaign, account):
         return False
     eligibility = campaign.eligibility or {"mode": "ALL", "rules": []}
     # Hoy solo ALL/AND. El JSON ya deja espacio para grupos OR cuando se defina su UX.
@@ -315,6 +305,7 @@ def _evaluate_campaigns(
         select(Campaign)
         .where(
             Campaign.status == CampaignStatus.ACTIVE,
+            Campaign.deleted_at.is_(None),
             Campaign.trigger.in_(triggers),
         )
         .order_by(Campaign.priority.asc(), Campaign.id.asc())

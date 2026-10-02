@@ -152,6 +152,7 @@ def _overlap_warnings(db: DbSession, campaign: Campaign) -> list[dict]:
             scope_filter,
             Campaign.trigger == campaign.trigger,
             Campaign.status != CampaignStatus.ENDED,
+            Campaign.deleted_at.is_(None),
         )
     ).all()
     return [
@@ -204,7 +205,11 @@ def _out(db: DbSession, campaign: Campaign) -> dict:
 
 def _campaign(db: DbSession, campaign_id: int) -> Campaign:
     campaign = db.get(Campaign, campaign_id)
-    if campaign is None or campaign.organization_id is not None:
+    if (
+        campaign is None
+        or campaign.organization_id is not None
+        or campaign.deleted_at is not None
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaña inexistente.")
     return campaign
 
@@ -215,7 +220,10 @@ def list_campaigns(_: PlatformOwner, db: DbSession) -> list[dict]:
     db.commit()
     campaigns = db.scalars(
         select(Campaign)
-        .where(Campaign.organization_id.is_(None))
+        .where(
+            Campaign.organization_id.is_(None),
+            Campaign.deleted_at.is_(None),
+        )
         .order_by(Campaign.priority.asc(), Campaign.id.asc())
     ).all()
     return [_out(db, campaign) for campaign in campaigns]
@@ -250,6 +258,8 @@ def update_campaign(
 @router.post("/{campaign_id}/activate")
 def activate_campaign(campaign_id: int, _: PlatformOwner, db: DbSession) -> dict:
     campaign = _campaign(db, campaign_id)
+    if campaign.status == CampaignStatus.ENDED:
+        raise HTTPException(409, "Una campaña terminada no se puede reactivar.")
     plan = _plan(db, campaign.plan_id)
     if not plan.active:
         raise HTTPException(409, "El servicio de la campaña está inactivo.")
@@ -278,3 +288,24 @@ def finish_campaign(campaign_id: int, _: PlatformOwner, db: DbSession) -> dict:
     campaign.status = CampaignStatus.ENDED
     db.commit()
     return _out(db, campaign)
+
+
+@router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_campaign(campaign_id: int, _: PlatformOwner, db: DbSession) -> None:
+    """Eliminar solo campañas terminadas.
+
+    Sin beneficiarios se borra físicamente. Con beneficiarios se oculta lógicamente para conservar
+    CampaignGrant como historial/idempotencia.
+    """
+    campaign = _campaign(db, campaign_id)
+    if campaign.status != CampaignStatus.ENDED:
+        raise HTTPException(409, "Solo se puede eliminar una campaña terminada.")
+
+    recipients = db.scalar(
+        select(func.count(CampaignGrant.id)).where(CampaignGrant.campaign_id == campaign.id)
+    ) or 0
+    if int(recipients) == 0:
+        db.delete(campaign)
+    else:
+        campaign.deleted_at = datetime.now(timezone.utc)
+    db.commit()

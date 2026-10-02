@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import logging
 
 import httpx
 from sqlalchemy import select
@@ -24,6 +25,7 @@ from app.study_profiles.models import (
 
 GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+logger = logging.getLogger(__name__)
 
 
 class AuthError(Exception):
@@ -134,10 +136,19 @@ def login_personal(
     _apply_platform_role(account)
     _ensure_profile(db, account)
 
-    # T-004 etapa 2: el login es un evento del motor de campañas. El beneficio queda otorgado
-    # antes de emitir la sesión; nunca_recibió(campaña) vuelve el proceso idempotente.
+    # Los datos esenciales del login deben quedar fuera del savepoint de campañas.
+    db.flush()
+
+    # Una campaña es un beneficio accesorio: nunca puede impedir el ingreso.
     from app.campaigns.service import evaluate_login_campaigns
 
-    evaluate_login_campaigns(db, account, first_login=first_login)
+    try:
+        with db.begin_nested():
+            evaluate_login_campaigns(db, account, first_login=first_login)
+    except Exception:
+        logger.exception(
+            "Falló la evaluación de campañas durante login para account_id=%s",
+            account.id,
+        )
     db.commit()
     return account

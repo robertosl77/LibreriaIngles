@@ -127,45 +127,30 @@ def test_first_login_campaign_reconciles_from_persisted_timestamps(client) -> No
     assert me.json()["service"]["origin"] == "CAMPAIGN"
 
 
-def test_first_login_reconcile_uses_earliest_grant_as_legacy_activation_floor(client) -> None:
-    from datetime import timedelta
-
-    from app.accounts.models import Account
-    from app.campaigns.models import Campaign, CampaignGrant
-    from app.db import SessionLocal
-    from app.subscriptions.models import Subscription
-
+def test_reactivation_does_not_capture_first_login_that_happened_while_paused(client) -> None:
     owner, _ = _owner_and_services(client)
     welcome = next(row for row in _campaigns(client, owner) if row["code"] == "WELCOME_PLATFORM")
-    activated = client.post(f"{API}/platform/campaigns/{welcome['id']}/activate", headers=owner)
-    assert activated.status_code == 200
 
-    login(client, "proof@example.com")
+    assert client.post(
+        f"{API}/platform/campaigns/{welcome['id']}/activate", headers=owner
+    ).status_code == 200
 
-    missed_headers = login(client, "missed@example.com")
-    with SessionLocal() as db:
-        missed = db.scalar(select(Account).where(Account.email == "missed@example.com"))
-        assert missed is not None
-        missed_grant = db.scalar(
-            select(CampaignGrant).where(
-                CampaignGrant.campaign_id == welcome["id"],
-                CampaignGrant.account_id == missed.id,
-            )
-        )
-        assert missed_grant is not None
-        subscription = db.get(Subscription, missed_grant.subscription_id)
-        db.delete(missed_grant)
-        if subscription is not None:
-            db.delete(subscription)
+    saturn = login(client, "saturno1@example.com")
+    assert client.get(f"{API}/me", headers=saturn).json()["service"]["source"] == "PLATFORM"
 
-        campaign = db.get(Campaign, welcome["id"])
-        campaign.activated_at = missed.first_login_at + timedelta(days=1)
-        db.commit()
+    assert client.post(
+        f"{API}/platform/campaigns/{welcome['id']}/pause", headers=owner
+    ).status_code == 200
 
-    me = client.get(f"{API}/me", headers=missed_headers)
-    assert me.status_code == 200
-    assert me.json()["service"]["source"] == "PLATFORM"
-    assert me.json()["service"]["origin"] == "CAMPAIGN"
+    neptune = login(client, "neptuno1@example.com")
+    assert client.get(f"{API}/me", headers=neptune).json()["service"]["source"] == "BYOK"
+
+    assert client.post(
+        f"{API}/platform/campaigns/{welcome['id']}/activate", headers=owner
+    ).status_code == 200
+
+    neptune = login(client, "neptuno1@example.com")
+    assert client.get(f"{API}/me", headers=neptune).json()["service"]["source"] == "BYOK"
 
 def test_existing_account_does_not_receive_first_login_campaign_later(client) -> None:
     alice = login(client, "old@example.com")
@@ -274,3 +259,131 @@ def test_email_notification_is_queued_not_sent_by_campaign_engine(client) -> Non
     login(client, "mail@example.com")
     row = next(r for r in _campaigns(client, owner) if r["id"] == campaign["id"])
     assert row["pendingEmails"] == 1
+
+
+def test_campaign_engine_exception_never_blocks_login_me_or_level(client, monkeypatch) -> None:
+    import app.auth.api as auth_api
+    import app.campaigns.service as campaign_service
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("campaign-engine-boom")
+
+    monkeypatch.setattr(campaign_service, "evaluate_login_campaigns", explode)
+    headers = login(client, "campaign-failure@example.com")
+
+    monkeypatch.setattr(auth_api, "reconcile_first_login_campaigns", explode)
+    me = client.get(f"{API}/me", headers=headers)
+    assert me.status_code == 200, me.text
+
+    level = client.put(f"{API}/me/level", headers=headers, json={"level": "A1"})
+    assert level.status_code == 200, level.text
+
+
+def test_ended_campaign_cannot_be_reactivated_or_deleted_before_end(client) -> None:
+    owner, services = _owner_and_services(client)
+    campaign = _create_campaign(
+        client,
+        owner,
+        services["INDIVIDUAL_PLATFORM"]["id"],
+        name="Ciclo cerrado",
+        days=3,
+        priority=10,
+    )
+
+    not_ended_delete = client.delete(
+        f"{API}/platform/campaigns/{campaign['id']}", headers=owner
+    )
+    assert not_ended_delete.status_code == 409
+
+    assert client.post(
+        f"{API}/platform/campaigns/{campaign['id']}/finish", headers=owner
+    ).status_code == 200
+    reactivation = client.post(
+        f"{API}/platform/campaigns/{campaign['id']}/activate", headers=owner
+    )
+    assert reactivation.status_code == 409
+
+
+def test_delete_ended_campaign_without_recipients_is_physical(client) -> None:
+    from app.campaigns.models import Campaign
+    from app.db import SessionLocal
+
+    owner, services = _owner_and_services(client)
+    response = client.post(
+        f"{API}/platform/campaigns",
+        headers=owner,
+        json={
+            "name": "Sin beneficiarios",
+            "serviceId": services["INDIVIDUAL_PLATFORM"]["id"],
+            "trigger": "FIRST_LOGIN",
+            "rules": [],
+            "grantDays": 3,
+            "priority": 20,
+            "stackable": False,
+            "notification": "NONE",
+        },
+    )
+    assert response.status_code == 201, response.text
+    campaign_id = response.json()["id"]
+
+    assert client.post(
+        f"{API}/platform/campaigns/{campaign_id}/finish", headers=owner
+    ).status_code == 200
+    deleted = client.delete(f"{API}/platform/campaigns/{campaign_id}", headers=owner)
+    assert deleted.status_code == 204, deleted.text
+    assert all(row["id"] != campaign_id for row in _campaigns(client, owner))
+
+    with SessionLocal() as db:
+        assert db.get(Campaign, campaign_id) is None
+
+
+def test_delete_ended_campaign_with_recipients_keeps_grant_history(client) -> None:
+    from app.accounts.models import Account
+    from app.campaigns.models import Campaign, CampaignGrant
+    from app.db import SessionLocal
+
+    owner, services = _owner_and_services(client)
+    campaign = _create_campaign(
+        client,
+        owner,
+        services["INDIVIDUAL_PLATFORM"]["id"],
+        name="Con historial",
+        days=3,
+        priority=1,
+    )
+
+    user = login(client, "history@example.com")
+    assert client.get(f"{API}/me", headers=user).json()["service"]["source"] == "PLATFORM"
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "history@example.com"))
+        assert account is not None
+        account_id = account.id
+        assert db.scalar(
+            select(CampaignGrant.id).where(
+                CampaignGrant.campaign_id == campaign["id"],
+                CampaignGrant.account_id == account_id,
+            )
+        ) is not None
+
+    assert client.post(
+        f"{API}/platform/campaigns/{campaign['id']}/finish", headers=owner
+    ).status_code == 200
+    deleted = client.delete(
+        f"{API}/platform/campaigns/{campaign['id']}", headers=owner
+    )
+    assert deleted.status_code == 204, deleted.text
+    assert all(row["id"] != campaign["id"] for row in _campaigns(client, owner))
+
+    login(client, "history@example.com")
+    with SessionLocal() as db:
+        stored = db.get(Campaign, campaign["id"])
+        assert stored is not None
+        assert stored.deleted_at is not None
+        grants = db.scalars(
+            select(CampaignGrant).where(
+                CampaignGrant.campaign_id == campaign["id"],
+                CampaignGrant.account_id == account_id,
+            )
+        ).all()
+        assert len(grants) == 1

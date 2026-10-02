@@ -64,6 +64,7 @@ class Campaign(Base):
     # Momento desde el que una activación puede capturar eventos FIRST_LOGIN.
     # Se reinicia al reactivar una campaña pausada para no volverla retroactiva.
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notification: Mapped[CampaignNotification] = mapped_column(
         SqlEnum(CampaignNotification, native_enum=False), default=CampaignNotification.IN_APP
     )
