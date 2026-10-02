@@ -1,0 +1,57 @@
+import { Component } from '@angular/core';
+
+import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
+import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
+import { BenefitsAdminComponent } from './benefits-admin.component';
+import { CampaignsAdminComponent } from './campaigns-admin.component';
+import { InvitationsAdminComponent } from './invitations-admin.component';
+import { ServicesAdminComponent } from './services-admin.component';
+
+@Component({
+  selector: 'app-platform-config',
+  imports: [
+    ConnectionsManagerComponent,
+    CollapseCardComponent,
+    ServicesAdminComponent,
+    BenefitsAdminComponent,
+    CampaignsAdminComponent,
+    InvitationsAdminComponent
+  ],
+  template: `
+    <section class="stack">
+      <div class="subhead">
+        <div>
+          <h2>Configuración</h2>
+          <p class="muted small">
+            Cómo está configurada la plataforma: servicios, beneficios, cuentas, campañas,
+            invitaciones y conexiones.
+          </p>
+        </div>
+      </div>
+
+      <app-services-admin />
+
+      <app-benefits-admin />
+
+      <app-campaigns-admin />
+
+      <app-invitations-admin />
+
+      <app-collapse-card
+        title="Conexiones de la plataforma"
+        description="API keys, modelos, prioridades, límites y estado de las conexiones usadas por la plataforma."
+      >
+        <app-connections-manager
+          scope="platform"
+          title="Conexiones de la plataforma"
+          [embedded]="true"
+        />
+      </app-collapse-card>
+    </section>
+  `,
+  styles: `
+    .subhead h2, .subhead p { margin: 0; }
+    .subhead p { margin-top: 0.25rem; }
+  `
+})
+export class PlatformConfigComponent {}
