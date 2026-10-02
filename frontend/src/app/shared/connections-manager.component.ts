@@ -86,22 +86,22 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
                 @if (isPlatform()) {
                   <div class="limits">
                     <span class="small">
-                      Uso 24 h: <strong>{{ c.usage24h ?? 0 }}</strong>
+                      Uso 24 h (pedidos): <strong>{{ c.usage24h ?? 0 }}</strong>
                       @if (c.dailyRequestLimit) { / {{ c.dailyRequestLimit }} }
                     </span>
                     @if (c.dailyRequestLimit) {
-                      <div class="bar usage-bar" [attr.aria-label]="'Uso ' + (c.usage24h ?? 0) + ' de ' + c.dailyRequestLimit">
+                      <div class="bar usage-bar" [attr.aria-label]="'Uso de pedidos ' + (c.usage24h ?? 0) + ' de ' + c.dailyRequestLimit">
                         <span [style.width.%]="usagePercent(c)"></span>
                       </div>
                     }
                     <label class="small limit-field">
-                      Límite total 24 h
+                      Límite total 24 h (pedidos)
                       <input class="input" type="number" min="1" placeholder="sin límite"
                         [ngModel]="c.dailyRequestLimit"
                         (change)="updateLimit(c, 'dailyRequestLimit', $any($event.target).value)" />
                     </label>
                     <label class="small limit-field">
-                      Límite por usuario 24 h
+                      Límite por usuario 24 h (pedidos)
                       <input class="input" type="number" min="1" placeholder="sin límite"
                         [ngModel]="c.perAccountDailyLimit"
                         (change)="updateLimit(c, 'perAccountDailyLimit', $any($event.target).value)" />
@@ -185,11 +185,11 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
           </label>
           @if (isPlatform()) {
             <label class="field">
-              Límite total 24 h
+              Límite total 24 h (pedidos)
               <input class="input" type="number" min="1" name="daily" [(ngModel)]="form.dailyRequestLimit" placeholder="sin límite" />
             </label>
             <label class="field">
-              Límite por usuario 24 h
+              Límite por usuario 24 h (pedidos)
               <input class="input" type="number" min="1" name="perAccount" [(ngModel)]="form.perAccountDailyLimit" placeholder="sin límite" />
             </label>
           }
