@@ -1730,6 +1730,76 @@ Problemas:
 
 ---
 
+
+---
+
+## T-048 — Conversation A1 + ortografía transversal y evaluación integrada
+
+**Prioridad:** P1 — Alta  
+**Estado:** En curso · ChatGPT  
+**Responsable:** ChatGPT  
+**Relación:** T-019 (modalidades), T-020 (lección), T-021/T-043 (mecánica de escritura), T-024 (examen), T-034 (evidencias por habilidad)
+
+Objetivo: incorporar **Conversation** como contenido curricular real de A1, con microconversaciones
+controladas y escalables a niveles futuros, manteniendo Listening/Speaking/Pronunciation como
+habilidades transversales; además incorporar el seguimiento explícito de **Ortografía** dentro de
+Writing y hacerlo visible en progreso y examen.
+
+Diseño acordado:
+
+1. **Conversation es curricular, no una habilidad transversal.**
+   - A1 debe definir temas/skills conversacionales (saludos, presentaciones, información personal,
+     intercambios cotidianos breves, etc.).
+   - La práctica inicial será una microconversación corta y controlada, con aproximadamente dos
+     intervenciones reales del alumno y cierre.
+   - El formato debe poder crecer en A2+ sin rediseñar el contrato completo.
+2. **Modalidades independientes del contenido conversacional.**
+   - El turno recibido puede ser READ o LISTEN.
+   - La respuesta puede ser SELECT, WRITE o SPEAK cuando el ejercicio lo permita.
+   - Listening, Speaking y Pronunciation siguen alimentándose transversalmente según la modalidad
+     y las señales de esfuerzo existentes.
+3. **Evaluación semántica por IA.**
+   - No exigir una única frase exacta: evaluar si la intervención responde a la intención,
+     mantiene el contexto, es comprensible y es apropiada para A1.
+   - Evaluar además errores lingüísticos observables (Grammar, Vocabulary y Writing) sin confundir
+     pertinencia conversacional con corrección formal.
+   - Una respuesta puede ser conversacionalmente válida y dejar evidencias secundarias negativas
+     en otras skills.
+4. **Evidencias curriculares secundarias.**
+   - Extender el mecanismo actual para que un intento pueda dejar evidencia en skills curriculares
+     secundarias cuando la IA detecta un error concreto, además de la skill principal.
+   - No inventar evidencia cuando la modalidad no permite observarla (por ejemplo, capitalización
+     en una respuesta hablada).
+5. **Ortografía dentro de Writing.**
+   - Agregar skills específicas para convenciones de escritura A1: capitalización, spelling básico,
+     apóstrofes/contracciones y puntuación básica según corresponda al nivel.
+   - Errores como `i am Robert` deben afectar la skill de capitalización, no Grammar.
+   - El dashboard debe mostrar un indicador explícito **Ortografía** agregado desde esas skills,
+     aunque internamente pertenezcan a Writing.
+6. **Dashboard y adaptación de clases.**
+   - Conversation debe aparecer como área curricular con su avance.
+   - Ortografía debe ser visible como indicador propio.
+   - Las evidencias secundarias y la ayuda/esfuerzo deben participar del balanceo futuro de clases
+     de forma coherente con el mecanismo existente.
+7. **Examen de nivel.**
+   - Incluir Conversation y Ortografía en la cobertura/evaluación del nivel.
+   - Mantener los requisitos actuales para habilitar el examen: al menos 70 % de cobertura del
+     nivel y 70 % de promedio sobre lo practicado.
+   - El examen debe representar también Conversation/Ortografía de forma coherente con el dashboard
+     y seguir siendo independiente del progreso de las clases.
+8. **Frontend.**
+   - Presentar la microconversación como una interacción legible tipo chat/turnos, sin convertirla
+     todavía en un chat abierto ilimitado.
+   - Mantener autoguardado, señales de Listening/Speaking/Pronunciation y corrección final.
+9. **Tests.**
+   - Cubrir currícula A1, generación/validación del nuevo ejercicio, evaluación conversacional,
+     evidencias curriculares secundarias, ortografía, dashboard, balanceo y examen.
+   - Mantener compatibilidad con las clases existentes y ejecutar la suite configurada del proyecto.
+
+**Criterio:** una conversación debe medir interacción contextual y poder producir evidencias
+lingüísticas adicionales sin confundirlas con la habilidad principal; Ortografía debe quedar
+curricularmente dentro de Writing pero visible y evaluable como dimensión propia.
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
