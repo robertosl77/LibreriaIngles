@@ -98,9 +98,10 @@ def _first_login_matches(db: Session, campaign: Campaign, account: Account) -> b
     activated = _as_utc(campaign.activated_at)
     first_grant = _as_utc(
         db.scalar(
-            select(func.min(CampaignGrant.applied_at)).where(
-                CampaignGrant.campaign_id == campaign.id
-            )
+            select(CampaignGrant.applied_at)
+            .where(CampaignGrant.campaign_id == campaign.id)
+            .order_by(CampaignGrant.applied_at.asc(), CampaignGrant.id.asc())
+            .limit(1)
         )
     )
     activation_floor = activated
