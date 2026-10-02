@@ -8,12 +8,9 @@ import { ToastService } from '../../core/toast.service';
 @Component({
   selector: 'app-platform-overview',
   template: `
-    <section class="stack">
-      <div class="subhead">
-        <div>
-          <h2>Resumen operativo</h2>
-          <p class="muted small">Qué está pasando en la plataforma: uso, actividad, errores y consumo.</p>
-        </div>
+    <section class="stack overview">
+      <div class="overview-toolbar">
+        <span class="muted small">Actividad de las últimas 24 h y tendencia diaria.</span>
         <button class="btn btn-sm" type="button" (click)="load()" [disabled]="loading()">
           Actualizar
         </button>
@@ -21,22 +18,22 @@ import { ToastService } from '../../core/toast.service';
 
       @if (data(); as d) {
         <section class="grid">
-          <div class="card">
+          <div class="card metric-card">
             <p class="muted small">Requests de IA · 24 h</p>
             <p class="big-number">{{ d.last24h.all.requests }}</p>
             <p class="muted small">{{ d.last24h.all.errors }} con error</p>
           </div>
-          <div class="card">
+          <div class="card metric-card">
             <p class="muted small">De plataforma · 24 h</p>
             <p class="big-number">{{ d.last24h.platform.successful }}</p>
             <p class="muted small">exitosos (costo propio)</p>
           </div>
-          <div class="card">
+          <div class="card metric-card">
             <p class="muted small">Usuarios activos · 24 h</p>
             <p class="big-number">{{ d.last24h.activeAccounts }}</p>
             <p class="muted small">de {{ d.accounts }} cuentas</p>
           </div>
-          <div class="card">
+          <div class="card metric-card">
             <p class="muted small">Clases pedidas · 24 h</p>
             <p class="big-number">{{ d.last24h.classesCreated }}</p>
             <p class="muted small">incluye las que fallaron</p>
@@ -45,9 +42,12 @@ import { ToastService } from '../../core/toast.service';
 
         <section class="card">
           <div class="chart-head">
-            <h2>Requests de IA por día</h2>
-            <span class="muted small">Últimos {{ d.daily.length }} días · todas las conexiones</span>
+            <div>
+              <h2>Requests de IA por día</h2>
+              <p class="muted small">Últimos {{ d.daily.length }} días · todas las conexiones</p>
+            </div>
           </div>
+
           <div class="chart" role="img" [attr.aria-label]="chartLabel()">
             <div class="y-max muted small">{{ maxDaily() }}</div>
             <div class="bars">
@@ -139,26 +139,29 @@ import { ToastService } from '../../core/toast.service';
     </section>
   `,
   styles: `
-    .subhead {
+    .overview { gap: 1rem; }
+
+    .overview-toolbar {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       gap: 1rem;
-      flex-wrap: wrap;
+      min-height: 2rem;
     }
 
-    .subhead h2, .subhead p { margin: 0; }
-    .subhead p { margin-top: 0.25rem; }
-
-    .chart-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 1rem;
-      flex-wrap: wrap;
+    .metric-card {
+      min-height: 7.2rem;
     }
 
-    .chart-head h2 { margin: 0 0 0.8rem; }
+    .chart-head h2,
+    .chart-head p {
+      margin: 0;
+    }
+
+    .chart-head p {
+      margin-top: 0.2rem;
+    }
+
     .chart { position: relative; padding-left: 2rem; }
     .y-max { position: absolute; left: 0; top: 0; }
 
@@ -238,6 +241,12 @@ import { ToastService } from '../../core/toast.service';
       text-align: left;
       padding: 0.3rem 1rem 0.3rem 0;
       border-bottom: 1px solid var(--border);
+    }
+
+    @media (max-width: 560px) {
+      .overview-toolbar {
+        align-items: flex-start;
+      }
     }
   `
 })

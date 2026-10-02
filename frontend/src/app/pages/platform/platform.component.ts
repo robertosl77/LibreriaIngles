@@ -5,77 +5,87 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
   selector: 'app-platform',
   imports: [RouterLink, RouterLinkActive, RouterOutlet],
   template: `
-    <main class="page stack">
-      <div class="page-header">
+    <main class="page stack platform-page">
+      <header class="platform-header">
         <div>
           <h1>Plataforma</h1>
-          <p class="muted">
-            Área exclusiva del dueño de Librería Inglés. Separá el monitoreo operativo de la
-            configuración para administrar la plataforma sin mezclar responsabilidades.
-          </p>
+          <p class="muted">Monitoreo y administración de la IA provista por Librería Inglés.</p>
         </div>
-      </div>
 
-      <nav class="platform-tabs" aria-label="Secciones de plataforma">
-        <a
-          routerLink="resumen"
-          routerLinkActive="active"
-          [routerLinkActiveOptions]="{ exact: true }"
-        >
-          Resumen
-          <span class="muted small">Uso, actividad y salud</span>
-        </a>
-        <a
-          routerLink="configuracion"
-          routerLinkActive="active"
-          [routerLinkActiveOptions]="{ exact: true }"
-        >
-          Configuración
-          <span class="muted small">Servicios, beneficios y motores</span>
-        </a>
-      </nav>
+        <nav class="platform-tabs" aria-label="Secciones de plataforma">
+          <a
+            routerLink="resumen"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            Resumen
+          </a>
+          <a
+            routerLink="configuracion"
+            routerLinkActive="active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            Configuración
+          </a>
+        </nav>
+      </header>
 
       <router-outlet />
     </main>
   `,
   styles: `
+    .platform-page { gap: 1.2rem; }
+
+    .platform-header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+
+    .platform-header h1,
+    .platform-header p {
+      margin: 0;
+    }
+
+    .platform-header p {
+      margin-top: 0.3rem;
+      max-width: 46rem;
+    }
+
     .platform-tabs {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.6rem;
-      padding: 0.35rem;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--card);
+      display: flex;
+      gap: 0.2rem;
+      border-bottom: 1px solid var(--border);
     }
 
     .platform-tabs a {
-      display: flex;
-      flex-direction: column;
-      gap: 0.12rem;
-      padding: 0.75rem 0.9rem;
-      border-radius: calc(var(--radius) - 0.2rem);
-      color: inherit;
+      position: relative;
+      padding: 0.55rem 0.85rem 0.65rem;
+      color: var(--muted);
+      font-weight: 650;
       text-decoration: none;
-      transition: background 0.15s ease, box-shadow 0.15s ease;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.15s ease, border-color 0.15s ease;
     }
 
     .platform-tabs a:hover {
-      background: var(--bg);
+      color: inherit;
     }
 
     .platform-tabs a.active {
-      background: var(--bg);
-      box-shadow: inset 0 0 0 1px var(--border);
-      font-weight: 700;
+      color: inherit;
+      border-bottom-color: var(--accent);
     }
 
-    .platform-tabs a.active .muted {
-      font-weight: 400;
-    }
+    @media (max-width: 560px) {
+      .platform-tabs {
+        overflow-x: auto;
+      }
 
-    @media (max-width: 640px) {
-      .platform-tabs { grid-template-columns: 1fr; }
+      .platform-tabs a {
+        white-space: nowrap;
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
