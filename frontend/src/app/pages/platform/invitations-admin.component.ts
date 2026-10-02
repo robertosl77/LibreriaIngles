@@ -12,6 +12,7 @@ import {
   PlatformInvitationDraft
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 
 interface InvitationForm {
   name: string;
@@ -43,21 +44,17 @@ function isoDate(value: string): string | null {
 
 @Component({
   selector: 'app-invitations-admin',
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, CollapseCardComponent],
   template: `
-    <section class="card stack">
-      <div class="section-head">
-        <div>
-          <h2>Pre-invitaciones e invitaciones</h2>
-          <p class="muted small">
-            Nominada = identidad concreta. Abierta = cualquiera con el link, hasta el cupo configurado.
-            El beneficio se configura una sola vez en <strong>Beneficios</strong>.
-          </p>
-        </div>
-        @if (!creating()) {
+    <app-collapse-card
+      title="Pre-invitaciones e invitaciones"
+      description="Nominada = identidad concreta. Abierta = cualquiera con el link hasta el cupo configurado. El beneficio se define una sola vez."
+    >
+      @if (!creating()) {
+        <div class="collapse-actions">
           <button class="btn btn-sm" type="button" (click)="startNew()">Nueva invitación</button>
-        }
-      </div>
+        </div>
+      }
 
       @if (creating()) {
         <form class="editor stack" (ngSubmit)="save()">
@@ -174,13 +171,11 @@ function isoDate(value: string): string | null {
           }
         </div>
       }
-    </section>
+    </app-collapse-card>
   `,
   styles: `
     :host { display: contents; }
-    .section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
-    .section-head h2, .section-head p { margin: 0; }
-    .section-head p { margin-top: 0.3rem; }
+    .collapse-actions { display: flex; justify-content: flex-end; margin-bottom: 0.8rem; }
     .editor { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
     .narrow { max-width: 18rem; }
     .invite-list { display: flex; flex-direction: column; gap: 0.6rem; }

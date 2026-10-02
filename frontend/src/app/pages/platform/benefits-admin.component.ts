@@ -9,6 +9,7 @@ import {
   PlatformService
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 import { ActiveToggleComponent } from './active-toggle.component';
 
 function emptyDraft(serviceId: number | null): PlatformBenefitDraft {
@@ -27,21 +28,17 @@ function numberOrNull(value: unknown): number | null {
 
 @Component({
   selector: 'app-benefits-admin',
-  imports: [FormsModule, ActiveToggleComponent],
+  imports: [FormsModule, ActiveToggleComponent, CollapseCardComponent],
   template: `
-    <section class="card stack">
-      <div class="section-head">
-        <div>
-          <h2>Beneficios</h2>
-          <p class="muted small">
-            Define <strong>qué se otorga</strong>: un servicio + su duración.
-            Campañas, invitaciones y otorgamientos manuales reutilizan esta definición.
-          </p>
-        </div>
-        @if (editingId() === null) {
+    <app-collapse-card
+      title="Beneficios"
+      description="Define qué se otorga: un servicio + su duración. Campañas, invitaciones y otorgamientos manuales reutilizan esta definición."
+    >
+      @if (editingId() === null) {
+        <div class="collapse-actions">
           <button class="btn btn-sm" type="button" (click)="startNew()">Nuevo beneficio</button>
-        }
-      </div>
+        </div>
+      }
 
       @if (editingId() !== null) {
         <form class="editor stack" (ngSubmit)="save()">
@@ -130,19 +127,11 @@ function numberOrNull(value: unknown): number | null {
           </table>
         </div>
       }
-    </section>
+    </app-collapse-card>
   `,
   styles: `
     :host { display: contents; }
-    .section-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    .section-head h2, .section-head p { margin: 0; }
-    .section-head p { margin-top: 0.3rem; }
+    .collapse-actions { display: flex; justify-content: flex-end; margin-bottom: 0.8rem; }
     .editor {
       padding: 0.8rem;
       border: 1px solid var(--border);

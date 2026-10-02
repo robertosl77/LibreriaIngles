@@ -12,6 +12,7 @@ import {
   PlatformCampaignDraft
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 
 interface CampaignForm {
   name: string;
@@ -68,21 +69,17 @@ function isoDate(value: string): string | null {
 
 @Component({
   selector: 'app-campaigns-admin',
-  imports: [FormsModule],
+  imports: [FormsModule, CollapseCardComponent],
   template: `
-    <section class="card stack">
-      <div class="section-head">
-        <div>
-          <h2>Campañas</h2>
-          <p class="muted small">
-            Regla = cuándo evaluar + condiciones + beneficio + notificación + límites. Una persona
-            recibe cada campaña una sola vez.
-          </p>
-        </div>
-        @if (editingId() === null) {
+    <app-collapse-card
+      title="Campañas"
+      description="Cuándo evaluar + condiciones + beneficio + notificación + límites. Cada persona recibe cada campaña una sola vez."
+    >
+      @if (editingId() === null) {
+        <div class="collapse-actions">
           <button class="btn btn-sm" type="button" (click)="startNew()">Nueva campaña</button>
-        }
-      </div>
+        </div>
+      }
 
       @if (editingId() !== null) {
         <form class="editor stack" (ngSubmit)="save()">
@@ -285,13 +282,11 @@ function isoDate(value: string): string | null {
           }
         </div>
       }
-    </section>
+    </app-collapse-card>
   `,
   styles: `
     :host { display: contents; }
-    .section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
-    .section-head h2, .section-head p { margin: 0; }
-    .section-head p { margin-top: 0.3rem; }
+    .collapse-actions { display: flex; justify-content: flex-end; margin-bottom: 0.8rem; }
     .editor, .rules { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
     .spread { justify-content: space-between; }
     .check-row { display: flex; gap: 0.5rem; align-items: flex-start; }
