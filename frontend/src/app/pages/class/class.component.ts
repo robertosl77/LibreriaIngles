@@ -188,9 +188,33 @@ const RESULT_LABELS: Record<string, string> = {
           }
 
           @for (exercise of c.exercises; track exercise.id; let i = $index) {
-            <article class="card exercise" [attr.id]="'ex-' + exercise.id" [class]="resultClass(exercise)" [class.form-locked]="formLocked()">
+            <article
+              class="card exercise"
+              [attr.id]="'ex-' + exercise.id"
+              [class]="resultClass(exercise)"
+              [class.form-locked]="formLocked()"
+              [class.conversation-card]="exercise.type === 'conversation'"
+              [class.conversation-start]="exercise.type === 'conversation' && (exercise.conversation?.turn ?? 1) === 1"
+              [class.conversation-end]="exercise.type === 'conversation' && (exercise.conversation?.turn ?? 1) === (exercise.conversation?.total ?? 1)"
+            >
               <header class="exercise-head">
-                <span class="muted small">{{ i + 1 }}. {{ typeLabels[exercise.type] }}@if (exercise.type === 'conversation') { · Turno {{ exercise.conversation?.turn ?? 1 }}/{{ exercise.conversation?.total ?? 1 }} }@if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }@if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> } · {{ exercise.skillName }}</span>
+                <span class="muted small">
+                  @if (exercise.type === 'conversation') {
+                    @if ((exercise.conversation?.turn ?? 1) === 1) {
+                      {{ i + 1 }}. <strong>Conversación guiada</strong> · {{ exercise.conversation?.total ?? 1 }} turnos
+                    } @else {
+                      <strong>Turno {{ exercise.conversation?.turn ?? 1 }} de {{ exercise.conversation?.total ?? 1 }}</strong>
+                    }
+                    @if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }
+                    @if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> }
+                    · {{ exercise.skillName }}
+                  } @else {
+                    {{ i + 1 }}. {{ typeLabels[exercise.type] }}
+                    @if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }
+                    @if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> }
+                    · {{ exercise.skillName }}
+                  }
+                </span>
                 @if (editable() && saveState()[exercise.id]; as state) {
                   <span class="small muted">
                     @switch (state) {
@@ -260,6 +284,10 @@ const RESULT_LABELS: Record<string, string> = {
                       </div>
                     }
                   </section>
+
+                  <div class="conversation-flow" aria-hidden="true">
+                    <span>→</span>
+                  </div>
 
                   <section class="conversation-side student-side">
                     <span class="speaker">Vos</span>
@@ -563,15 +591,79 @@ const RESULT_LABELS: Record<string, string> = {
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
     .transcript em { font-style: normal; }
-    .conversation-turn-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; align-items: stretch; }
-    .conversation-side { min-width: 0; padding: 0.8rem 0.9rem; border: 1px solid var(--border); border-radius: 0.75rem; display: flex; flex-direction: column; gap: 0.6rem; }
-    .partner-side { background: var(--bg); }
-    .student-side { background: var(--info-bg); }
-    .turn-help { margin-top: auto; padding-top: 0.15rem; }
-    .speaker { font-size: 0.75rem; font-weight: 700; color: var(--muted); }
-    .chat-text { margin: 0; font-size: 1.05rem; }
+    .conversation-card {
+      border-color: #d9d5cb;
+      background: linear-gradient(180deg, #fffefb, var(--surface));
+    }
+    .conversation-start {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom-style: dashed;
+      padding-bottom: 0.9rem;
+      margin-bottom: -1rem;
+      position: relative;
+      z-index: 1;
+    }
+    .conversation-end {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+      border-top: 0;
+      padding-top: 1.05rem;
+    }
+    .conversation-end .exercise-head { padding-top: 0.1rem; }
+    .conversation-turn-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 2.25rem minmax(0, 1fr);
+      gap: 0.55rem;
+      align-items: center;
+    }
+    .conversation-side {
+      min-width: 0;
+      padding: 0.72rem 0.82rem;
+      border: 1px solid var(--border);
+      border-radius: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      align-self: stretch;
+    }
+    .partner-side {
+      background: #fbfaf6;
+      border-bottom-left-radius: 0.25rem;
+    }
+    .student-side {
+      background: #f6f8ff;
+      border-bottom-right-radius: 0.25rem;
+    }
+    .conversation-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 1.35rem;
+      font-weight: 700;
+      align-self: center;
+    }
+    .conversation-flow span {
+      display: grid;
+      place-items: center;
+      width: 1.9rem;
+      height: 1.9rem;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: var(--surface);
+    }
+    .turn-help { padding-top: 0.15rem; }
+    .speaker { font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+    .chat-text { margin: 0; font-size: 1.05rem; line-height: 1.4; }
     .conversation-input { resize: vertical; background: var(--surface); }
     .chat-bubble.closing { max-width: 50%; padding: 0.7rem 0.85rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--bg); display: flex; flex-direction: column; gap: 0.3rem; }
+    @media (max-width: 720px) {
+      .conversation-turn-grid { grid-template-columns: 1fr; }
+      .conversation-flow { transform: rotate(90deg); }
+      .conversation-start { margin-bottom: -0.75rem; }
+      .chat-bubble.closing { max-width: 100%; }
+    }
     .lesson-btn {
       align-self: flex-start;
       display: inline-flex; align-items: center; gap: 0.4rem;
