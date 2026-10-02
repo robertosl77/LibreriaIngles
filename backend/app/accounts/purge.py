@@ -14,6 +14,7 @@ from app.ai.models import (
     AIConnectionOwnerType,
     AIUsageEvent,
 )
+from app.benefits.models import Benefit
 from app.campaigns.models import Campaign, CampaignGrant
 from app.exams.models import LevelCertificate
 from app.learning.models import (
@@ -24,7 +25,9 @@ from app.learning.models import (
     Exercise,
     StudySkillProgress,
 )
-from app.memberships.models import Invitation, Membership
+from app.invitations.models import Invitation, InvitationRedemption
+from app.invitations.service import refresh_status
+from app.memberships.models import Membership
 from app.study_profiles.models import AccountLinkVerification, AccountStudyProfile, StudyProfile
 from app.subscriptions.models import Subscription
 
@@ -138,6 +141,21 @@ def purge_account_completely(db: Session, account: Account) -> None:
         db.execute(delete(AIConnection).where(AIConnection.id.in_(own_connection_ids)))
 
     db.execute(delete(CampaignGrant).where(CampaignGrant.account_id == account_id))
+
+    redeemed_invitation_ids = _ids(
+        db,
+        select(InvitationRedemption.invitation_id).where(
+            InvitationRedemption.account_id == account_id
+        ),
+    )
+    db.execute(
+        delete(InvitationRedemption).where(InvitationRedemption.account_id == account_id)
+    )
+    for invitation_id in redeemed_invitation_ids:
+        invitation = db.get(Invitation, invitation_id)
+        if invitation is not None:
+            refresh_status(db, invitation)
+
     db.execute(delete(Subscription).where(Subscription.account_id == account_id))
     db.execute(
         update(Subscription)
@@ -149,6 +167,16 @@ def purge_account_completely(db: Session, account: Account) -> None:
         .where(Campaign.created_by_account_id == account_id)
         .values(created_by_account_id=None)
     )
+    db.execute(
+        update(Benefit)
+        .where(Benefit.created_by_account_id == account_id)
+        .values(created_by_account_id=None)
+    )
+    db.execute(
+        update(Invitation)
+        .where(Invitation.created_by_account_id == account_id)
+        .values(created_by_account_id=None)
+    )
 
     db.execute(
         update(Membership)
@@ -157,8 +185,6 @@ def purge_account_completely(db: Session, account: Account) -> None:
     )
     if membership_ids:
         db.execute(delete(Membership).where(Membership.id.in_(membership_ids)))
-    db.execute(delete(Invitation).where(func.lower(Invitation.email) == email.lower()))
-
     link_filters = [AccountLinkVerification.account_id == account_id]
     if exclusive_profile_ids:
         link_filters.append(AccountLinkVerification.study_profile_id.in_(exclusive_profile_ids))

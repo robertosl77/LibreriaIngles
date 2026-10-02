@@ -5,6 +5,8 @@ Models live in domain modules. Importing this module registers every table on Ba
 
 from app.accounts.models import *  # noqa: F401,F403
 from app.ai.models import *  # noqa: F401,F403
+from app.benefits.models import *  # noqa: F401,F403
+from app.invitations.models import *  # noqa: F401,F403
 from app.learning.models import *  # noqa: F401,F403
 from app.memberships.models import *  # noqa: F401,F403
 from app.organizations.models import *  # noqa: F401,F403

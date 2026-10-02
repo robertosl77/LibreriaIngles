@@ -40,11 +40,13 @@ class AuthConfig(BaseModel):
 
 class GoogleLoginRequest(BaseModel):
     credential: str = Field(min_length=10)
+    invitationToken: str | None = Field(default=None, min_length=10, max_length=500)
 
 
 class DevLoginRequest(BaseModel):
     email: EmailStr
     name: str | None = None
+    invitationToken: str | None = Field(default=None, min_length=10, max_length=500)
 
 
 class TokenResponse(BaseModel):
@@ -74,6 +76,7 @@ def login_google(payload: GoogleLoginRequest, db: DbSession) -> TokenResponse:
             google_subject=identity.subject,
             display_name=identity.name,
             auth_method=AuthMethod.GOOGLE,
+            invitation_token=payload.invitationToken,
         )
     except service.AuthError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
@@ -92,6 +95,7 @@ def login_dev(payload: DevLoginRequest, db: DbSession) -> TokenResponse:
             display_name=payload.name,
             # Simula el alta personal (Google) sin pasar por Google. Solo en local.
             auth_method=AuthMethod.GOOGLE,
+            invitation_token=payload.invitationToken,
         )
     except service.AuthError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
