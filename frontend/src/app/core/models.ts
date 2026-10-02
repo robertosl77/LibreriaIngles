@@ -42,7 +42,6 @@ export interface ServiceStatus {
 export interface MyService extends ServiceStatus {
   usesOwnKeys: boolean;
   usesPlatform: boolean;
-  platformRequests24h?: number;
 }
 
 export interface PlatformService {
