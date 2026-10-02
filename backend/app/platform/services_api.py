@@ -7,7 +7,7 @@ Benefit. Los otorgamientos manuales, campañas e invitaciones aplican un Benefit
 """
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 
 from app.accounts.models import Account, PlatformRole
@@ -35,6 +35,9 @@ ACCOUNTS_PAGE = 50
 
 
 class ServiceIn(BaseModel):
+    # No aceptar campos antiguos silenciosamente: los límites de pedidos viven en AIConnection.
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=2, max_length=120)
     source: AISource
     linkType: ServiceLinkType = ServiceLinkType.PERSONAL
