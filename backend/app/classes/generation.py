@@ -207,7 +207,7 @@ def select_slots(
     # Conversation funciona mejor como microintercambio: si entró una sola skill de conversación,
     # se reserva un segundo slot con otra skill conversacional para formar dos turnos.
     conversation_indexes = [i for i, s in enumerate(chosen) if s.area_key == "conversation"]
-    if len(conversation_indexes) == 1 and len(chosen) >= 2:
+    if len(conversation_indexes) % 2 == 1 and len(chosen) >= 2:
         used = {s.key for s in chosen}
         candidates = [s for s in skills if s.area_key == "conversation" and s.key not in used]
         replaceable = [
