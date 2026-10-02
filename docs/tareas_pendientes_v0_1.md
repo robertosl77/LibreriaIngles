@@ -209,7 +209,7 @@ FUENTE DE IA (lo único que elige la persona)
    PLATAFORMA  → las keys de sr.macros
    HÍBRIDO     → las propias primero; si fallan de fondo, las de sr.macros
 
-SERVICIO     = vínculo + fuente + capacidades/límites + costo futuro
+SERVICIO     = vínculo + fuente + metadatos comerciales + costo futuro
 BENEFICIO    = servicio + duración/vigencia + política de otorgamiento
 
 OTORGAMIENTO (cómo alguien recibe un servicio)
@@ -238,7 +238,7 @@ CORPORATIVO     │ servicio D        │ servicio E          │ servicio F
 ```
 
 - **Panel de servicios de sr.macros:** crear/editar servicios (nombre, vínculo, fuente,
-  tope de tokens por día, descripción y costo futuro). **No lleva duración.**
+  descripción y costo futuro). **No lleva duración ni límites de consumo.**
   La duración pertenece exclusivamente a Beneficio para evitar dos fuentes de verdad.
   Permite agregar combinaciones nuevas más adelante.
   Nombres iniciales: **Individual** y **Corporativa**.
@@ -505,16 +505,20 @@ siempre:
 
 ### 8. Topes y frenos (para no perder plata ni sufrir abusos)
 
-1. **Tope de TOKENS por día** (no por cantidad de pedidos), configurable por servicio. Aplica a
-   todo lo que usa las keys de sr.macros: campañas (bienvenida), servicio plataforma y la parte de
-   plataforma del híbrido. Depende de T-049; hasta tenerlo, tope provisorio por pedidos.
-2. **Generar una clase ya gasta tokens del tope:** crear clases y no terminarlas consume el tope
-   igual (se frena solo).
-3. **Máximo de clases abiertas a la vez** (ej. 3, configurable): para crear otra, terminá o
+1. **Límites actuales por PEDIDOS:** pertenecen exclusivamente a cada **conexión de IA de
+   plataforma**, nunca al Servicio. Cada conexión puede definir:
+   - límite total de pedidos en ventana móvil de 24 h;
+   - límite de pedidos por usuario en ventana móvil de 24 h.
+   Ambos campos deben mostrar explícitamente la unidad **pedidos**.
+2. **Tokens/costo (T-049):** cuando exista medición real de tokens, definir allí la política
+   comercial/operativa correspondiente sin volver a introducir un límite de pedidos dentro de
+   Servicio.
+3. **Generar una clase ya consume IA:** crear clases y no terminarlas igualmente consume pedidos
+   y, cuando T-049 exista, tokens/costo.
+4. **Máximo de clases abiertas a la vez** (ej. 3, configurable): para crear otra, terminá o
    descartá una.
-4. El tope se controla al **crear**: una clase ya generada se puede terminar y corregir aunque se
-   pase un poco (es acotado: ~6 ejercicios).
-5. Al alumno se le muestra en porcentaje ("usaste el 80 % de tu IA de hoy"), nunca en tokens.
+5. El control de consumo se evalúa al intentar usar una conexión. La visualización para el alumno
+   deberá diseñarse con T-049/T-053 y no inferirse desde un límite del Servicio.
 
 ### 9. Consumo de tokens (T-049)
 
@@ -555,8 +559,8 @@ servicio vigente   effective_service(cuenta): suscripción activa; si no hay o v
                    "Individual · propias keys" (+ aviso "venció" durante 14 días)
 router de IA       BYOK → propias · PLATAFORMA → plataforma · HÍBRIDO → propias y luego
                    plataforma · dueño → ambas (reemplaza platform_ai_allowed de T-003)
-tope provisorio    pedidos exitosos a la plataforma por cuenta en 24 h (hasta T-049 tokens)
-portal sr.macros   Servicios (capacidades) + Beneficios (servicio + duración)
+límites actuales  solo en ai_connections: total 24 h + por usuario 24 h, medidos en pedidos
+portal sr.macros   Servicios (sin límites) + Beneficios (servicio + duración)
                    + Cuentas y servicios (buscar, otorgar beneficio, quitar)
 usuario            "Tu servicio" en IA e Inicio: nombre, vence, % de uso de hoy, aviso de vencido
 ```
@@ -578,7 +582,8 @@ seguridad       una falla del motor nunca impide login, /me o /me/level
 
 ```text
 benefits        única fuente de verdad para servicio + duración + política de conflicto
-servicios       sin duración; solo capacidades/límites
+servicios       sin duración ni límites de consumo; vínculo + fuente + metadatos
+conexiones       única fuente de verdad para límites actuales: total 24 h + por usuario 24 h
 manual          Cuentas y servicios otorga benefit_id, no service_id + días
 campañas        pasan a referenciar benefit_id (sin duplicar plan_id + grant_days)
 invitaciones    NAMED u OPEN, token, cupo, vigencia opcional, cancelación/regeneración
@@ -604,8 +609,9 @@ email           NAMED queda PENDING hasta implementar T-051
   fallback u otras estrategias) sin tener que redefinir el catálogo de Servicios. **No implementar
   ahora; queda documentado para una etapa posterior.**
 - **Unidades de los límites:** toda pantalla que muestre/configure límites de conexiones debe
-  indicar explícitamente la unidad usada (hoy: cantidad de pedidos en ventana de 24 h; futuro:
-  tokens/costo cuando corresponda) para evitar ambigüedad entre límite total y límite por usuario.
+  indicar explícitamente la unidad usada. **Implementado para límites actuales:** cantidad de
+  **pedidos** en ventana móvil de 24 h, tanto total como por usuario. Futuro: tokens/costo cuando
+  corresponda (T-049).
 
 ---
 
