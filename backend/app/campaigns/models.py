@@ -34,10 +34,7 @@ class CampaignNotification(str, Enum):
 
 
 class CampaignSeedMarker(Base):
-    """Marca que una campaña ejemplo ya fue creada una vez.
-
-    Permite borrarla físicamente sin que el seeding runtime la recree en el próximo listado.
-    """
+    """Marca que una campaña ejemplo ya fue creada una vez."""
 
     __tablename__ = "campaign_seed_markers"
 
@@ -46,14 +43,14 @@ class CampaignSeedMarker(Base):
 
 
 class Campaign(Base):
-    """Regla configurable que otorga un servicio cuando una cuenta cumple condiciones."""
+    """Regla configurable que aplica un beneficio cuando una cuenta cumple condiciones."""
 
     __tablename__ = "campaigns"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(String(80), unique=True)
     name: Mapped[str] = mapped_column(String(120))
-    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.id"), index=True)
+    benefit_id: Mapped[int] = mapped_column(ForeignKey("benefits.id"), index=True)
     # NULL = scope plataforma/OWNER. T-059/T-005 reutilizan esta columna para campañas de empresa.
     organization_id: Mapped[int | None] = mapped_column(
         ForeignKey("organizations.id"), nullable=True, index=True
@@ -64,17 +61,12 @@ class Campaign(Base):
     trigger: Mapped[CampaignTrigger] = mapped_column(
         SqlEnum(CampaignTrigger, native_enum=False), default=CampaignTrigger.FIRST_LOGIN, index=True
     )
-    # Contrato extensible: hoy API escribe {mode: "ALL", rules: [...]}; más adelante puede sumar OR/grupos.
     eligibility: Mapped[dict] = mapped_column(JSON, default=lambda: {"mode": "ALL", "rules": []})
-    grant_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Menor número = mayor prioridad. Se permiten empates; acumulabilidad se configura aparte.
     priority: Mapped[int] = mapped_column(Integer, default=100, index=True)
     stackable: Mapped[bool] = mapped_column(Boolean, default=False)
     max_recipients: Mapped[int | None] = mapped_column(Integer, nullable=True)
     starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Momento desde el que una activación puede capturar eventos FIRST_LOGIN.
-    # Se reinicia al reactivar una campaña pausada para no volverla retroactiva.
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notification: Mapped[CampaignNotification] = mapped_column(

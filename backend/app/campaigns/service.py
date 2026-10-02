@@ -1,16 +1,21 @@
 """Motor de campañas de T-004, etapa 2.
 
-La campaña no conoce conceptos comerciales como "bienvenida" o "fidelización": combina trigger,
-condiciones, prioridad/acumulabilidad, beneficio (servicio) y notificación. T-059 agregará el
-scheduler para CampaignTrigger.SCHEDULED sin cambiar este contrato.
+La campaña define CUÁNDO/A QUIÉN; el beneficio reusable define QUÉ servicio/duración se otorga.
+T-059 agregará el scheduler para CampaignTrigger.SCHEDULED sin cambiar este contrato.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.accounts.models import Account, PlatformRole
+from app.benefits.models import Benefit
+from app.benefits.service import (
+    BenefitApplication,
+    apply_service_benefit,
+    seed_benefits,
+)
 from app.campaigns.models import (
     Campaign,
     CampaignGrant,
@@ -20,10 +25,11 @@ from app.campaigns.models import (
     CampaignTrigger,
 )
 from app.memberships.models import Membership, MembershipStatus
-from app.subscriptions.models import Plan, Subscription, SubscriptionOrigin
-from app.subscriptions.service import effective_service, grant_service
+from app.subscriptions.models import SubscriptionOrigin
+from app.subscriptions.service import effective_service
 
 WELCOME_CODE = "WELCOME_PLATFORM"
+WELCOME_BENEFIT_CODE = "WELCOME_PLATFORM_3D"
 
 
 def utcnow() -> datetime:
@@ -37,10 +43,7 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 
 def seed_campaigns(db: Session) -> None:
-    """Crea una sola vez la campaña ejemplo de bienvenida como BORRADOR.
-
-    El marker sobrevive al borrado físico: Eliminar significa que la campaña no reaparece.
-    """
+    """Crea una sola vez la campaña ejemplo de bienvenida como BORRADOR."""
     marker = db.get(CampaignSeedMarker, WELCOME_CODE)
     if marker is not None:
         return
@@ -51,8 +54,9 @@ def seed_campaigns(db: Session) -> None:
         db.flush()
         return
 
-    plan = db.scalar(select(Plan).where(Plan.code == "INDIVIDUAL_PLATFORM"))
-    if plan is None:
+    seed_benefits(db)
+    benefit = db.scalar(select(Benefit).where(Benefit.code == WELCOME_BENEFIT_CODE))
+    if benefit is None:
         return
 
     db.add(CampaignSeedMarker(code=WELCOME_CODE))
@@ -60,7 +64,7 @@ def seed_campaigns(db: Session) -> None:
         Campaign(
             code=WELCOME_CODE,
             name="Bienvenida · 3 días de Plataforma",
-            plan_id=plan.id,
+            benefit_id=benefit.id,
             status=CampaignStatus.DRAFT,
             trigger=CampaignTrigger.FIRST_LOGIN,
             eligibility={
@@ -70,7 +74,6 @@ def seed_campaigns(db: Session) -> None:
                     {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
                 ],
             },
-            grant_days=3,
             priority=100,
             stackable=False,
             notification=CampaignNotification.IN_APP,
@@ -78,6 +81,7 @@ def seed_campaigns(db: Session) -> None:
         )
     )
     db.flush()
+
 
 def _scope_matches(db: Session, campaign: Campaign, account: Account) -> bool:
     if campaign.organization_id is None:
@@ -101,11 +105,6 @@ def _within_window(campaign: Campaign, now: datetime) -> bool:
 
 
 def _first_login_matches(campaign: Campaign, account: Account) -> bool:
-    """FIRST_LOGIN pertenece al período de activación actual.
-
-    Al pausar y reactivar, activated_at se reinicia: una cuenta cuyo primer login ocurrió
-    durante la pausa no puede volverse elegible retroactivamente.
-    """
     first_login = _as_utc(account.first_login_at)
     activated = _as_utc(campaign.activated_at)
     if first_login is None or activated is None or first_login < activated:
@@ -118,6 +117,7 @@ def _first_login_matches(campaign: Campaign, account: Account) -> bool:
     if ends is not None and first_login >= ends:
         return False
     return True
+
 
 def _compare_number(actual: int | float, operator: str, expected: int | float) -> bool:
     if operator == "EQ":
@@ -172,7 +172,6 @@ def _rule_matches(db: Session, account: Account, rule: dict, now: datetime) -> b
             return actual <= expected_dt
         return operator == "EQ" and actual == expected_dt
 
-    # Configuración desconocida: nunca otorgar por accidente.
     return False
 
 
@@ -202,53 +201,25 @@ def eligible(db: Session, campaign: Campaign, account: Account, *, now: datetime
     if campaign.trigger == CampaignTrigger.FIRST_LOGIN and not _first_login_matches(campaign, account):
         return False
     eligibility = campaign.eligibility or {"mode": "ALL", "rules": []}
-    # Hoy solo ALL/AND. El JSON ya deja espacio para grupos OR cuando se defina su UX.
     if str(eligibility.get("mode", "ALL")).upper() != "ALL":
         return False
     return all(_rule_matches(db, account, rule, now) for rule in eligibility.get("rules", []))
-
-
-def _benefit_summary(plan: Plan, days: int | None) -> str:
-    return f"{plan.name} · {days} días" if days else f"{plan.name} · sin vencimiento"
 
 
 def _notification_message(campaign: Campaign, benefit: str) -> str:
     return (campaign.message or "").strip() or f'Recibiste la campaña "{campaign.name}": {benefit}.'
 
 
-def _apply_service(db: Session, campaign: Campaign, account: Account) -> Subscription | None:
-    plan = db.get(Plan, campaign.plan_id)
-    if plan is None or not plan.active:
+def _apply_benefit(db: Session, campaign: Campaign, account: Account) -> BenefitApplication | None:
+    benefit = db.get(Benefit, campaign.benefit_id)
+    if benefit is None:
         return None
-
-    current = effective_service(db, account)
-    duration = campaign.grant_days if campaign.grant_days is not None else plan.duration_days
-    now = utcnow()
-
-    if current.granted:
-        # Una campaña nunca reemplaza silenciosamente un servicio diferente. Puede bonificar días
-        # sobre el mismo servicio; para reemplazos explícitos habrá una acción/política propia.
-        if current.plan_id != plan.id or current.subscription_id is None:
-            return None
-        subscription = db.get(Subscription, current.subscription_id)
-        if subscription is None:
-            return None
-        if duration is None:
-            subscription.expires_at = None
-        else:
-            expiry = _as_utc(subscription.expires_at)
-            base = expiry if expiry and expiry > now else now
-            subscription.expires_at = base + timedelta(days=duration)
-        db.flush()
-        return subscription
-
     creator = db.get(Account, campaign.created_by_account_id) if campaign.created_by_account_id else None
-    return grant_service(
+    return apply_service_benefit(
         db,
+        benefit,
         account,
-        plan,
         granted_by=creator,
-        days=duration,
         origin=SubscriptionOrigin.CAMPAIGN,
         note=f"Campaña #{campaign.id}: {campaign.name}",
     )
@@ -261,8 +232,7 @@ def apply_campaign(
     *,
     conditions_prechecked: bool = False,
 ) -> CampaignGrant | None:
-    """Reserva cupo, otorga el beneficio y registra nunca_recibió(campaña) en una transacción."""
-    # Bloquea la fila en motores que soportan FOR UPDATE; SQLite serializa las escrituras.
+    """Reserva cupo, aplica el beneficio y registra nunca_recibió(campaña)."""
     locked = db.scalar(select(Campaign).where(Campaign.id == campaign.id).with_for_update())
     now = utcnow()
     if locked is None or not _available_for_account(db, locked, account, now=now):
@@ -276,20 +246,18 @@ def apply_campaign(
         if int(used) >= locked.max_recipients:
             return None
 
-    subscription = _apply_service(db, locked, account)
-    if subscription is None:
+    application = _apply_benefit(db, locked, account)
+    if application is None or not application.applied or application.subscription is None:
         return None
-    plan = db.get(Plan, locked.plan_id)
-    duration = locked.grant_days if locked.grant_days is not None else plan.duration_days
-    benefit = _benefit_summary(plan, duration)
+
     notification = locked.notification
     grant = CampaignGrant(
         campaign_id=locked.id,
         account_id=account.id,
-        subscription_id=subscription.id,
-        benefit_summary=benefit,
+        subscription_id=application.subscription.id,
+        benefit_summary=application.summary,
         notification_message=(
-            _notification_message(locked, benefit)
+            _notification_message(locked, application.summary)
             if notification in {CampaignNotification.IN_APP, CampaignNotification.IN_APP_EMAIL}
             else None
         ),
@@ -324,8 +292,6 @@ def _evaluate_campaigns(
         .order_by(Campaign.priority.asc(), Campaign.id.asc())
     ).all()
 
-    # Todas las condiciones se calculan sobre el mismo estado inicial para que las campañas
-    # acumulables no se anulen entre sí por el beneficio recién otorgado.
     candidates = [campaign for campaign in campaigns if eligible(db, campaign, account, now=now)]
 
     applied: list[CampaignGrant] = []
@@ -351,11 +317,6 @@ def evaluate_login_campaigns(
     *,
     first_login: bool | None = None,
 ) -> list[CampaignGrant]:
-    """Evalúa LOGIN y FIRST_LOGIN.
-
-    FIRST_LOGIN se valida contra first_login_at + activated_at persistidos. Así puede reconciliarse
-    en un request posterior sin hacerse retroactivo para cuentas que ingresaron antes de la campaña.
-    """
     return _evaluate_campaigns(
         db,
         account,
@@ -364,7 +325,6 @@ def evaluate_login_campaigns(
 
 
 def reconcile_first_login_campaigns(db: Session, account: Account) -> list[CampaignGrant]:
-    """Reintento seguro para campañas FIRST_LOGIN al cargar /me."""
     return _evaluate_campaigns(db, account, triggers=[CampaignTrigger.FIRST_LOGIN])
 
 
