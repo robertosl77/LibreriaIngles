@@ -172,12 +172,12 @@ def test_max_recipients_reserves_only_configured_slots(client) -> None:
 def test_overlapping_non_stackable_campaigns_return_warning(client) -> None:
     owner, services = _owner_and_services(client)
     plan_id = services["INDIVIDUAL_PLATFORM"]["id"]
-    first = _create_campaign(client, owner, plan_id, name="A", days=3, priority=10)
+    first = _create_campaign(client, owner, plan_id, name="Campaña A", days=3, priority=10)
     response = client.post(
         f"{API}/platform/campaigns",
         headers=owner,
         json={
-            "name": "B",
+            "name": "Campaña B",
             "serviceId": plan_id,
             "trigger": "FIRST_LOGIN",
             "rules": [],
