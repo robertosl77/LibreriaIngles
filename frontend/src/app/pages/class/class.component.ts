@@ -35,7 +35,8 @@ const TYPE_LABELS: Record<Exercise['type'], string> = {
   multiple_choice: 'Opción múltiple',
   reading_multiple_choice: 'Lectura',
   rewrite: 'Reescribir',
-  short_writing: 'Escritura'
+  short_writing: 'Escritura',
+  conversation: 'Conversación'
 };
 
 /** En el examen cada audio se puede escuchar dos veces (en la práctica, sin límite). */
@@ -119,7 +120,7 @@ const RESULT_LABELS: Record<string, string> = {
           @if (c.kind === 'EXAM' && editable()) {
             <p class="banner banner-info small">
               <strong>Examen de nivel {{ c.targetLevel }}.</strong> {{ c.exercises.length }} ejercicios de todas las
-              áreas, sin lecciones. Para aprobar: 70% en total y al menos 60% en cada área. Tus
+              áreas, sin lecciones. Para aprobar: 70% en total y al menos 60% en cada área y en Ortografía. Tus
               respuestas se guardan solas; cuando termines, tocá <strong>Finalizar examen</strong>.
             </p>
           }
@@ -152,7 +153,7 @@ const RESULT_LABELS: Record<string, string> = {
                 }
               </ul>
               <p class="muted small">
-                Se aprueba con {{ r.passScore }}% en total y al menos {{ r.areaMinScore }}% en cada área (línea vertical).
+                Se aprueba con {{ r.passScore }}% en total y al menos {{ r.areaMinScore }}% en cada área y en Ortografía (línea vertical).
                 @if (!r.passed) { Podés volver a rendirlo en 24 horas; mientras tanto, practicá las áreas marcadas. }
               </p>
             </section>
@@ -187,9 +188,33 @@ const RESULT_LABELS: Record<string, string> = {
           }
 
           @for (exercise of c.exercises; track exercise.id; let i = $index) {
-            <article class="card exercise" [attr.id]="'ex-' + exercise.id" [class]="resultClass(exercise)" [class.form-locked]="formLocked()">
+            <article
+              class="card exercise"
+              [attr.id]="'ex-' + exercise.id"
+              [class]="resultClass(exercise)"
+              [class.form-locked]="formLocked()"
+              [class.conversation-card]="exercise.type === 'conversation'"
+              [class.conversation-start]="exercise.type === 'conversation' && (exercise.conversation?.turn ?? 1) === 1"
+              [class.conversation-end]="exercise.type === 'conversation' && (exercise.conversation?.turn ?? 1) === (exercise.conversation?.total ?? 1)"
+            >
               <header class="exercise-head">
-                <span class="muted small">{{ i + 1 }}. {{ typeLabels[exercise.type] }}@if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }@if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> } · {{ exercise.skillName }}</span>
+                <span class="muted small">
+                  @if (exercise.type === 'conversation') {
+                    @if ((exercise.conversation?.turn ?? 1) === 1) {
+                      {{ i + 1 }}. <strong>Conversación guiada</strong> · {{ exercise.conversation?.total ?? 1 }} turnos
+                    } @else {
+                      <strong>Turno {{ exercise.conversation?.turn ?? 1 }} de {{ exercise.conversation?.total ?? 1 }}</strong>
+                    }
+                    @if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }
+                    @if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> }
+                    · {{ exercise.skillName }}
+                  } @else {
+                    {{ i + 1 }}. {{ typeLabels[exercise.type] }}
+                    @if (exercise.presentation === 'LISTEN') { · <strong class="modality">Escucha</strong> }
+                    @if (exercise.response === 'SPEAK') { · <strong class="modality">Habla</strong> }
+                    · {{ exercise.skillName }}
+                  }
+                </span>
                 @if (editable() && saveState()[exercise.id]; as state) {
                   <span class="small muted">
                     @switch (state) {
@@ -209,27 +234,126 @@ const RESULT_LABELS: Record<string, string> = {
                 </span>
               </header>
 
-              @if (exercise.instruction) {
+              @if (exercise.instruction && exercise.type !== 'conversation') {
                 <p class="instruction">{{ exercise.instruction }}</p>
               }
-              @if (exercise.passage) {
-                <blockquote class="passage">{{ exercise.passage }}</blockquote>
-              }
-              @if (exercise.presentation === 'LISTEN' && exercise.stimulus; as stimulus) {
-                <app-audio-player
-                  [text]="stimulus.text"
-                  [lang]="stimulus.lang"
-                  [rate]="stimulus.rate"
-                  [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
-                  [allowSlow]="c.kind !== 'EXAM'"
-                  [initialPlays]="exercise.signals.listenPlays ?? 0"
-                  [disabled]="formLocked()"
-                  (played)="recordListen(exercise, $event.slow)"
-                />
-              }
-              <p class="question">{{ exercise.question }}</p>
+              @if (exercise.type === 'conversation') {
+                <div class="conversation-turn-grid">
+                  <section class="conversation-side partner-side">
+                    <span class="speaker">Interlocutor</span>
+                    @if (exercise.presentation === 'LISTEN' && exercise.stimulus; as stimulus) {
+                      <app-audio-player
+                        [text]="stimulus.text"
+                        [lang]="stimulus.lang"
+                        [rate]="stimulus.rate"
+                        [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
+                        [allowSlow]="c.kind !== 'EXAM'"
+                        [initialPlays]="exercise.signals.listenPlays ?? 0"
+                        [disabled]="formLocked()"
+                        (played)="recordListen(exercise, $event.slow)"
+                      />
+                      <span class="muted small">Escuchá el turno y respondé.</span>
+                    } @else {
+                      <p class="chat-text">{{ exercise.question }}</p>
+                    }
 
-              @if ((editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
+                    @if ((editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
+                      <div class="turn-help">
+                        @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
+                          <app-lesson-panel
+                            [lesson]="lesson"
+                            [registered]="editable() && exercise.assistance === 'LESSON'"
+                            [editable]="editable()"
+                            (closed)="closeLesson()"
+                          />
+                        } @else {
+                          <button
+                            class="lesson-btn"
+                            type="button"
+                            (click)="toggleLesson(exercise)"
+                            [disabled]="lessonLoading() === exercise.id"
+                          >
+                            @if (lessonLoading() === exercise.id) {
+                              <span class="spinner"></span>
+                            } @else {
+                              <svg class="book" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H20v3H6.5A2.5 2.5 0 0 1 4 20.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                            }
+                            <span>{{ editable() ? 'Necesito lección' : 'Ver lección del tema' }}</span>
+                          </button>
+                        }
+                      </div>
+                    }
+                  </section>
+
+                  <div class="conversation-flow" aria-hidden="true">
+                    <span>→</span>
+                  </div>
+
+                  <section class="conversation-side student-side">
+                    <span class="speaker">Vos</span>
+                    @if (editable()) {
+                      @if (exercise.response === 'SPEAK') {
+                        <app-audio-recorder
+                          [busy]="formLocked() || audioSavingId() === exercise.id"
+                          [confirmed]="confirmedSpeaking().has(exercise.id)"
+                          (recordingStarted)="beginSpeaking(exercise.id)"
+                          (pendingChange)="markPendingSpeaking(exercise.id, $event)"
+                          (accepted)="confirmSpeaking(exercise, $event)"
+                        />
+                      } @else {
+                        <textarea
+                          class="input conversation-input"
+                          rows="2"
+                          [ngModel]="answers()[exercise.id]"
+                          (ngModelChange)="onAnswer(exercise.id, $event)"
+                          [disabled]="formLocked()"
+                          placeholder="Respondé naturalmente en inglés…"
+                        ></textarea>
+                      }
+                    } @else {
+                      <strong>{{ exercise.answer || '(sin respuesta)' }}</strong>
+                    }
+
+                    @if (editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
+                      <div class="turn-help">
+                        @if (openPronunciationPractice() === exercise.id) {
+                          <app-pronunciation-practice
+                            (closed)="closePronunciationPractice()"
+                            (practiced)="recordPractice(exercise, $event.score)"
+                          />
+                        } @else {
+                          <button class="lesson-btn pronunciation-btn" type="button" (click)="togglePronunciationPractice(exercise.id)">
+                            <svg class="sound" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                              <path d="M4 10v4h4l5 4V6L8 10H4Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                              <path d="M16 9.2a4 4 0 0 1 0 5.6M18.5 6.8a7 7 0 0 1 0 10.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                            </svg>
+                            <span>Practicar fonética</span>
+                          </button>
+                        }
+                      </div>
+                    }
+                  </section>
+                </div>
+              } @else {
+                @if (exercise.passage) {
+                  <blockquote class="passage">{{ exercise.passage }}</blockquote>
+                }
+                @if (exercise.presentation === 'LISTEN' && exercise.stimulus; as stimulus) {
+                  <app-audio-player
+                    [text]="stimulus.text"
+                    [lang]="stimulus.lang"
+                    [rate]="stimulus.rate"
+                    [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
+                    [allowSlow]="c.kind !== 'EXAM'"
+                    [initialPlays]="exercise.signals.listenPlays ?? 0"
+                    [disabled]="formLocked()"
+                    (played)="recordListen(exercise, $event.slow)"
+                  />
+                }
+                <p class="question">{{ exercise.question }}</p>
+              }
+
+              @if (exercise.type !== 'conversation' && (editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
                 @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
                   <app-lesson-panel
                     [lesson]="lesson"
@@ -254,7 +378,7 @@ const RESULT_LABELS: Record<string, string> = {
                 }
               }
 
-              @if (editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
+              @if (exercise.type !== 'conversation' && editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
                 @if (openPronunciationPractice() === exercise.id) {
                   <app-pronunciation-practice
                     (closed)="closePronunciationPractice()"
@@ -271,54 +395,55 @@ const RESULT_LABELS: Record<string, string> = {
                 }
               }
 
-              @if (editable()) {
-                @if (exercise.response === 'SPEAK') {
-                  <app-audio-recorder
-                    [busy]="formLocked() || audioSavingId() === exercise.id"
-                    [confirmed]="confirmedSpeaking().has(exercise.id)"
-                    (recordingStarted)="beginSpeaking(exercise.id)"
-                    (pendingChange)="markPendingSpeaking(exercise.id, $event)"
-                    (accepted)="confirmSpeaking(exercise, $event)"
-                  />
-                } @else {
-                @switch (exercise.type) {
-                  @case ('multiple_choice') {
-                    <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
-                  }
-                  @case ('reading_multiple_choice') {
-                    <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
-                  }
-
-                  @case ('short_writing') {
-                    <textarea
-                      class="input"
-                      rows="4"
-                      [ngModel]="answers()[exercise.id]"
-                      (ngModelChange)="onAnswer(exercise.id, $event)"
-                      [disabled]="formLocked()"
-                      placeholder="Escribí tu respuesta en inglés…"
-                    ></textarea>
-                  }
-                  @default {
-                    <input
-                      class="input"
-                      type="text"
-                      autocomplete="off"
-                      autocapitalize="off"
-                      spellcheck="false"
-                      [ngModel]="answers()[exercise.id]"
-                      (ngModelChange)="onAnswer(exercise.id, $event)"
-                      [disabled]="formLocked()"
-                      [placeholder]="exercise.type === 'rewrite' ? 'Escribí la oración completa' : 'Palabra(s) que completan el espacio'"
+              @if (exercise.type !== 'conversation') {
+                @if (editable()) {
+                  @if (exercise.response === 'SPEAK') {
+                    <app-audio-recorder
+                      [busy]="formLocked() || audioSavingId() === exercise.id"
+                      [confirmed]="confirmedSpeaking().has(exercise.id)"
+                      (recordingStarted)="beginSpeaking(exercise.id)"
+                      (pendingChange)="markPendingSpeaking(exercise.id, $event)"
+                      (accepted)="confirmSpeaking(exercise, $event)"
                     />
+                  } @else {
+                    @switch (exercise.type) {
+                      @case ('multiple_choice') {
+                        <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
+                      }
+                      @case ('reading_multiple_choice') {
+                        <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
+                      }
+                      @case ('short_writing') {
+                        <textarea
+                          class="input"
+                          rows="4"
+                          [ngModel]="answers()[exercise.id]"
+                          (ngModelChange)="onAnswer(exercise.id, $event)"
+                          [disabled]="formLocked()"
+                          placeholder="Escribí tu respuesta en inglés…"
+                        ></textarea>
+                      }
+                      @default {
+                        <input
+                          class="input"
+                          type="text"
+                          autocomplete="off"
+                          autocapitalize="off"
+                          spellcheck="false"
+                          [ngModel]="answers()[exercise.id]"
+                          (ngModelChange)="onAnswer(exercise.id, $event)"
+                          [disabled]="formLocked()"
+                          [placeholder]="exercise.type === 'rewrite' ? 'Escribí la oración completa' : 'Palabra(s) que completan el espacio'"
+                        />
+                      }
+                    }
                   }
+                } @else {
+                  <p class="your-answer">
+                    <span class="muted small">Tu respuesta:</span>
+                    <strong>{{ exercise.answer || '(sin respuesta)' }}</strong>
+                  </p>
                 }
-                }
-              } @else {
-                <p class="your-answer">
-                  <span class="muted small">Tu respuesta:</span>
-                  <strong>{{ exercise.answer || '(sin respuesta)' }}</strong>
-                </p>
               }
 
               @if (exercise.result; as r) {
@@ -388,6 +513,12 @@ const RESULT_LABELS: Record<string, string> = {
                     </button>
                   }
                 </div>
+                @if (exercise.type === 'conversation' && exercise.conversation?.closing; as closing) {
+                  <div class="chat-bubble partner closing">
+                    <span class="speaker">Interlocutor</span>
+                    <span>{{ closing }}</span>
+                  </div>
+                }
               }
             </article>
           }
@@ -460,6 +591,79 @@ const RESULT_LABELS: Record<string, string> = {
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
     .transcript em { font-style: normal; }
+    .conversation-card {
+      border-color: #d9d5cb;
+      background: linear-gradient(180deg, #fffefb, var(--surface));
+    }
+    .conversation-start {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom-style: dashed;
+      padding-bottom: 0.9rem;
+      margin-bottom: -1rem;
+      position: relative;
+      z-index: 1;
+    }
+    .conversation-end {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+      border-top: 0;
+      padding-top: 1.05rem;
+    }
+    .conversation-end .exercise-head { padding-top: 0.1rem; }
+    .conversation-turn-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 2.25rem minmax(0, 1fr);
+      gap: 0.55rem;
+      align-items: center;
+    }
+    .conversation-side {
+      min-width: 0;
+      padding: 0.72rem 0.82rem;
+      border: 1px solid var(--border);
+      border-radius: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      align-self: stretch;
+    }
+    .partner-side {
+      background: #fbfaf6;
+      border-bottom-left-radius: 0.25rem;
+    }
+    .student-side {
+      background: #f6f8ff;
+      border-bottom-right-radius: 0.25rem;
+    }
+    .conversation-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 1.35rem;
+      font-weight: 700;
+      align-self: center;
+    }
+    .conversation-flow span {
+      display: grid;
+      place-items: center;
+      width: 1.9rem;
+      height: 1.9rem;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: var(--surface);
+    }
+    .turn-help { padding-top: 0.15rem; }
+    .speaker { font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+    .chat-text { margin: 0; font-size: 1.05rem; line-height: 1.4; }
+    .conversation-input { resize: vertical; background: var(--surface); }
+    .chat-bubble.closing { max-width: 50%; padding: 0.7rem 0.85rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--bg); display: flex; flex-direction: column; gap: 0.3rem; }
+    @media (max-width: 720px) {
+      .conversation-turn-grid { grid-template-columns: 1fr; }
+      .conversation-flow { transform: rotate(90deg); }
+      .conversation-start { margin-bottom: -0.75rem; }
+      .chat-bubble.closing { max-width: 100%; }
+    }
     .lesson-btn {
       align-self: flex-start;
       display: inline-flex; align-items: center; gap: 0.4rem;
@@ -746,11 +950,16 @@ export class ClassComponent implements OnDestroy {
     }
   }
 
-  /** Áreas + modalidades transversales (Escucha/Habla) en las barras del resultado del examen. */
+  /** Áreas + dimensiones visibles + modalidades transversales en el resultado del examen. */
   examRows(result: NonNullable<ClassDetail['examResult']>) {
     return [
       ...result.areas,
-      ...(result.modalities ?? []).map((m) => ({ ...m, key: 'modality-' + m.key, name: m.name + ' (todo lo escuchado)' }))
+      ...(result.dimensions ?? []).map((d) => ({ ...d, key: 'dimension-' + d.key })),
+      ...(result.modalities ?? []).map((m) => ({
+        ...m,
+        key: 'modality-' + m.key,
+        name: m.name + (m.key === 'LISTEN' ? ' (todo lo escuchado)' : ' (todo lo hablado)')
+      }))
     ];
   }
 

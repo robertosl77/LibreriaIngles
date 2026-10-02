@@ -61,6 +61,26 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
           </div>
         </section>
 
+        @if (d.orthography; as orthography) {
+          <section class="card orthography-card">
+            <div>
+              <p class="muted small">Convenciones de escritura</p>
+              <h2>Ortografía</h2>
+              <p class="muted small">
+                Mayúsculas, spelling, puntuación y apóstrofes. Vive dentro de Writing,
+                pero se sigue por separado.
+              </p>
+            </div>
+            <div class="orthography-score">
+              <strong>{{ orthography.score === null ? '—' : orthography.score + '%' }}</strong>
+              <span [class]="statusInfo(orthography.status).chip">{{ statusInfo(orthography.status).label }}</span>
+              <span class="muted small">
+                {{ orthography.skillsPracticed }}/{{ orthography.skillsTotal }} tema(s) practicados
+              </span>
+            </div>
+          </section>
+        }
+
         @if (d.weakest.length) {
           <section class="card">
             <h2>Para reforzar</h2>
@@ -178,6 +198,10 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
     </main>
   `,
   styles: `
+    .orthography-card { display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
+    .orthography-card h2 { margin: 0.1rem 0 0.25rem; }
+    .orthography-score { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
+    .orthography-score > strong { font-size: 1.8rem; }
     .abilities { display: flex; flex-direction: column; gap: 0.7rem; }
     .ability { padding: 0; }
     .ability summary {
@@ -215,6 +239,8 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
     .skill-name { display: flex; flex-direction: column; gap: 0.15rem; }
     .skill-score { display: flex; gap: 0.6rem; align-items: center; min-width: 150px; justify-content: flex-end; }
     @media (max-width: 560px) {
+      .orthography-card { align-items: flex-start; flex-direction: column; }
+      .orthography-score { align-items: flex-start; }
       .ability summary { gap: 0.3rem 0.45rem; padding: 0.8rem 0.9rem; }
       .ab-score { min-width: 0; }
       .ability summary { grid-template-columns: 1fr auto auto; }
