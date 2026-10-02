@@ -2242,6 +2242,50 @@ un tiempo límite redondeado hacia arriba con margen suficiente; el alumno ve el
 intento finaliza automáticamente al vencer, sin poder extenderlo desde el cliente.
 
 ---
+## T-057 — Habilitar el examen sin haber practicado un área (ej. Reading) · A ANALIZAR
+
+**Prioridad:** P2 — Media  
+**Estado:** ⚠️ **Para analizar y volver a discutir** (no implementar todavía) · detectado por Roberto
+al aprobar A1 (2026-10-02)  
+**Relación:** T-024 (examen de nivel y certificado: requisitos para habilitarlo), T-034
+(evidencias por habilidad y balanceo adaptativo de las clases), T-056 (tiempo límite de exámenes)
+
+Qué pasó: Roberto aprobó el examen A1 (89 %) con **Reading "Sin practicar"** en Progreso. Nunca
+le tocó un ejercicio de Reading en las clases y aun así se le habilitó el examen.
+
+Por qué pasa (código actual, `app/exams/service.py`):
+
+```text
+Requisitos para habilitar el examen (solo miran el TOTAL, no cada área)
+  1. Practicar el 70 % de los temas del nivel   A1 = 50 temas → 35
+  2. Promedio ≥ 70 % en lo practicado
+
+Temas de A1 por área
+  Grammar 21 · Vocabulary 10 · Writing 9 · Conversation 5 · Listening 4 · Reading 1
+  → Reading es 1 tema de 50 (2 %): se llega a 35 sin tocarlo
+```
+
+- Las clases eligen temas por peso/debilidad: con 1 solo tema, Reading casi nunca aparece.
+- Las respuestas del examen no cuentan como práctica (a propósito): Reading salió 100 % en el
+  examen pero Progreso sigue en "Sin practicar".
+- Para **aprobar**, el examen sí exige ≥ 60 % en cada área: el certificado es válido; el problema
+  es que se llega al examen sin haber practicado esa área.
+
+Propuesta de Claude (a discutir):
+
+```text
+Requisito nuevo   3. Practicar al menos 1 tema de CADA área del nivel
+                     (visible en la lista de requisitos del examen, con qué áreas faltan)
+Clases            si un área del nivel todavía no tiene práctica, la próxima clase la incluye
+                  sí o sí (balanceo de T-034)
+```
+
+Preguntas abiertas:
+- ¿Alcanza con 1 tema por área o pedir un % por área (ej. 50 % de los temas de cada una)?
+- ¿Sumar más temas de Reading a A1 (hoy hay 1) en vez de, o además de, la regla?
+- ¿El resultado del examen debería contar como evidencia en Progreso?
+
+---
 
 # 3. Orden sugerido de trabajo
 
