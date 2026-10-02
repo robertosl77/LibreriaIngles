@@ -120,7 +120,7 @@ export class AudioRecorderComponent implements OnDestroy {
   private audioContext: AudioContext | null = null;
   private audioSource: MediaStreamAudioSourceNode | null = null;
   private analyser: AnalyserNode | null = null;
-  private analyserData: Uint8Array | null = null;
+  private analyserData: Uint8Array<ArrayBuffer> | null = null;
   private voiceFrameId: number | null = null;
   private speechDetected = false;
   private voiceCandidateSince: number | null = null;

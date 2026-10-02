@@ -90,8 +90,25 @@ Luego proteger `main` para que los cambios entren mediante Pull Request y requie
 
 ## T-002 — Revisar vulnerabilidades npm
 
-**Prioridad:** P1 — Alta  
-**Estado:** Pendiente de análisis
+**Estado:** Resuelta (PR #28 a `develop`) · Claude  
+**Estado:** Resuelta (PR a `develop`) · Claude
+
+Resolución (2026-10-01): `npm audit` pasó de **29 (2 críticas, 14 altas) a 0**.
+
+1. Causa: Angular 19 ya no recibe parches (todas las 19.x afectadas: XSS en el compilador,
+   hidratación/SSR, etc.), y sus herramientas fijaban versiones viejas de vite, piscina, tar…
+   Por eso `npm audit fix` no podía hacer nada sin `--force`.
+2. Actualización oficial con `ng update`, de a una versión: 19 → 20 → 21 (LTS). Las migraciones
+   automáticas solo agregaron `provideZoneChangeDetection()` (Angular 21 es *zoneless* por
+   defecto; la app sigue con zone.js) y ajustaron `tsconfig`. TypeScript 5.9.
+3. Builder nuevo `@angular/build` en lugar de `@angular-devkit/build-angular` (webpack): se van
+   403 paquetes, incluidos webpack-dev-server/sockjs/uuid vulnerables.
+4. `overrides: piscina 5.3.2` (la que ya usa Angular 22; misma versión mayor).
+5. `start:remote` usaba `--disable-host-check` (no existe en el builder nuevo): ahora es
+   `ng serve --configuration remote` (host 0.0.0.0, puerto 8081, `allowedHosts: true`).
+6. CI: Node 22 y `npm audit --audit-level=high` en el job del frontend. Se borra el workflow
+   viejo `t002-npm-audit.yml` (aplicaba `npm audit fix` automático en una rama que ya no existe).
+7. Requisito: Node.js 22.12+ (o 20.19+/24+). Después de actualizar: `npm ci` en el frontend.
 
 Durante la instalación actual npm informó vulnerabilidades, incluyendo una crítica.
 
