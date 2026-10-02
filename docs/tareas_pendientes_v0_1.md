@@ -1981,6 +1981,12 @@ modelo), pero **sin tokens** y solo lo ve sr.macros.
    `01/10 22:12 · Gemini (gemini-2.5-flash) · corregir ejercicio · 1.240 tokens · USD 0,0004`
 5. Nunca guardar prompts ni respuestas: solo metadatos y conteos.
 
+**Unidades visibles (pedido de Roberto, 2026-10-02):** en el portal de plataforma los números
+salen sin unidad ("24 h: 7 ok") y se confunden con tokens. Mostrar siempre la unidad y, cuando
+exista el registro de tokens, ambas: `7 pedidos · 12.340 tokens` (por conexión, por cuenta, en el
+gráfico diario y en el ranking de cuentas). Lo mismo en "Uso de hoy" del alumno y en T-053
+(dashboard de consumo por cliente).
+
 ---
 
 ## T-050 — Fidelización: retención de datos, avisos y promociones
