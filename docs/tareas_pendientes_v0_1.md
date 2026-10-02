@@ -174,7 +174,7 @@ No eliminar el modelo PLATFORM/HYBRID; solamente evitar que se active antes de i
 **Responsable:** Claude  
 **Relación:** T-003 (cada usuario usa solo su IA propia: hoy decide `platform_ai_allowed()`),
 T-005 (conexiones de IA de una organización), T-006 (portal del dueño con las keys de
-plataforma), T-048 (tokens y costo por uso), T-049 (fidelización), T-050 (emails)
+plataforma), T-049 (tokens y costo por uso), T-050 (fidelización), T-051 (emails)
 
 Base existente sin usar (migración inicial): tablas `plans` (`ai_source` BYOK / PLATFORM / HYBRID),
 `subscriptions` (cuenta u organización, estado, fechas), `organizations`, `memberships`
@@ -223,7 +223,7 @@ CORPORATIVO     │ servicio D        │ servicio E          │ servicio F
   tope de tokens por día, costo futuro). Permite agregar combinaciones nuevas más adelante.
   Nombres iniciales: **Individual** y **Corporativa**.
 - **Costos (futuro):** PLATAFORMA = cuota fija estimada para cubrir los tokens; HÍBRIDO = base +
-  uso a demanda de sr.macros, detallado como factura (T-048).
+  uso a demanda de sr.macros, detallado como factura (T-049).
 - **BYOK corporativo:** las keys las carga la empresa (paga la capacitación, no el empleado) →
   requiere T-005.
 
@@ -239,7 +239,7 @@ CAMPAÑA
 - **Panel de campañas de sr.macros.** Una campaña se alimenta de un servicio del catálogo.
 - **La bienvenida es la primera campaña** (no algo fijo en el código): PERSONAL + PLATAFORMA,
   sin costo, **3 días corridos**, con tope de tokens. Deja probar la app sin saber qué es una API
-  key. Como PedidosYa: cupones a todos al principio; después solo para fidelizar (T-049).
+  key. Como PedidosYa: cupones a todos al principio; después solo para fidelizar (T-050).
 
 ### 4. Invitaciones (sr.macros o una empresa otorgan un servicio a una persona)
 
@@ -248,7 +248,7 @@ INVITACIÓN
   quién invita  → sr.macros | una empresa (futuro: usuarios con invitaciones de regalo)
   servicio      → uno del catálogo (vínculo + fuente + días + costo)
   cómo llega    → un LINK que se copia y se manda como quiera (WhatsApp, etc.)
-                  el envío por email (T-050) llevará el mismo link
+                  el envío por email (T-051) llevará el mismo link
 
 Ej.: sr.macros → amigo:    PERSONAL + PLATAFORMA, 30 días, sin costo
      Empresa X → empleado:  CORPORATIVO + HÍBRIDO, mensual, la paga la empresa
@@ -273,7 +273,7 @@ Cliente personal                    → "sin empresa" (NO es miembro de Librerí
   mensual: 07/10 → 07/11). El historial de pagos es otra cosa (con los pagos).
 - **Al vencer:** puede **ver** clases, resultados, progreso, historial y certificados; **no puede
   crear** clases ni exámenes hasta renovar.
-- **Retención:** al año de vencida **se borra todo** (avisos previos: T-049).
+- **Retención:** al año de vencida **se borra todo** (avisos previos: T-050).
 - **Usuarios que ya existen** (ej. robertosl77): son PERSONAL + BYOK → siguen funcionando, sin
   borrar nada ni reconfigurar keys. sr.macros (OWNER) no vence nunca.
 
@@ -292,7 +292,7 @@ siempre:
 
 1. **Tope de TOKENS por día** (no por cantidad de pedidos), configurable por servicio. Aplica a
    todo lo que usa las keys de sr.macros: campañas (bienvenida), servicio plataforma y la parte de
-   plataforma del híbrido. Depende de T-048; hasta tenerlo, tope provisorio por pedidos.
+   plataforma del híbrido. Depende de T-049; hasta tenerlo, tope provisorio por pedidos.
 2. **Generar una clase ya gasta tokens del tope:** crear clases y no terminarlas consume el tope
    igual (se frena solo).
 3. **Máximo de clases abiertas a la vez** (ej. 3, configurable): para crear otra, terminá o
@@ -301,7 +301,7 @@ siempre:
    pase un poco (es acotado: ~6 ejercicios).
 5. Al alumno se le muestra en porcentaje ("usaste el 80 % de tu IA de hoy"), nunca en tokens.
 
-### 9. Consumo de tokens (T-048)
+### 9. Consumo de tokens (T-049)
 
 Se registra en **todas** las fuentes: cuándo, proveedor, modelo, operación y tokens. El cliente ve
 su propio detalle; en híbrido es la base de la factura. La tabla de precios por modelo la mantiene
@@ -324,7 +324,7 @@ Ej.: pagó su individual hasta el 15/10 y el 01/10 su empresa lo invita.
    platform_ai_allowed() pasa a mirar el servicio vigente; vencimiento en solo lectura
 2. Campañas: panel + bienvenida (3 días, plataforma, tope provisorio por pedidos)
 3. Invitaciones de sr.macros por link
-4. Tokens y costo por uso (T-048) → topes por tokens, frenos de clases abiertas, detalle al cliente
+4. Tokens y costo por uso (T-049) → topes por tokens, frenos de clases abiertas, detalle al cliente
 5. Corporativo: empresas, keys de la empresa (T-005), invitaciones de empresa, unificar/separar
 6. Pagos (otro otorgamiento; débito automático a definir)
 ```
@@ -1037,9 +1037,9 @@ T-043 Calibrar la corrección de escritura libre según el nivel (Claude)
 T-044 Apelación con justificación escrita o grabada (Claude)
 T-046 v2 Grabación de Speaking: corte más rápido y sin "Confirmar respuesta" (Claude)
 T-047 Avisos claros cuando no hay IA y reintento al entrar a la clase (Claude)
-T-048 Registro de tokens y costo por cada uso de IA (Claude)
-T-049 Fidelización: retención de datos, avisos y promociones (futuro)
-T-050 Sistema de envío de emails
+T-049 Registro de tokens y costo por cada uso de IA (Claude)
+T-050 Fidelización: retención de datos, avisos y promociones (futuro)
+T-051 Sistema de envío de emails
 ```
 
 Referencias: documento funcional v0.3 §4.1, §5, §8, §15, §16, §17, §17.1, §39, §41 (Audio), §42 (Audio).
@@ -1871,7 +1871,78 @@ Problemas:
 
 ---
 
-## T-048 — Registro de tokens y costo por cada uso de IA
+---
+
+## T-048 — Conversation A1 + ortografía transversal y evaluación integrada
+
+**Prioridad:** P1 — Alta  
+**Estado:** En curso · ChatGPT  
+**Responsable:** ChatGPT  
+**Relación:** T-019 (modalidades), T-020 (lección), T-021/T-043 (mecánica de escritura), T-024 (examen), T-034 (evidencias por habilidad)
+
+Objetivo: incorporar **Conversation** como contenido curricular real de A1, con microconversaciones
+controladas y escalables a niveles futuros, manteniendo Listening/Speaking/Pronunciation como
+habilidades transversales; además incorporar el seguimiento explícito de **Ortografía** dentro de
+Writing y hacerlo visible en progreso y examen.
+
+Diseño acordado:
+
+1. **Conversation es curricular, no una habilidad transversal.**
+   - A1 debe definir temas/skills conversacionales (saludos, presentaciones, información personal,
+     intercambios cotidianos breves, etc.).
+   - La práctica inicial será una microconversación corta y controlada, con aproximadamente dos
+     intervenciones reales del alumno y cierre.
+   - El formato debe poder crecer en A2+ sin rediseñar el contrato completo.
+2. **Modalidades independientes del contenido conversacional.**
+   - El turno recibido puede ser READ o LISTEN.
+   - La respuesta puede ser SELECT, WRITE o SPEAK cuando el ejercicio lo permita.
+   - Listening, Speaking y Pronunciation siguen alimentándose transversalmente según la modalidad
+     y las señales de esfuerzo existentes.
+3. **Evaluación semántica por IA.**
+   - No exigir una única frase exacta: evaluar si la intervención responde a la intención,
+     mantiene el contexto, es comprensible y es apropiada para A1.
+   - Evaluar además errores lingüísticos observables (Grammar, Vocabulary y Writing) sin confundir
+     pertinencia conversacional con corrección formal.
+   - Una respuesta puede ser conversacionalmente válida y dejar evidencias secundarias negativas
+     en otras skills.
+4. **Evidencias curriculares secundarias.**
+   - Extender el mecanismo actual para que un intento pueda dejar evidencia en skills curriculares
+     secundarias cuando la IA detecta un error concreto, además de la skill principal.
+   - No inventar evidencia cuando la modalidad no permite observarla (por ejemplo, capitalización
+     en una respuesta hablada).
+5. **Ortografía dentro de Writing.**
+   - Agregar skills específicas para convenciones de escritura A1: capitalización, spelling básico,
+     apóstrofes/contracciones y puntuación básica según corresponda al nivel.
+   - Errores como `i am Robert` deben afectar la skill de capitalización, no Grammar.
+   - El dashboard debe mostrar un indicador explícito **Ortografía** agregado desde esas skills,
+     aunque internamente pertenezcan a Writing.
+6. **Dashboard y adaptación de clases.**
+   - Conversation debe aparecer como área curricular con su avance.
+   - Ortografía debe ser visible como indicador propio.
+   - Las evidencias secundarias y la ayuda/esfuerzo deben participar del balanceo futuro de clases
+     de forma coherente con el mecanismo existente.
+7. **Examen de nivel.**
+   - Incluir Conversation y Ortografía en la cobertura/evaluación del nivel.
+   - Mantener los requisitos actuales para habilitar el examen: al menos 70 % de cobertura del
+     nivel y 70 % de promedio sobre lo practicado.
+   - El examen debe representar también Conversation/Ortografía de forma coherente con el dashboard
+     y seguir siendo independiente del progreso de las clases.
+8. **Frontend.**
+   - Presentar la microconversación como una interacción legible tipo chat/turnos, sin convertirla
+     todavía en un chat abierto ilimitado.
+   - Mantener autoguardado, señales de Listening/Speaking/Pronunciation y corrección final.
+9. **Tests.**
+   - Cubrir currícula A1, generación/validación del nuevo ejercicio, evaluación conversacional,
+     evidencias curriculares secundarias, ortografía, dashboard, balanceo y examen.
+   - Mantener compatibilidad con las clases existentes y ejecutar la suite configurada del proyecto.
+
+**Criterio:** una conversación debe medir interacción contextual y poder producir evidencias
+lingüísticas adicionales sin confundirlas con la habilidad principal; Ortografía debe quedar
+curricularmente dentro de Writing pero visible y evaluable como dimensión propia.
+
+---
+
+## T-049 — Registro de tokens y costo por cada uso de IA
 
 **Prioridad:** P2 — Media (imprescindible antes de vender el servicio híbrido de T-004)  
 **Estado:** Pendiente  
@@ -1894,11 +1965,11 @@ modelo), pero **sin tokens** y solo lo ve sr.macros.
 
 ---
 
-## T-049 — Fidelización: retención de datos, avisos y promociones
+## T-050 — Fidelización: retención de datos, avisos y promociones
 
 **Prioridad:** P4 — Muy baja (mucho más adelante)  
 **Estado:** Para analizar  
-**Relación:** T-004 (vencimiento de membresías), T-050 (emails)
+**Relación:** T-004 (vencimiento de membresías), T-051 (emails)
 
 Ideas anotadas para no perderlas (Roberto, 2026-10-01):
 
@@ -1909,17 +1980,18 @@ Ideas anotadas para no perderlas (Roberto, 2026-10-01):
 
 ---
 
-## T-050 — Sistema de envío de emails
+## T-051 — Sistema de envío de emails
 
 **Prioridad:** P3 — Baja  
 **Estado:** Pendiente  
-**Relación:** T-004 (invitaciones por link), T-049 (avisos y promociones)
+**Relación:** T-004 (invitaciones por link), T-050 (avisos y promociones)
 
 La app no envía emails. Hace falta un servicio para: invitaciones (llevan el mismo link que hoy se
 copia a mano), avisos de vencimiento, recuperación de cuenta y campañas de fidelización. Remitente:
 la cuenta real de sr.macros. Elegir proveedor (SMTP propio o servicio transaccional) y plantillas.
 
 ---
+
 
 # 3. Orden sugerido de trabajo
 
