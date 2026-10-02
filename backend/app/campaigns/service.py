@@ -87,6 +87,21 @@ def _within_window(campaign: Campaign, now: datetime) -> bool:
     return (starts is None or starts <= now) and (ends is None or now < ends)
 
 
+def _first_login_matches(campaign: Campaign, account: Account) -> bool:
+    """FIRST_LOGIN se decide con hechos persistidos y no con un boolean efímero del request."""
+    first_login = _as_utc(account.first_login_at)
+    activated = _as_utc(campaign.activated_at)
+    if first_login is None or activated is None or first_login < activated:
+        return False
+    starts = _as_utc(campaign.starts_at)
+    ends = _as_utc(campaign.ends_at)
+    if starts is not None and first_login < starts:
+        return False
+    if ends is not None and first_login >= ends:
+        return False
+    return True
+
+
 def _compare_number(actual: int | float, operator: str, expected: int | float) -> bool:
     if operator == "EQ":
         return actual == expected
@@ -162,6 +177,8 @@ def _available_for_account(
 def eligible(db: Session, campaign: Campaign, account: Account, *, now: datetime | None = None) -> bool:
     now = now or utcnow()
     if not _available_for_account(db, campaign, account, now=now):
+        return False
+    if campaign.trigger == CampaignTrigger.FIRST_LOGIN and not _first_login_matches(campaign, account):
         return False
     eligibility = campaign.eligibility or {"mode": "ALL", "rules": []}
     # Hoy solo ALL/AND. El JSON ya deja espacio para grupos OR cuando se defina su UX.
@@ -266,16 +283,16 @@ def apply_campaign(
     return grant
 
 
-def evaluate_login_campaigns(db: Session, account: Account, *, first_login: bool) -> list[CampaignGrant]:
-    """Evalúa campañas del evento de login, ordenadas por prioridad."""
+def _evaluate_campaigns(
+    db: Session,
+    account: Account,
+    *,
+    triggers: list[CampaignTrigger],
+) -> list[CampaignGrant]:
     if account.platform_role == PlatformRole.PLATFORM_OWNER:
         return []
     seed_campaigns(db)
     now = utcnow()
-    triggers = [CampaignTrigger.LOGIN]
-    if first_login:
-        triggers.insert(0, CampaignTrigger.FIRST_LOGIN)
-
     campaigns = db.scalars(
         select(Campaign)
         .where(
@@ -285,15 +302,13 @@ def evaluate_login_campaigns(db: Session, account: Account, *, first_login: bool
         .order_by(Campaign.priority.asc(), Campaign.id.asc())
     ).all()
 
-    # Las condiciones se evalúan contra el mismo estado inicial. Una campaña aplicada no debe
-    # hacer desaparecer otra que también cumplía (ej. dos promos acumulables de primer login).
+    # Todas las condiciones se calculan sobre el mismo estado inicial para que las campañas
+    # acumulables no se anulen entre sí por el beneficio recién otorgado.
     candidates = [campaign for campaign in campaigns if eligible(db, campaign, account, now=now)]
 
     applied: list[CampaignGrant] = []
     applied_campaigns: list[Campaign] = []
     for campaign in candidates:
-        # Para combinar dos campañas ambas deben declararse acumulables. La prioridad resuelve el
-        # conflicto; mismo número de prioridad no implica acumulación.
         if applied_campaigns and (
             not campaign.stackable or any(not previous.stackable for previous in applied_campaigns)
         ):
@@ -306,6 +321,29 @@ def evaluate_login_campaigns(db: Session, account: Account, *, first_login: bool
         if not campaign.stackable:
             break
     return applied
+
+
+def evaluate_login_campaigns(
+    db: Session,
+    account: Account,
+    *,
+    first_login: bool | None = None,
+) -> list[CampaignGrant]:
+    """Evalúa LOGIN y FIRST_LOGIN.
+
+    FIRST_LOGIN se valida contra first_login_at + activated_at persistidos. Así puede reconciliarse
+    en un request posterior sin hacerse retroactivo para cuentas que ingresaron antes de la campaña.
+    """
+    return _evaluate_campaigns(
+        db,
+        account,
+        triggers=[CampaignTrigger.FIRST_LOGIN, CampaignTrigger.LOGIN],
+    )
+
+
+def reconcile_first_login_campaigns(db: Session, account: Account) -> list[CampaignGrant]:
+    """Reintento seguro para campañas FIRST_LOGIN al cargar /me."""
+    return _evaluate_campaigns(db, account, triggers=[CampaignTrigger.FIRST_LOGIN])
 
 
 def pending_in_app_notices(db: Session, account: Account) -> list[dict]:

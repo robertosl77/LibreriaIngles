@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.deps import CurrentStudy, DbSession
 from app.core.security import create_access_token
 from app.curriculum.service import CEFR_LEVELS, available_levels
+from app.campaigns.service import reconcile_first_login_campaigns
 from app.learning.models import ClassSession, ClassSessionStatus
 from app.subscriptions.service import effective_service
 
@@ -145,8 +146,11 @@ def _me_payload(study, db) -> dict:
 
 @router.get("/me")
 def me(study: CurrentStudy, db: DbSession) -> dict:
+    # Si el request de autenticación no alcanzó a aplicar FIRST_LOGIN, /me lo reconcilia
+    # usando first_login_at + activated_at persistidos.
+    reconcile_first_login_campaigns(db, study.account)
     payload = _me_payload(study, db)
-    db.commit()  # persiste vencimientos perezosos del servicio
+    db.commit()  # persiste campaña/vencimientos perezosos del servicio
     return payload
 
 
@@ -164,5 +168,7 @@ def set_level(payload: LevelRequest, study: CurrentStudy, db: DbSession) -> dict
     # Luego el motor puede ajustarlo con evidencia (documento funcional §6 y §8).
     study.profile.selected_level = level
     study.profile.operational_level = level
+    reconcile_first_login_campaigns(db, study.account)
+    payload = _me_payload(study, db)
     db.commit()
-    return _me_payload(study, db)
+    return payload

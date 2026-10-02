@@ -76,6 +76,7 @@ def test_active_welcome_applies_once_on_first_login_and_notifies_in_app(client) 
     welcome = next(row for row in _campaigns(client, owner) if row["code"] == "WELCOME_PLATFORM")
     activated = client.post(f"{API}/platform/campaigns/{welcome['id']}/activate", headers=owner)
     assert activated.status_code == 200
+    assert activated.json()["activatedAt"] is not None
 
     alice = login(client, "alice@example.com")
     me = client.get(f"{API}/me", headers=alice).json()
@@ -96,6 +97,34 @@ def test_active_welcome_applies_once_on_first_login_and_notifies_in_app(client) 
     rows = client.get(f"{API}/platform/campaigns", headers=owner).json()
     welcome_after = next(row for row in rows if row["id"] == welcome["id"])
     assert welcome_after["recipients"] == 1
+
+
+def test_first_login_campaign_reconciles_from_persisted_timestamps(client) -> None:
+    from app.campaigns.models import CampaignGrant
+    from app.db import SessionLocal
+    from app.subscriptions.models import Subscription
+
+    owner, _ = _owner_and_services(client)
+    welcome = next(row for row in _campaigns(client, owner) if row["code"] == "WELCOME_PLATFORM")
+    activated = client.post(f"{API}/platform/campaigns/{welcome['id']}/activate", headers=owner)
+    assert activated.status_code == 200
+
+    alice = login(client, "reconcile@example.com")
+    with SessionLocal() as db:
+        grant = db.scalar(
+            select(CampaignGrant).where(CampaignGrant.campaign_id == welcome["id"])
+        )
+        assert grant is not None
+        subscription = db.get(Subscription, grant.subscription_id)
+        db.delete(grant)
+        if subscription is not None:
+            db.delete(subscription)
+        db.commit()
+
+    me = client.get(f"{API}/me", headers=alice)
+    assert me.status_code == 200
+    assert me.json()["service"]["source"] == "PLATFORM"
+    assert me.json()["service"]["origin"] == "CAMPAIGN"
 
 
 def test_existing_account_does_not_receive_first_login_campaign_later(client) -> None:

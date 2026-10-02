@@ -194,6 +194,7 @@ def _out(db: DbSession, campaign: Campaign) -> dict:
         "recipients": int(recipients),
         "startsAt": campaign.starts_at,
         "endsAt": campaign.ends_at,
+        "activatedAt": campaign.activated_at,
         "notification": campaign.notification.value,
         "message": campaign.message,
         "pendingEmails": int(pending_email),
@@ -254,6 +255,8 @@ def activate_campaign(campaign_id: int, _: PlatformOwner, db: DbSession) -> dict
         raise HTTPException(409, "El servicio de la campaña está inactivo.")
     if campaign.trigger == CampaignTrigger.SCHEDULED:
         raise HTTPException(409, "Las campañas programadas requieren el scheduler de T-059.")
+    if campaign.status != CampaignStatus.ACTIVE:
+        campaign.activated_at = datetime.now(timezone.utc)
     campaign.status = CampaignStatus.ACTIVE
     db.commit()
     return _out(db, campaign)
