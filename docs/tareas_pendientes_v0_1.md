@@ -2512,6 +2512,36 @@ Queda abierto cuál (o cuáles) y cómo se calcula el monto en cada caso.
 
 ---
 
+
+---
+
+## T-061 — Estado visual claro para conexiones de IA activas y pausadas
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+
+Objetivo: mejorar la lectura visual del estado de las conexiones de IA para que una conexión
+**activa/disponible** y una conexión **pausada/inactiva** se distingan inmediatamente por color y
+tratamiento visual, sin depender únicamente del texto del estado.
+
+Alcance:
+
+1. Aplicar el criterio visual en todos los lugares donde se administren o activen conexiones de IA,
+   tanto para conexiones individuales del usuario como para conexiones de la plataforma.
+2. Mantener visibles los estados actuales y sus acciones (`Pausar`, `Activar`, etc.), pero sumar
+   un código visual consistente que permita identificar rápidamente si la conexión está activa o
+   pausada.
+3. Reutilizar los estilos/chips existentes cuando sea posible y mantener coherencia con el resto de
+   estados visuales de la aplicación.
+4. Definir colores con contraste suficiente y sin depender exclusivamente del color para transmitir
+   el estado.
+5. Verificar el resultado en las pantallas de conexiones individuales y en el portal del
+   PLATFORM_OWNER.
+
+**Criterio:** al recorrer cualquier listado de conexiones de IA debe poder distinguirse de forma
+inmediata cuáles están activas y cuáles están pausadas, conservando además el texto explícito del
+estado.
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
