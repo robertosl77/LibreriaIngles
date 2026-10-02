@@ -282,10 +282,9 @@ export class ApiService {
     });
   }
 
-  grantService(accountId: number, serviceId: number, days: number | null): Observable<PlatformAccount> {
-    return this.http.post<PlatformAccount>(`${this.base}/platform/accounts/${accountId}/service`, {
-      serviceId,
-      days
+  grantBenefit(accountId: number, benefitId: number): Observable<PlatformAccount> {
+    return this.http.post<PlatformAccount>(`${this.base}/platform/accounts/${accountId}/benefit`, {
+      benefitId
     });
   }
 

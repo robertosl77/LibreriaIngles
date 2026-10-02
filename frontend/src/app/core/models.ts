@@ -52,7 +52,6 @@ export interface PlatformService {
   name: string;
   source: AiSource;
   linkType: LinkType;
-  durationDays: number | null;
   dailyRequestLimit: number | null;
   description: string | null;
   active: boolean;
@@ -81,7 +80,6 @@ export interface PlatformBenefit {
   serviceId: number;
   serviceName: string;
   durationDays: number | null;
-  effectiveDurationDays: number | null;
   conflictPolicy: 'EXTEND_SAME_SERVICE';
   active: boolean;
   usedByCampaigns: number;

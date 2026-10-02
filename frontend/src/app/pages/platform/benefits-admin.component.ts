@@ -9,6 +9,7 @@ import {
   PlatformService
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { ActiveToggleComponent } from './active-toggle.component';
 
 function emptyDraft(serviceId: number | null): PlatformBenefitDraft {
   return {
@@ -26,15 +27,15 @@ function numberOrNull(value: unknown): number | null {
 
 @Component({
   selector: 'app-benefits-admin',
-  imports: [FormsModule],
+  imports: [FormsModule, ActiveToggleComponent],
   template: `
     <section class="card stack">
       <div class="section-head">
         <div>
           <h2>Beneficios</h2>
           <p class="muted small">
-            Acá se define una sola vez <strong>qué se otorga</strong>: servicio + duración.
-            Campañas e invitaciones reutilizan esta definición.
+            Define <strong>qué se otorga</strong>: un servicio + su duración.
+            Campañas, invitaciones y otorgamientos manuales reutilizan esta definición.
           </p>
         </div>
         @if (editingId() === null) {
@@ -61,19 +62,26 @@ function numberOrNull(value: unknown): number | null {
             <label class="field">
               Duración (días)
               <input class="input" type="number" min="1" name="bDays" [(ngModel)]="draft.durationDays"
-                placeholder="usa la duración del servicio" />
+                placeholder="sin vencimiento" />
+              <span class="muted tiny">Vacío = el beneficio no vence.</span>
             </label>
           </div>
-          <label class="check-row small">
-            <input type="checkbox" name="bActive" [(ngModel)]="draft.active" />
-            Activo para nuevos otorgamientos
-          </label>
+
+          <div class="state-row">
+            <div>
+              <strong class="small">Estado</strong>
+              <div class="muted tiny">Determina si puede usarse en nuevos otorgamientos.</div>
+            </div>
+            <app-active-toggle [(value)]="draft.active" />
+          </div>
+
           @if (editingId()) {
             <p class="banner small">
               Cambiar este beneficio modifica los <strong>futuros</strong> otorgamientos de todas las
               campañas e invitaciones que lo usan. Los canjes ya realizados conservan su historial.
             </p>
           }
+
           <div class="row">
             <button class="btn btn-primary btn-sm" type="submit"
               [disabled]="saving() || !draft.name.trim() || !draft.serviceId">
@@ -90,21 +98,32 @@ function numberOrNull(value: unknown): number | null {
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Beneficio</th><th>Servicio</th><th>Duración</th><th>Usos</th><th></th></tr>
+              <tr>
+                <th>Beneficio</th>
+                <th>Servicio</th>
+                <th>Duración</th>
+                <th>Usos</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
             </thead>
             <tbody>
               @for (benefit of benefits(); track benefit.id) {
                 <tr [class.inactive]="!benefit.active">
-                  <td>
-                    <strong>{{ benefit.name }}</strong>
-                    @if (!benefit.active) { <span class="chip">Inactivo</span> }
-                  </td>
+                  <td><strong>{{ benefit.name }}</strong></td>
                   <td>{{ benefit.serviceName }}</td>
-                  <td>{{ benefit.effectiveDurationDays ? benefit.effectiveDurationDays + ' días' : 'sin vencimiento' }}</td>
+                  <td>{{ benefit.durationDays ? benefit.durationDays + ' días' : 'sin vencimiento' }}</td>
                   <td class="small">
                     {{ benefit.usedByCampaigns }} campaña(s) · {{ benefit.usedByInvitations }} invitación(es)
                   </td>
-                  <td><button class="btn btn-sm" type="button" (click)="startEdit(benefit)">Editar</button></td>
+                  <td>
+                    <span [class]="benefit.active ? 'chip chip-ok' : 'chip'">
+                      {{ benefit.active ? 'Activo' : 'Inactivo' }}
+                    </span>
+                  </td>
+                  <td>
+                    <button class="btn btn-sm" type="button" (click)="startEdit(benefit)">Editar</button>
+                  </td>
                 </tr>
               }
             </tbody>
@@ -115,15 +134,38 @@ function numberOrNull(value: unknown): number | null {
   `,
   styles: `
     :host { display: contents; }
-    .section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
     .section-head h2, .section-head p { margin: 0; }
     .section-head p { margin-top: 0.3rem; }
-    .editor { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
-    .check-row { display: flex; align-items: center; gap: 0.45rem; }
+    .editor {
+      padding: 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      background: var(--bg);
+    }
+    .state-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .tiny { font-size: 0.76rem; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-    th, td { text-align: left; padding: 0.45rem 0.8rem 0.45rem 0; border-bottom: 1px solid var(--border); vertical-align: top; }
-    tr.inactive { opacity: 0.65; }
+    th, td {
+      text-align: left;
+      padding: 0.45rem 0.8rem 0.45rem 0;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr.inactive { opacity: 0.62; }
   `
 })
 export class BenefitsAdminComponent implements OnInit {

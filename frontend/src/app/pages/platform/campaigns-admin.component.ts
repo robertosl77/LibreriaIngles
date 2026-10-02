@@ -97,7 +97,7 @@ function isoDate(value: string): string | null {
                 @for (benefit of activeBenefits(); track benefit.id) {
                   <option [ngValue]="benefit.id">
                     {{ benefit.name }} · {{ benefit.serviceName }}
-                    @if (benefit.effectiveDurationDays) { · {{ benefit.effectiveDurationDays }} días }
+                    @if (benefit.durationDays) { · {{ benefit.durationDays }} días }
                   </option>
                 }
               </select>
