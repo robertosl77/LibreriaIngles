@@ -245,9 +245,11 @@ SECONDARY_MAX = 3
 
 def _secondary_skill_candidates(exercise: Exercise) -> list[dict]:
     """Skills que la IA puede observar incidentalmente en una respuesta productiva."""
-    if not exercise.level or not exercise.response_mode or exercise.response_mode.value == "SELECT":
+    level = getattr(exercise, "level", None)
+    response_mode = getattr(exercise, "response_mode", None)
+    if not level or not response_mode or response_mode.value == "SELECT":
         return []
-    curriculum = get_level(exercise.level)
+    curriculum = get_level(level)
     if curriculum is None:
         return []
     areas = {"grammar", "vocabulary"}
@@ -320,7 +322,7 @@ def _surface_normalize(value: str) -> str:
 
 def _orthography_primary(exercise: Exercise, answer: str) -> Evaluation | None:
     """Capitalización, puntuación y apóstrofes necesitan comparar la forma escrita, no solo significado."""
-    key = exercise.skill_key or ""
+    key = getattr(exercise, "skill_key", None) or ""
     if ".writing.orthography." not in key or key.endswith(".basic_spelling"):
         return None
     accepted = _accepted(exercise)
@@ -352,10 +354,11 @@ def _orthography_primary(exercise: Exercise, answer: str) -> Evaluation | None:
 
 def _add_mechanics_evidence(exercise: Exercise, answer: str, result: dict, *, spoken: bool) -> dict:
     """Capitalización/puntuación observables: evidencia curricular, sin tocar la nota principal."""
-    if spoken or not answer.strip() or not exercise.response_mode or exercise.response_mode.value != "WRITE":
+    response_mode = getattr(exercise, "response_mode", None)
+    if spoken or not answer.strip() or not response_mode or response_mode.value != "WRITE":
         return result
     # Solo producción de oraciones; un fill_blank de una palabra no demuestra puntuación.
-    if exercise.exercise_type not in {"short_writing", "conversation"} and exercise.area != "writing":
+    if exercise.exercise_type not in {"short_writing", "conversation"} and getattr(exercise, "area", None) != "writing":
         return result
 
     text = answer.strip()
