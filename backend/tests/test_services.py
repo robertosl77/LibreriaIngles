@@ -122,7 +122,7 @@ def test_service_does_not_define_duration_and_manual_grant_uses_benefit(client) 
     assert benefit.status_code == 201, benefit.text
 
     granted = client.post(
-        f"{API}/platform/accounts/{_account_id(client, owner, "benefit-only@example.com")}/benefit",
+        f"{API}/platform/accounts/{_account_id(client, owner, 'benefit-only@example.com')}/benefit",
         json={"benefitId": benefit.json()["id"]},
         headers=owner,
     )
@@ -131,7 +131,7 @@ def test_service_does_not_define_duration_and_manual_grant_uses_benefit(client) 
     assert granted.json()["service"]["expiresAt"] is not None
 
     legacy = client.post(
-        f"{API}/platform/accounts/{_account_id(client, owner, "benefit-only@example.com")}/service",
+        f"{API}/platform/accounts/{_account_id(client, owner, 'benefit-only@example.com')}/service",
         json={"serviceId": created.json()["id"], "days": 99},
         headers=owner,
     )
