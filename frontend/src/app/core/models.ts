@@ -67,6 +67,7 @@ export interface PlatformAccount {
   displayName: string | null;
   isPlatformOwner: boolean;
   createdAt: string;
+  firstLoginAt: string | null;
   ownConnections: number;
   platformRequests24h: number;
   service: ServiceStatus;

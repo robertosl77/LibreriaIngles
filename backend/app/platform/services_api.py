@@ -128,6 +128,7 @@ def _account_out(db, account: Account) -> dict:
         "displayName": account.display_name,
         "isPlatformOwner": account.platform_role == PlatformRole.PLATFORM_OWNER,
         "createdAt": account.created_at,
+        "firstLoginAt": account.first_login_at,
         "ownConnections": int(own_keys or 0),
         "platformRequests24h": platform_requests(db, account.id, since=utcnow() - LIMIT_WINDOW),
         "service": service.payload(),

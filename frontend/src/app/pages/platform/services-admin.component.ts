@@ -154,7 +154,14 @@ function numberOrNull(value: unknown): number | null {
                   }
                 </span>
                 <span class="muted small">
-                  {{ a.ownConnections }} conexión(es) propia(s) · {{ a.platformRequests24h }} pedidos a la plataforma en 24 h
+                  Primera sesión:
+                  @if (a.firstLoginAt) {
+                    {{ a.firstLoginAt | date: 'dd/MM/yyyy HH:mm:ss' }}
+                  } @else {
+                    nunca ingresó
+                  }
+                  · {{ a.ownConnections }} conexión(es) propia(s)
+                  · {{ a.platformRequests24h }} pedidos a la plataforma en 24 h
                 </span>
               </div>
               <div class="row">
