@@ -141,8 +141,9 @@ Menú **Plataforma** → `/app/plataforma`.
   se puede escribir el modelo a mano. Si el modelo actual ya no figura en la lista, se avisa
   (probablemente discontinuado).
 - Cada registro de consumo guarda el modelo usado (migración `0004_usage_model`).
-- Qué conexiones usa cada usuario (propias, de plataforma o ambas según el plan) queda para
-  T-003/T-004.
+- **Qué conexiones usa cada usuario (T-003):** un usuario común usa solo sus conexiones
+  propias; las de plataforma las usa únicamente el `PLATFORM_OWNER`. Cuando existan planes,
+  la membresía decidirá quién más las usa (T-004, `platform_ai_allowed()`).
 
 Migraciones: `0003_platform_ai_usage` y `0004_usage_model`.
 

@@ -7,6 +7,9 @@ Reglas (documento funcional §24–§29):
   sin avisar con modales: el resultado indica si hubo cambio de proveedor.
 - Si ninguna responde, se lanza NoAIAvailable y el trabajo queda persistido
   (la clase queda pendiente y se reintenta más tarde).
+- Fuente de IA (T-003, MVP BYOK): cada cuenta usa SOLO sus conexiones propias. Las de la
+  plataforma las usa únicamente el PLATFORM_OWNER, hasta que un plan/membresía las habilite
+  (T-004).
 """
 
 from dataclasses import dataclass, field
@@ -15,7 +18,7 @@ from datetime import timedelta
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.accounts.models import Account
+from app.accounts.models import Account, PlatformRole
 from app.ai.models import (
     AIConnection,
     AIConnectionOwnerType,
@@ -68,20 +71,28 @@ class AudioTranscriptionResult:
         return bool(self.failed_connections)
 
 
+def platform_ai_allowed(account: Account) -> bool:
+    """¿Puede esta cuenta usar las conexiones de IA de la plataforma?
+
+    MVP (T-003): solo el dueño de la plataforma. Cuando existan planes, lo decide la
+    membresía del usuario (T-004); este es el único punto a cambiar.
+    """
+    return account.platform_role == PlatformRole.PLATFORM_OWNER
+
+
 def candidate_connections(
     db: Session, account: Account, *, include_backoff: bool = False
 ) -> list[AIConnection]:
-    """Conexiones de la cuenta (BYOK) y, después, las de la plataforma."""
-    rows = db.scalars(
-        select(AIConnection).where(
-            AIConnection.active.is_(True),
-            or_(
-                (AIConnection.owner_type == AIConnectionOwnerType.ACCOUNT)
-                & (AIConnection.owner_id == account.id),
-                AIConnection.owner_type == AIConnectionOwnerType.PLATFORM,
-            ),
-        )
-    ).all()
+    """Conexiones de la cuenta (BYOK) y, solo si está habilitado, las de la plataforma."""
+    own = (AIConnection.owner_type == AIConnectionOwnerType.ACCOUNT) & (
+        AIConnection.owner_id == account.id
+    )
+    source = (
+        or_(own, AIConnection.owner_type == AIConnectionOwnerType.PLATFORM)
+        if platform_ai_allowed(account)
+        else own
+    )
+    rows = db.scalars(select(AIConnection).where(AIConnection.active.is_(True), source)).all()
     rows = sorted(
         rows,
         key=lambda c: (c.owner_type != AIConnectionOwnerType.ACCOUNT, c.priority, c.id),

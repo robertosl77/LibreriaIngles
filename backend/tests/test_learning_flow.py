@@ -200,7 +200,11 @@ def test_platform_connections_only_for_platform_owner(client) -> None:
         headers=owner,
     )
     assert response.status_code == 201
-    # Un usuario común sin conexiones propias puede usar la de plataforma.
+    # T-003: un usuario común sin conexiones propias NO usa la IA de la plataforma.
     client.put(f"{API}/me/level", json={"level": "A1"}, headers=headers)
     klass = client.post(f"{API}/classes", headers=headers).json()
-    assert klass["status"] == "READY"
+    assert klass["status"] == "GENERATION_FAILED"
+    assert client.get(f"{API}/me", headers=headers).json()["ai"]["connections"] == 0
+    # El dueño sí la usa.
+    client.put(f"{API}/me/level", json={"level": "A1"}, headers=owner)
+    assert client.post(f"{API}/classes", headers=owner).json()["status"] == "READY"

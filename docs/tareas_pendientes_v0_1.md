@@ -122,8 +122,22 @@ porque puede introducir cambios incompatibles.
 ## T-003 — Ajustar el router de IA al alcance actual BYOK
 
 **Prioridad:** P1 — Alta  
-**Estado:** Pendiente  
+**Estado:** En curso · Claude  
 **Bloquea prueba local:** No
+
+Resolución (2026-10-01): hasta ahora **cualquier** cuenta sin conexiones propias usaba las de
+la plataforma (las del dueño). Ahora:
+
+```text
+usuario común   → solo sus conexiones propias (BYOK)
+PLATFORM_OWNER  → las suyas + las de la plataforma
+membresía paga  → (T-004) la habilitará; único punto a cambiar: platform_ai_allowed()
+```
+
+- `app/ai/service.py`: `platform_ai_allowed(account)` decide si la cuenta ve conexiones de
+  plataforma; lo usan generación, corrección, audio y el contador de IA del inicio.
+- Un usuario nuevo sin IA propia ve "Conectá una IA" y no puede crear clases hasta cargar la suya.
+- Los tests de topes de consumo (T-006) se mantienen simulando una membresía.
 
 El router actual considera conexiones:
 
