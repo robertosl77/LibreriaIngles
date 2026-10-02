@@ -233,7 +233,7 @@ const RESULT_LABELS: Record<string, string> = {
                       <p class="chat-text">{{ exercise.question }}</p>
                     }
 
-                    @if (exercise.type !== 'conversation' && (editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
+                    @if ((editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
                       <div class="turn-help">
                         @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
                           <app-lesson-panel
@@ -286,7 +286,7 @@ const RESULT_LABELS: Record<string, string> = {
                       <strong>{{ exercise.answer || '(sin respuesta)' }}</strong>
                     }
 
-                    @if (exercise.type !== 'conversation' && editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
+                    @if (editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
                       <div class="turn-help">
                         @if (openPronunciationPractice() === exercise.id) {
                           <app-pronunciation-practice
@@ -325,7 +325,7 @@ const RESULT_LABELS: Record<string, string> = {
                 <p class="question">{{ exercise.question }}</p>
               }
 
-              @if ((editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
+              @if (exercise.type !== 'conversation' && (editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
                 @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
                   <app-lesson-panel
                     [lesson]="lesson"
@@ -350,7 +350,7 @@ const RESULT_LABELS: Record<string, string> = {
                 }
               }
 
-              @if (editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
+              @if (exercise.type !== 'conversation' && editable() && !busy() && exercise.response === 'SPEAK' && c.kind !== 'EXAM' && openLesson() !== exercise.id) {
                 @if (openPronunciationPractice() === exercise.id) {
                   <app-pronunciation-practice
                     (closed)="closePronunciationPractice()"
