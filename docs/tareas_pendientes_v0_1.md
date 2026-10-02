@@ -204,7 +204,9 @@ OTORGAMIENTO (cómo alguien recibe un servicio)
   empresa. Es un ordenamiento interno de configuraciones, no una opción para el usuario.
 - **Hoy (sin pagos):** vínculo + fuente y ya funciona. **Con pagos:** triple restricción
   vínculo × fuente × pago (el pago habilita el servicio por un período, ej. mensual).
-- Analogías: AWS (base fija + uso variable) y el celular (cuenta controlada / línea libre).
+- Analogías: **home banking** (uno para personas, otro para empresas: el de empresas es el que
+  tiene una empresa de por medio), AWS (base fija + uso variable) y el celular (cuenta controlada
+  / línea libre).
 
 ### 2. Servicios (catálogo configurable por sr.macros)
 
