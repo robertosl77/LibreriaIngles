@@ -33,6 +33,18 @@ class CampaignNotification(str, Enum):
     IN_APP_EMAIL = "IN_APP_EMAIL"
 
 
+class CampaignSeedMarker(Base):
+    """Marca que una campaña ejemplo ya fue creada una vez.
+
+    Permite borrarla físicamente sin que el seeding runtime la recree en el próximo listado.
+    """
+
+    __tablename__ = "campaign_seed_markers"
+
+    code: Mapped[str] = mapped_column(String(80), primary_key=True)
+    seeded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Campaign(Base):
     """Regla configurable que otorga un servicio cuando una cuenta cumple condiciones."""
 

@@ -391,3 +391,18 @@ def test_delete_ended_campaign_with_recipients_keeps_grant_history(client) -> No
             )
         ).all()
         assert len(grants) == 1
+
+
+def test_deleted_seed_welcome_without_recipients_is_not_recreated(client) -> None:
+    owner, _ = _owner_and_services(client)
+    welcome = next(row for row in _campaigns(client, owner) if row["code"] == "WELCOME_PLATFORM")
+    assert welcome["recipients"] == 0
+
+    assert client.post(
+        f"{API}/platform/campaigns/{welcome['id']}/finish", headers=owner
+    ).status_code == 200
+    assert client.delete(
+        f"{API}/platform/campaigns/{welcome['id']}", headers=owner
+    ).status_code == 204
+
+    assert all(row["code"] != "WELCOME_PLATFORM" for row in _campaigns(client, owner))

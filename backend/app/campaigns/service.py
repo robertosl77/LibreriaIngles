@@ -14,6 +14,7 @@ from app.accounts.models import Account, PlatformRole
 from app.campaigns.models import (
     Campaign,
     CampaignGrant,
+    CampaignSeedMarker,
     CampaignNotification,
     CampaignStatus,
     CampaignTrigger,
@@ -36,12 +37,25 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 
 def seed_campaigns(db: Session) -> None:
-    """Crea la campaña ejemplo de bienvenida como BORRADOR; el OWNER decide cuándo activarla."""
-    if db.scalar(select(Campaign.id).where(Campaign.code == WELCOME_CODE)) is not None:
+    """Crea una sola vez la campaña ejemplo de bienvenida como BORRADOR.
+
+    El marker sobrevive al borrado físico: Eliminar significa que la campaña no reaparece.
+    """
+    marker = db.get(CampaignSeedMarker, WELCOME_CODE)
+    if marker is not None:
         return
+
+    existing = db.scalar(select(Campaign).where(Campaign.code == WELCOME_CODE))
+    if existing is not None:
+        db.add(CampaignSeedMarker(code=WELCOME_CODE))
+        db.flush()
+        return
+
     plan = db.scalar(select(Plan).where(Plan.code == "INDIVIDUAL_PLATFORM"))
     if plan is None:
         return
+
+    db.add(CampaignSeedMarker(code=WELCOME_CODE))
     db.add(
         Campaign(
             code=WELCOME_CODE,
@@ -64,7 +78,6 @@ def seed_campaigns(db: Session) -> None:
         )
     )
     db.flush()
-
 
 def _scope_matches(db: Session, campaign: Campaign, account: Account) -> bool:
     if campaign.organization_id is None:
