@@ -593,6 +593,65 @@ portal OWNER    Beneficios + Pre-invitaciones/Invitaciones
 email           NAMED queda PENDING hasta implementar T-051
 ```
 
+### 12. Ajustes detectados en revisión manual de Configuración (Roberto, 2026-10-02)
+
+Estos puntos se detectaron recorriendo el flujo real de Plataforma > Configuración. No implementar
+por separado sin revisar primero cómo afectan la trazabilidad de Benefit/Subscription.
+
+1. **Fuentes de IA visibles como bloque propio.** Además del selector de Servicios, Configuración
+   debe mostrar una sección informativa "Fuentes de IA" con BYOK / PLATFORM / HYBRID y su significado.
+   Hoy aparecen solo como opciones del formulario y quedan demasiado implícitas.
+
+2. **Renombrar "Cuentas y servicios" a "Cuentas".** La sección administra cuentas y su beneficio
+   vigente; llamarla "Cuentas y servicios" hace parecer que existe una segunda gestión de Servicios.
+
+3. **En Cuentas mostrar el Beneficio vigente, no solo el Servicio.** El chip verde actual muestra
+   algo como "Individual · Plataforma", que es el servicio/fuente, no el beneficio. Debe verse el
+   nombre del beneficio aplicado (ej. "Bienvenida", "Invitación amigo"). El servicio puede quedar
+   como detalle secundario si hace falta.
+
+4. **Trazar explícitamente qué Benefit originó la suscripción.** Hoy Subscription guarda plan,
+   origen y nota, pero no un `benefit_id` directo; además, al aplicar otro Benefit del mismo Plan,
+   el motor extiende la suscripción existente. Eso hace imposible reconstruir de forma robusta cuál
+   es el "beneficio vigente" y explica que el selector pueda volver a preseleccionar el primer
+   beneficio compatible. Resolver la trazabilidad antes de usar el nombre del beneficio como dato
+   de verdad en Cuentas.
+
+5. **Selector "Otorgar beneficio": mostrar solo el nombre.** No concatenar
+   "Beneficio · Servicio · N días" en la opción principal. Ej.: mostrar "Bienvenida". La
+   configuración completa se consulta en Beneficios; si se necesita contexto, usar información
+   secundaria no redundante.
+
+6. **Refresco cruzado entre componentes.** Editar/renombrar un Beneficio debe actualizar
+   inmediatamente los selectores y listados que lo consumen, sin exigir F5. Configuración necesita
+   una estrategia compartida de refresh/estado o eventos entre Beneficios y Cuentas.
+
+7. **Cambio manual de beneficio sin paso intermedio "Quitar".** El PLATFORM_OWNER debe poder elegir
+   otro beneficio y confirmar un reemplazo explícito en una sola operación. Esto no contradice la
+   política conservadora de Campañas/Invitaciones: allí no se reemplaza silenciosamente; en el
+   otorgamiento MANUAL el cambio es una acción explícita del OWNER y debe preservar historial/
+   auditoría de lo anterior.
+
+8. **Beneficios: baja lógica.** Agregar acción "Eliminar" entendida como baja lógica/inactivación,
+   preservando referencias históricas de campañas, invitaciones, canjes y otorgamientos. No borrar
+   físicamente un Benefit que tenga trazabilidad.
+
+9. **Beneficios: sacar "Usos" de Configuración.** La columna "N campañas · N invitaciones" es
+   información estadística/diagnóstica, no configuración primaria. Moverla a Resumen o a una vista
+   de detalle/uso del beneficio; mantener Configuración enfocada en nombre, servicio, duración,
+   estado y acciones.
+
+10. **Resumen: mapa de cuentas y beneficios efectivos.** Agregar una visualización/listado de
+    cuentas con el beneficio actualmente aplicado según la lógica real de la aplicación. Debe
+    distinguir al menos cuenta, beneficio vigente, servicio resultante, origen
+    (MANUAL/CAMPAIGN/INVITATION/PAYMENT) y vencimiento. Esto sirve para verificar rápidamente qué
+    terminó aplicando el motor.
+
+11. **Nombres de beneficios semánticos.** El nombre es la identidad humana del beneficio
+    ("Bienvenida", "Invitación amigo"); servicio y duración son su configuración interna. Evitar
+    nombres por defecto del tipo "Plataforma 3 días" si terminan duplicando exactamente los campos
+    que ya se muestran en la ficha.
+
 ### 12. Pendiente de definir más adelante
 
 - Nombres comerciales definitivos de los servicios.
