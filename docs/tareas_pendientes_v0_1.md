@@ -2177,8 +2177,8 @@ Híbrido      (optional)  → "Tu servicio" + Tus conexiones + Agregar conexión
 
 Criterios:
 - Con Plataforma no se ve el alta de conexiones; si el alumno ya tenía keys propias cargadas,
-  se avisa que quedan guardadas pero sin uso mientras dure el servicio (no se borran: al
-  vencer vuelve a usarlas).
+  las sigue viendo y administrando (editar/pausar/eliminar), con aviso de que quedan sin uso
+  mientras dure el servicio (no se borran: al vencer vuelve a usarlas).
 - "En uso ahora" solo nombra conexiones **propias**; si la que se usa es de plataforma o de
   empresa, dice genéricamente "IA de Librería Inglés" / "IA de tu empresa".
 - La API tampoco expone nombre/modelo de conexiones de plataforma a cuentas que no son el dueño.
@@ -2192,8 +2192,10 @@ Backend   public_trace(): toda traza de IA de plataforma sale como "IA de Librer
           · transcripción y pronunciación · mensajes de error ("Gemini interna: sin cuota")
           Las trazas nuevas guardan ownerType; las viejas se resuelven por connectionId.
           /me → ai.own cuenta las propias guardadas aunque el servicio no las use.
-Pantalla  IA con Plataforma: título "IA", solo "Tu servicio", sin conexiones ni alta;
-          si tenía keys propias, aviso "quedan guardadas… al vencer vuelven a usarse".
+Pantalla  IA con Plataforma: título "IA" + "Tu servicio", sin "Agregar conexión".
+          Si nunca cargó keys: no ve conexiones. Si ya tenía (pedido de Roberto): ve
+          "Tus conexiones guardadas" y puede editarlas, pausarlas o eliminarlas; aviso de que
+          no se usan mientras dure el servicio y vuelven a usarse al vencer.
           Híbrido y Propias keys: como antes. "· motor X" solo si hay motor.
 ```
 

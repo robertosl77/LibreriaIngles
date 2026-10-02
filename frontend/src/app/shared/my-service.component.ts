@@ -48,10 +48,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
             } @else {
               Generás y corregís tus clases con tus propias API keys.
             }
-            @if (s.source === 'PLATFORM' && ownKeys() > 0) {
-              Tus conexiones propias quedan guardadas pero no se usan mientras tengas este servicio;
-              cuando venza, vuelven a usarse.
-            }
             @if (s.source === 'HYBRID') {
               Primero se usan tus conexiones; si fallan, la IA de Librería Inglés.
             }

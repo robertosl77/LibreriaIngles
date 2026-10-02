@@ -154,7 +154,8 @@ Menú **Plataforma** → `/app/plataforma`.
 - **Privacidad de las conexiones de plataforma (T-055):** el alumno nunca ve nombre, proveedor
   ni motor de una conexión de plataforma: en IA, en la clase, en cada corrección y en los
   errores figura como *IA de Librería Inglés*. Con servicio *Plataforma*, el menú IA no ofrece
-  cargar keys (si tenía, quedan guardadas sin uso hasta que venza el servicio).
+  cargar keys nuevas; si ya tenía, las ve como "Tus conexiones guardadas" (puede editarlas o
+  borrarlas) y quedan sin uso hasta que venza el servicio.
 
 Migraciones: `0003_platform_ai_usage`, `0004_usage_model` y `0012_services`.
 

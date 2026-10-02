@@ -70,6 +70,15 @@ import { MyServiceComponent } from '../../shared/my-service.component';
           title="Tus conexiones"
           (changed)="refreshActive()"
         />
+      } @else if (ownKeys() > 0) {
+        <!-- Plataforma con keys propias ya cargadas: puede verlas, editarlas o borrarlas. -->
+        <app-connections-manager
+          scope="account"
+          title="Tus conexiones guardadas"
+          note="No se usan mientras tengas este servicio; cuando venza, vuelven a usarse. Podés editarlas, pausarlas o eliminarlas."
+          [allowCreate]="false"
+          (changed)="refreshActive()"
+        />
       }
     </main>
   `
@@ -81,6 +90,7 @@ export class AiSettingsComponent implements OnInit {
   readonly isOwner = computed(() => this.auth.me()?.account.isPlatformOwner ?? false);
   /** T-055: con un servicio que no usa keys propias (Plataforma) no se ofrece cargarlas. */
   readonly keysUnused = computed(() => this.auth.me()?.service.ownKeys === 'unused');
+  readonly ownKeys = computed(() => this.auth.me()?.ai.own ?? 0);
   readonly active = signal<ActiveAiConnections>({ default: null, audio: null });
 
   async ngOnInit(): Promise<void> {
