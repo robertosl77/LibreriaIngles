@@ -120,7 +120,7 @@ const RESULT_LABELS: Record<string, string> = {
           @if (c.kind === 'EXAM' && editable()) {
             <p class="banner banner-info small">
               <strong>Examen de nivel {{ c.targetLevel }}.</strong> {{ c.exercises.length }} ejercicios de todas las
-              áreas, sin lecciones. Para aprobar: 70% en total y al menos 60% en cada área. Tus
+              áreas, sin lecciones. Para aprobar: 70% en total y al menos 60% en cada área y en Ortografía. Tus
               respuestas se guardan solas; cuando termines, tocá <strong>Finalizar examen</strong>.
             </p>
           }
@@ -153,7 +153,7 @@ const RESULT_LABELS: Record<string, string> = {
                 }
               </ul>
               <p class="muted small">
-                Se aprueba con {{ r.passScore }}% en total y al menos {{ r.areaMinScore }}% en cada área (línea vertical).
+                Se aprueba con {{ r.passScore }}% en total y al menos {{ r.areaMinScore }}% en cada área y en Ortografía (línea vertical).
                 @if (!r.passed) { Podés volver a rendirlo en 24 horas; mientras tanto, practicá las áreas marcadas. }
               </p>
             </section>
