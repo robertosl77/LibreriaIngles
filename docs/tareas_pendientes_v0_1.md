@@ -2336,6 +2336,110 @@ nivel que Grammar, Vocabulary, Listening y el resto, sin un tratamiento especial
 
 ---
 
+
+## T-059 — Motor programable de ejecución de campañas y campañas ejemplo por empresa
+
+**Prioridad:** P2 — Media  
+**Estado:** Para analizar / diseñar  
+**Relación:** T-004 (campañas), T-050 (fidelización), T-051 (emails)
+
+Objetivo: separar del motor de campañas el concepto de **cuándo se evalúan campañas programadas**.
+Las campañas no deben depender únicamente de eventos como login/registro: hace falta un segundo motor
+de ejecución programada que permita evaluar campañas aunque el usuario no entre a la aplicación.
+
+### A. Scheduler / batch de campañas
+
+Inicialmente puede implementarse de forma simple o incluso con una ejecución diaria hardcodeada, pero
+el diseño debe permitir evolucionar a una configuración dinámica.
+
+El scheduler debe poder expresar, como mínimo:
+
+1. **Frecuencia:** una vez por día, varias veces por día, semanal, ciertos días de la semana, etc.
+2. **Horario:** una o más horas de ejecución.
+3. **Vigencia:** fecha/hora desde y hasta cuándo corre esa programación.
+4. **Ciclos:** permitir repeticiones periódicas sin crear lógica especial por campaña.
+5. **Asociación con campañas:** una programación puede indicar qué campaña(s) debe evaluar en cada
+   ejecución.
+6. **Estado:** activa / pausada / finalizada.
+7. **Idempotencia:** una ejecución repetida no debe volver a aplicar una campaña ya otorgada cuando
+   la regla de campaña sea de una sola vez.
+8. **Trazabilidad:** registrar cuándo corrió el batch, qué campaña evaluó, cuántos candidatos encontró,
+   cuántos beneficios aplicó y qué errores tuvo.
+
+Flujo conceptual:
+
+```text
+SCHEDULER
+   ↓
+llega fecha/hora de ejecución
+   ↓
+obtiene campañas asociadas y activas
+   ↓
+busca candidatos
+   ↓
+evalúa ELIGIBILITY
+   ↓
+verifica nunca_recibió(campaña) / límites
+   ↓
+ejecuta ACTION
+   ↓
+ejecuta NOTIFICATION si corresponde
+   ↓
+registra resultado
+```
+
+Ejemplo:
+
+```text
+Programación:
+todos los días 08:00
+
+Campaña:
+"Volvé con 50 %"
+
+Condición:
+último pago entre 90 y 120 días
+AND sin servicio activo
+AND nunca_recibió(campaña)
+
+Acción:
+crear promoción
+
+Notificación:
+EMAIL
+```
+
+Importante: **scheduler y campaña son conceptos distintos**. La campaña define audiencia, condiciones,
+acciones, notificación y límites. El scheduler solamente define cuándo debe evaluarse.
+
+### B. Campañas iniciales / ejemplos para nuevas empresas
+
+Al crear una organización, precargar campañas de ejemplo en estado **BORRADOR / INACTIVAS** para que
+el ADMIN tenga configuraciones reales como referencia y pueda entender el sistema sin empezar desde
+cero.
+
+Ejemplos iniciales posibles:
+
+- bienvenida a nuevo empleado;
+- beneficio por primera actividad;
+- recordatorio por inactividad;
+- campaña programada de fidelización;
+- invitación/regalo mediante link.
+
+Las campañas precargadas:
+
+1. nunca deben activarse automáticamente solo por crear la empresa;
+2. deben quedar limitadas por backend al `organization_id` de esa empresa;
+3. pueden editarse, duplicarse o eliminarse;
+4. deben servir como ejemplos funcionales del constructor de campañas;
+5. no deben contener condiciones o acciones que el ADMIN de empresa no tenga permiso de utilizar.
+
+**Criterio de aceptación:** el sistema puede ejecutar campañas tanto por eventos como por una
+programación independiente y configurable, y una empresa nueva recibe campañas de ejemplo inactivas
+que muestran al ADMIN cómo configurarlas dentro de su propio tenant.
+
+---
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
