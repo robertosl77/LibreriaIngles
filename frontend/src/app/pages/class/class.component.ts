@@ -451,7 +451,7 @@ const RESULT_LABELS: Record<string, string> = {
                   @if (r.feedback) { <p>{{ r.feedback }}</p> }
                   @if (r.ai; as ai) {
                     <p class="muted small">
-                      Corrección realizada por {{ ai.providerLabel }} · motor {{ ai.model }}
+                      Corrección realizada por {{ ai.providerLabel }}@if (ai.model) { · motor {{ ai.model }} }
                     </p>
                   }
                   @if (exercise.response === 'SPEAK') {
@@ -565,7 +565,7 @@ const RESULT_LABELS: Record<string, string> = {
             Creada {{ c.createdAt | date: 'dd/MM/yyyy HH:mm' }}
             @if (c.generationAi; as ai) {
               · {{ c.kind === 'EXAM' ? 'Examen' : 'Clase' }} realizada por el agente
-              {{ ai.providerLabel }} · motor {{ ai.model }}
+              {{ ai.providerLabel }}@if (ai.model) { · motor {{ ai.model }} }
             } @else if (c.generatedBy) {
               · generada con {{ c.generatedBy }}
             }

@@ -1,7 +1,9 @@
 """T-004 etapa 1: servicios (vínculo × fuente de IA) otorgados por sr.macros."""
 
+import json
 from datetime import timedelta
 
+from app.ai.service import PLATFORM_LABEL
 from conftest import login
 from sqlalchemy import select
 
@@ -91,8 +93,10 @@ def test_source_decides_which_keys_are_used(client) -> None:
 
     # Plataforma: ignora las propias.
     _grant(client, owner, "alice@example.com", services["INDIVIDUAL_PLATFORM"]["id"])
-    assert client.get(f"{API}/me", headers=alice).json()["service"]["ownKeys"] == "unused"
-    assert _new_class(client, alice)["generatedBy"] == "Plataforma"
+    me = client.get(f"{API}/me", headers=alice).json()
+    assert me["service"]["ownKeys"] == "unused"
+    assert me["ai"]["own"] == 1  # guardada aunque no se use
+    assert _new_class(client, alice)["generatedBy"] == PLATFORM_LABEL
 
     # Volver a propias keys.
     account_id = _account_id(client, owner, "alice@example.com")
@@ -115,7 +119,7 @@ def test_hybrid_uses_own_first_then_platform(client) -> None:
     alice = _student(client)
     _connection(client, alice, "Mía rota", model="mock-fail-quota")
     _grant(client, owner, "alice@example.com", _services(client, owner)["INDIVIDUAL_HYBRID"]["id"])
-    assert _new_class(client, alice)["generatedBy"] == "Plataforma"
+    assert _new_class(client, alice)["generatedBy"] == PLATFORM_LABEL
 
 
 def test_service_daily_cap_limits_platform_usage(client) -> None:
@@ -149,7 +153,7 @@ def test_granted_days_expire_back_to_own_keys(client) -> None:
         client, owner, "alice@example.com", _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"], 3
     )
     assert granted["service"]["expiresAt"] is not None
-    assert _new_class(client, alice)["generatedBy"] == "Plataforma"
+    assert _new_class(client, alice)["generatedBy"] == PLATFORM_LABEL
 
     with SessionLocal() as db:
         subscription = db.scalars(select(Subscription)).one()
@@ -170,3 +174,39 @@ def test_corporate_services_wait_for_companies(client) -> None:
         headers=owner,
     )
     assert response.status_code == 422
+
+
+def test_platform_connection_details_are_hidden_from_students(client) -> None:
+    """T-055: el alumno ve "IA de Librería Inglés", nunca nombre/proveedor/motor de plataforma."""
+    owner = login(client, OWNER)
+    _connection(client, owner, "Gemini interna", platform=True, model="mock-fail-quota")
+    _connection(client, owner, "Clave secreta sr.macros", platform=True)
+    alice = _student(client)
+    _grant(client, owner, "alice@example.com", _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"])
+
+    created = _new_class(client, alice)
+    assert created["generatedBy"] == PLATFORM_LABEL
+    assert created["generationAi"]["providerLabel"] == PLATFORM_LABEL
+    assert created["generationAi"]["model"] == ""
+    assert created["generationAi"]["connectionId"] is None
+
+    active = client.get(f"{API}/ai/active", headers=alice).json()["default"]
+    assert active["connection"] == PLATFORM_LABEL and active["model"] == ""
+
+    body = json.dumps(client.get(f"{API}/classes/{created['id']}", headers=alice).json())
+    assert "Gemini interna" not in body and "Clave secreta" not in body
+
+    # El dueño ve sus conexiones de plataforma con nombre.
+    _connection(client, owner, "Mía del dueño")
+    owner_active = client.get(f"{API}/ai/active", headers=owner).json()["default"]
+    assert owner_active["connection"] == "Mía del dueño"
+
+
+def test_platform_errors_do_not_name_platform_connections(client) -> None:
+    owner = login(client, OWNER)
+    _connection(client, owner, "Gemini interna", platform=True, model="mock-fail-quota")
+    alice = _student(client)
+    _grant(client, owner, "alice@example.com", _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"])
+    failed = _new_class(client, alice)
+    assert failed["status"] == "GENERATION_FAILED"
+    assert "Gemini interna" not in failed["generationError"]

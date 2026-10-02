@@ -116,6 +116,49 @@ def candidate_connections(
     return [c for c in rows if c.is_usable]
 
 
+PLATFORM_LABEL = "IA de Librería Inglés"
+
+
+def shows_connection_details(account: Account | None, owner_type) -> bool:
+    """¿Puede esta cuenta ver nombre/motor de la conexión? (T-055)
+
+    Las conexiones de la plataforma son información interna de sr.macros: el alumno solo ve
+    "IA de Librería Inglés". Sus propias conexiones y el dueño ven todo.
+    """
+    value = getattr(owner_type, "value", owner_type)
+    if value != AIConnectionOwnerType.PLATFORM.value:
+        return True
+    return account is not None and account.platform_role == PlatformRole.PLATFORM_OWNER
+
+
+def connection_label(connection: AIConnection, account: Account | None) -> str:
+    """Nombre de la conexión para mensajes al usuario (errores, avisos)."""
+    if shows_connection_details(account, connection.owner_type):
+        return connection.name
+    return PLATFORM_LABEL
+
+
+def public_trace(db: Session, trace, account: Account | None):
+    """Oculta nombre/proveedor/motor de una traza de IA de plataforma para quien no es dueño.
+
+    Sirve para snapshots de `connection_snapshot` y para resultados de pronunciación. Las trazas
+    viejas sin `ownerType` se resuelven por `connectionId` si la conexión sigue existiendo.
+    """
+    if not isinstance(trace, dict):
+        return trace
+    owner_type = trace.get("ownerType")
+    if owner_type is None and trace.get("connectionId"):
+        connection = db.get(AIConnection, trace["connectionId"])
+        owner_type = connection.owner_type.value if connection else None
+    if owner_type is None or shows_connection_details(account, owner_type):
+        return trace
+    masked = {**trace, "connection": PLATFORM_LABEL, "provider": "PLATFORM", "model": ""}
+    masked["providerLabel"] = PLATFORM_LABEL
+    if "connectionId" in masked:
+        masked["connectionId"] = None
+    return masked
+
+
 def connection_snapshot(connection: AIConnection) -> dict:
     """Metadatos no sensibles de la conexión que produjo un resultado.
 
@@ -130,6 +173,7 @@ def connection_snapshot(connection: AIConnection) -> dict:
         "provider": connection.provider,
         "providerLabel": info.label if info else connection.provider,
         "model": model,
+        "ownerType": connection.owner_type.value,
     }
 
 
@@ -300,7 +344,7 @@ def run_json_task(
         reason = limit_reason(db, connection, account)
         if reason:
             # Límite de consumo: se saltea sin marcarla como caída.
-            errors.append(f"{connection.name}: {reason}")
+            errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
         try:
             data = provider_for(connection).complete_json(system, user, task)
@@ -308,7 +352,7 @@ def run_json_task(
             _mark_failure(connection, exc)
             record_usage(db, connection, account=account, operation=operation, error=exc)
             failed.append(connection.name)
-            errors.append(f"{connection.name}: {exc.message}")
+            errors.append(f"{connection_label(connection, account)}: {exc.message}")
             db.commit()
             continue
         _mark_success(connection)
@@ -331,7 +375,7 @@ def transcribe_audio(
     for connection in audio_connections(db, account):
         reason = limit_reason(db, connection, account)
         if reason:
-            errors.append(f"{connection.name}: {reason}")
+            errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
         try:
             analysis = provider_for(connection).analyze_speech(audio, mime_type)
@@ -344,7 +388,7 @@ def transcribe_audio(
                 db, connection, account=account, operation="transcribe_audio", error=exc
             )
             failed.append(connection.name)
-            errors.append(f"{connection.name}: {exc.message}")
+            errors.append(f"{connection_label(connection, account)}: {exc.message}")
             db.commit()
             continue
         _mark_success(connection)

@@ -3,7 +3,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
 from app.accounts.models import AuthMethod, PlatformRole
-from app.ai.models import AIConnectionOwnerType, utcnow
+from app.ai.models import AIConnection, AIConnectionOwnerType, utcnow
 from app.ai.service import LIMIT_WINDOW, ai_sources, candidate_connections, platform_requests
 from app.auth import service
 from app.core.config import settings
@@ -130,7 +130,14 @@ def _me_payload(study, db) -> dict:
         "ai": {
             "connections": len(ai_connections),
             "available": sum(1 for c in ai_connections if c.is_usable),
-            "own": sum(1 for c in ai_connections if c.owner_type == AIConnectionOwnerType.ACCOUNT),
+            # Propias guardadas, se usen o no según el servicio (T-055).
+            "own": db.scalar(
+                select(func.count(AIConnection.id)).where(
+                    AIConnection.owner_type == AIConnectionOwnerType.ACCOUNT,
+                    AIConnection.owner_id == account.id,
+                )
+            )
+            or 0,
         },
         "service": service_payload,
     }

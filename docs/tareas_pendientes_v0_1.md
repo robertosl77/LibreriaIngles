@@ -2153,7 +2153,7 @@ se muestra como opcional).
 ## T-055 — Pantalla "IA" según el servicio: no ofrecer configurar keys que no se usan
 
 **Prioridad:** P2 — Media (antes de otorgar servicios Plataforma a usuarios reales)  
-**Estado:** Pendiente (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
+**Estado:** En prueba en `feat/t-055-ia-segun-servicio` (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
 **Relación:** T-004 (membresías: servicio = vínculo + fuente de IA, bandera `ownKeys`
 required / optional / unused), T-054 (Híbrido sin keys propias), T-005 (keys de la empresa)
 
@@ -2182,6 +2182,20 @@ Criterios:
 - "En uso ahora" solo nombra conexiones **propias**; si la que se usa es de plataforma o de
   empresa, dice genéricamente "IA de Librería Inglés" / "IA de tu empresa".
 - La API tampoco expone nombre/modelo de conexiones de plataforma a cuentas que no son el dueño.
+
+Hecho (en prueba):
+
+```text
+Backend   public_trace(): toda traza de IA de plataforma sale como "IA de Librería Inglés"
+          (sin connectionId ni motor) para quien no es el dueño:
+          /ai/active · clase (generada por, generationAi) · corrección de cada ejercicio
+          · transcripción y pronunciación · mensajes de error ("Gemini interna: sin cuota")
+          Las trazas nuevas guardan ownerType; las viejas se resuelven por connectionId.
+          /me → ai.own cuenta las propias guardadas aunque el servicio no las use.
+Pantalla  IA con Plataforma: título "IA", solo "Tu servicio", sin conexiones ni alta;
+          si tenía keys propias, aviso "quedan guardadas… al vencer vuelven a usarse".
+          Híbrido y Propias keys: como antes. "· motor X" solo si hay motor.
+```
 
 ---
 

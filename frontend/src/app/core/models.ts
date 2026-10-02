@@ -91,12 +91,15 @@ export interface ProviderInfo {
 
 export type ConnectionScope = 'account' | 'platform';
 
+/** Traza del motor de IA. Si es de plataforma y no sos el dueño, llega como
+ *  "IA de Librería Inglés", sin connectionId ni motor (T-055). */
 export interface AiEngineTrace {
-  connectionId: number;
+  connectionId: number | null;
   connection: string;
   provider: string;
   providerLabel: string;
   model: string;
+  ownerType?: 'ACCOUNT' | 'PLATFORM' | 'ORGANIZATION';
 }
 
 export interface ActiveAiConnections {

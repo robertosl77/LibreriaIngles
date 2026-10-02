@@ -145,6 +145,7 @@ def test_failover_uses_next_connection(client) -> None:
         "provider": "MOCK",
         "providerLabel": "Simulado (solo desarrollo)",
         "model": "mock",
+        "ownerType": "ACCOUNT",
     }
 
     active = client.get(f"{API}/ai/active", headers=headers).json()
