@@ -170,7 +170,7 @@ No eliminar el modelo PLATFORM/HYBRID; solamente evitar que se active antes de i
 ## T-004 — Membresías, servicios, campañas e invitaciones
 
 **Prioridad:** P1 — Alta (antes de publicar la app o cobrar)  
-**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · implementación por etapas, no iniciada  
+**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · Etapa 1 (Servicios) resuelta (PR #26 a `develop`) · etapas 2–6 pendientes  
 **Responsable:** Claude  
 **Relación:** T-003 (cada usuario usa solo su IA propia: hoy decide `platform_ai_allowed()`),
 T-005 (conexiones de IA de una organización), T-006 (portal del dueño con las keys de
@@ -328,6 +328,24 @@ Ej.: pagó su individual hasta el 15/10 y el 01/10 su empresa lo invita.
 5. Corporativo: empresas, keys de la empresa (T-005), invitaciones de empresa, unificar/separar
 6. Pagos (otro otorgamiento; débito automático a definir)
 ```
+
+**Etapa 1 — Resuelta (PR #26 a `develop`):**
+
+```text
+migración 0012     plans: vínculo, duración, tope diario, descripción
+                   subscriptions: vence, origen (manual/campaña/invitación/pago), otorgado por, nota
+                   siembra: Individual · propias keys / · Plataforma / · Híbrido
+servicio vigente   effective_service(cuenta): suscripción activa; si no hay o venció →
+                   "Individual · propias keys" (+ aviso "venció" durante 14 días)
+router de IA       BYOK → propias · PLATAFORMA → plataforma · HÍBRIDO → propias y luego
+                   plataforma · dueño → ambas (reemplaza platform_ai_allowed de T-003)
+tope provisorio    pedidos exitosos a la plataforma por cuenta en 24 h (hasta T-049 tokens)
+portal sr.macros   Servicios (alta/edición) + Cuentas y servicios (buscar, otorgar N días, quitar)
+usuario            "Tu servicio" en IA e Inicio: nombre, vence, % de uso de hoy, aviso de vencido
+```
+
+Al vencer, por ahora vuelve a "Individual · propias keys": si tiene keys propias sigue; si
+no, no puede generar clases nuevas pero ve todo lo hecho (solo lectura de hecho).
 
 ### 12. Pendiente de definir más adelante
 
@@ -2078,6 +2096,69 @@ Criterios:
 **Criterio de aceptación:** cada cliente puede entrar a su portal y entender su consumo de IA por día
 y en tokens, con una presentación coherente con su modalidad BYOK/plataforma/híbrida y sin acceso a
 datos de terceros.
+
+---
+
+## T-054 — Servicio Híbrido sin API keys propias: ¿funciona o no?
+
+**Prioridad:** P2 — Media (definir antes de otorgar Híbrido a usuarios reales)  
+**Estado:** Pendiente de decisión (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
+**Relación:** T-004 (membresías: servicio = vínculo + fuente de IA; Híbrido = propias primero,
+plataforma si fallan), T-049 (tokens y costo por uso), T-047 (avisos claros cuando no hay IA)
+
+Situación: una cuenta tiene el servicio **Individual · Híbrido** pero **no cargó ninguna API key
+propia**. Hoy (etapa 1) el router simplemente salta a la IA de la plataforma: el alumno usa
+Librería Inglés (con el tope del servicio), igual que con el servicio Plataforma.
+
+```text
+Híbrido + keys propias OK        → usa las propias            (esperado)
+Híbrido + keys propias fallan    → usa la plataforma          (esperado, con aviso y tope)
+Híbrido + SIN keys propias       → ¿?                          ← a decidir
+```
+
+Opciones a discutir:
+
+1. Funciona igual, todo por plataforma (como hoy). Riesgo: Híbrido = Plataforma encubierto.
+2. No genera clases hasta que cargue una key: Inicio muestra "Conectá una IA" como obligatorio.
+3. Funciona por plataforma con un tope más bajo / período de gracia (N días) para cargar su key.
+
+Además: el paso 2 de "Primeros pasos" en Inicio debe reflejar la decisión (hoy, para Híbrido,
+se muestra como opcional).
+
+---
+
+## T-055 — Pantalla "IA" según el servicio: no ofrecer configurar keys que no se usan
+
+**Prioridad:** P2 — Media (antes de otorgar servicios Plataforma a usuarios reales)  
+**Estado:** Pendiente (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
+**Relación:** T-004 (membresías: servicio = vínculo + fuente de IA, bandera `ownKeys`
+required / optional / unused), T-054 (Híbrido sin keys propias), T-005 (keys de la empresa)
+
+Problema: un alumno con servicio **Plataforma** (ej. 1 día otorgado por sr.macros) entra al
+menú **IA** y ve "Tus conexiones" + "Agregar conexión". Si carga una key, **no se usa** (el
+servicio Plataforma ignora las propias): confunde. Además el cartel "En uso ahora" muestra el
+nombre y el motor de la conexión de la plataforma (ej. `Google Gemini · gemini-3.5-flash-lite`),
+información interna de sr.macros / la empresa que el alumno no necesita ver.
+
+Qué debe mostrar el menú IA según el servicio (decidirlo por la bandera `ownKeys`, no por el
+nombre del servicio, para que un tipo nuevo no obligue a tocar pantallas):
+
+```text
+Propias keys (required)  → como hoy: "Tu servicio" + Tus conexiones + Agregar conexión
+Plataforma   (unused)    → solo "Tu servicio": "Usás la IA de Librería Inglés"
+                           (o "de tu empresa" cuando sea corporativo). Sin alta de keys.
+                           Sin nombre/motor de la conexión de plataforma.
+Híbrido      (optional)  → "Tu servicio" + Tus conexiones + Agregar conexión
+                           (se usan primero las propias; ver T-054 si no carga ninguna)
+```
+
+Criterios:
+- Con Plataforma no se ve el alta de conexiones; si el alumno ya tenía keys propias cargadas,
+  se avisa que quedan guardadas pero sin uso mientras dure el servicio (no se borran: al
+  vencer vuelve a usarlas).
+- "En uso ahora" solo nombra conexiones **propias**; si la que se usa es de plataforma o de
+  empresa, dice genéricamente "IA de Librería Inglés" / "IA de tu empresa".
+- La API tampoco expone nombre/modelo de conexiones de plataforma a cuentas que no son el dueño.
 
 ---
 

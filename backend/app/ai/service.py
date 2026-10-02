@@ -7,9 +7,10 @@ Reglas (documento funcional §24–§29):
   sin avisar con modales: el resultado indica si hubo cambio de proveedor.
 - Si ninguna responde, se lanza NoAIAvailable y el trabajo queda persistido
   (la clase queda pendiente y se reintenta más tarde).
-- Fuente de IA (T-003, MVP BYOK): cada cuenta usa SOLO sus conexiones propias. Las de la
-  plataforma las usa únicamente el PLATFORM_OWNER, hasta que un plan/membresía las habilite
-  (T-004).
+- Fuente de IA (T-003 + T-004): la decide el servicio vigente de la cuenta.
+  BYOK → solo sus conexiones propias · PLATAFORMA → solo las de la plataforma ·
+  HÍBRIDO → propias primero y, si fallan, las de la plataforma. El PLATFORM_OWNER usa ambas.
+  Sin servicio otorgado, la cuenta es "Individual · propias keys" (BYOK).
 """
 
 from dataclasses import dataclass, field
@@ -28,6 +29,8 @@ from app.ai.models import (
 )
 from app.ai.providers import PROVIDERS, ProviderError, build_provider
 from app.core.security import decrypt_secret
+from app.subscriptions.models import AISource
+from app.subscriptions.service import effective_service
 
 LIMIT_WINDOW = timedelta(hours=24)
 HEALTH_CHECK = "health_check"
@@ -71,27 +74,38 @@ class AudioTranscriptionResult:
         return bool(self.failed_connections)
 
 
-def platform_ai_allowed(account: Account) -> bool:
-    """¿Puede esta cuenta usar las conexiones de IA de la plataforma?
+def ai_sources(db: Session, account: Account) -> tuple[bool, bool]:
+    """(usa propias, usa plataforma) según el servicio vigente de la cuenta (T-004)."""
+    if account.platform_role == PlatformRole.PLATFORM_OWNER:
+        return True, True
+    source = effective_service(db, account).source
+    if source == AISource.PLATFORM:
+        return False, True
+    if source == AISource.HYBRID:
+        return True, True
+    return True, False
 
-    MVP (T-003): solo el dueño de la plataforma. Cuando existan planes, lo decide la
-    membresía del usuario (T-004); este es el único punto a cambiar.
-    """
-    return account.platform_role == PlatformRole.PLATFORM_OWNER
+
+def platform_ai_allowed(db: Session, account: Account) -> bool:
+    """¿Puede esta cuenta usar las conexiones de IA de la plataforma?"""
+    return ai_sources(db, account)[1]
 
 
 def candidate_connections(
     db: Session, account: Account, *, include_backoff: bool = False
 ) -> list[AIConnection]:
-    """Conexiones de la cuenta (BYOK) y, solo si está habilitado, las de la plataforma."""
+    """Conexiones que el servicio vigente habilita: propias y/o de la plataforma."""
+    use_own, use_platform = ai_sources(db, account)
     own = (AIConnection.owner_type == AIConnectionOwnerType.ACCOUNT) & (
         AIConnection.owner_id == account.id
     )
-    source = (
-        or_(own, AIConnection.owner_type == AIConnectionOwnerType.PLATFORM)
-        if platform_ai_allowed(account)
-        else own
-    )
+    platform = AIConnection.owner_type == AIConnectionOwnerType.PLATFORM
+    if use_own and use_platform:
+        source = or_(own, platform)
+    elif use_platform:
+        source = platform
+    else:
+        source = own
     rows = db.scalars(select(AIConnection).where(AIConnection.active.is_(True), source)).all()
     rows = sorted(
         rows,
@@ -225,8 +239,40 @@ def successful_requests(
     return db.scalar(query) or 0
 
 
+def platform_requests(db: Session, account_id: int, *, since) -> int:
+    """Requests exitosos de la cuenta sobre CUALQUIER conexión de la plataforma."""
+    return (
+        db.scalar(
+            select(func.count(AIUsageEvent.id)).where(
+                AIUsageEvent.owner_type == AIConnectionOwnerType.PLATFORM,
+                AIUsageEvent.account_id == account_id,
+                AIUsageEvent.success.is_(True),
+                AIUsageEvent.operation != HEALTH_CHECK,
+                AIUsageEvent.created_at >= since,
+            )
+        )
+        or 0
+    )
+
+
+def service_limit_reason(db: Session, account: Account) -> str | None:
+    """Tope diario del servicio sobre la IA de la plataforma (T-004), o None."""
+    if account.platform_role == PlatformRole.PLATFORM_OWNER:
+        return None
+    limit = effective_service(db, account).daily_request_limit
+    if limit is None:
+        return None
+    if platform_requests(db, account.id, since=utcnow() - LIMIT_WINDOW) >= limit:
+        return "alcanzaste el tope diario de tu servicio"
+    return None
+
+
 def limit_reason(db: Session, connection: AIConnection, account: Account) -> str | None:
     """Motivo por el que la conexión no puede usarse ahora por límites, o None."""
+    if connection.owner_type == AIConnectionOwnerType.PLATFORM:
+        reason = service_limit_reason(db, account)
+        if reason:
+            return reason
     if connection.daily_request_limit is None and connection.per_account_daily_limit is None:
         return None
     since = utcnow() - LIMIT_WINDOW

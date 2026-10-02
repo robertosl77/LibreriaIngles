@@ -24,7 +24,7 @@ def membership(monkeypatch):
     Desde T-003 los alumnos usan solo sus conexiones propias; estos tests cubren los límites
     de consumo, que aplican cuando la plataforma sí está habilitada.
     """
-    monkeypatch.setattr("app.ai.service.platform_ai_allowed", lambda account: True)
+    monkeypatch.setattr("app.ai.service.ai_sources", lambda db, account: (True, True))
 
 
 def _student(client, email: str) -> dict:

@@ -6,10 +6,11 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ActiveAiConnections } from '../../core/models';
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
+import { MyServiceComponent } from '../../shared/my-service.component';
 
 @Component({
   selector: 'app-ai-settings',
-  imports: [ConnectionsManagerComponent, RouterLink],
+  imports: [ConnectionsManagerComponent, MyServiceComponent, RouterLink],
   template: `
     <main class="page stack">
       <div class="page-header">
@@ -26,6 +27,8 @@ import { ConnectionsManagerComponent } from '../../shared/connections-manager.co
           </p>
         </div>
       </div>
+
+      <app-my-service />
 
       @if (active().default; as current) {
         <p class="banner banner-info small">
@@ -73,6 +76,7 @@ export class AiSettingsComponent implements OnInit {
 
   async refreshActive(): Promise<void> {
     try {
+      void this.auth.refreshMe().catch(() => undefined);
       this.active.set(await firstValueFrom(this.api.activeAiConnections()));
     } catch {
       this.active.set({ default: null, audio: null });

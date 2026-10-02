@@ -5,18 +5,19 @@ import { ApiService, errorMessage } from '../../core/api.service';
 import { PlatformOverview } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
+import { ServicesAdminComponent } from './services-admin.component';
 
 @Component({
   selector: 'app-platform',
-  imports: [ConnectionsManagerComponent],
+  imports: [ConnectionsManagerComponent, ServicesAdminComponent],
   template: `
     <main class="page stack">
       <div class="page-header">
         <div>
           <h1>Plataforma</h1>
           <p class="muted">
-            IA provista por Librería Inglés: conexiones, límites de consumo y uso. Las conexiones de
-            plataforma se usan después de las conexiones propias de cada usuario.
+            IA provista por Librería Inglés: servicios, conexiones, límites de consumo y uso. Cada
+            cuenta usa la IA que indica su servicio: propias keys, plataforma o híbrido.
           </p>
         </div>
         <button class="btn btn-sm" type="button" (click)="load()" [disabled]="loading()">Actualizar</button>
@@ -114,6 +115,8 @@ import { ConnectionsManagerComponent } from '../../shared/connections-manager.co
       } @else if (loading()) {
         <p class="muted"><span class="spinner"></span></p>
       }
+
+      <app-services-admin />
 
       <app-connections-manager scope="platform" title="Conexiones de la plataforma" (changed)="load()" />
     </main>
