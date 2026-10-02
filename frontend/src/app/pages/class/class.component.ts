@@ -35,7 +35,8 @@ const TYPE_LABELS: Record<Exercise['type'], string> = {
   multiple_choice: 'Opción múltiple',
   reading_multiple_choice: 'Lectura',
   rewrite: 'Reescribir',
-  short_writing: 'Escritura'
+  short_writing: 'Escritura',
+  conversation: 'Conversación'
 };
 
 /** En el examen cada audio se puede escuchar dos veces (en la práctica, sin límite). */
@@ -212,22 +213,45 @@ const RESULT_LABELS: Record<string, string> = {
               @if (exercise.instruction) {
                 <p class="instruction">{{ exercise.instruction }}</p>
               }
-              @if (exercise.passage) {
-                <blockquote class="passage">{{ exercise.passage }}</blockquote>
+              @if (exercise.type === 'conversation') {
+                <div class="conversation-thread">
+                  <div class="chat-bubble partner">
+                    <span class="speaker">Interlocutor · turno {{ exercise.conversation?.turn ?? 1 }}/{{ exercise.conversation?.total ?? 1 }}</span>
+                    @if (exercise.presentation === 'LISTEN' && exercise.stimulus; as stimulus) {
+                      <app-audio-player
+                        [text]="stimulus.text"
+                        [lang]="stimulus.lang"
+                        [rate]="stimulus.rate"
+                        [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
+                        [allowSlow]="c.kind !== 'EXAM'"
+                        [initialPlays]="exercise.signals.listenPlays ?? 0"
+                        [disabled]="formLocked()"
+                        (played)="recordListen(exercise, $event.slow)"
+                      />
+                      <span class="muted small">Escuchá el turno y respondé.</span>
+                    } @else {
+                      <p class="chat-text">{{ exercise.question }}</p>
+                    }
+                  </div>
+                </div>
+              } @else {
+                @if (exercise.passage) {
+                  <blockquote class="passage">{{ exercise.passage }}</blockquote>
+                }
+                @if (exercise.presentation === 'LISTEN' && exercise.stimulus; as stimulus) {
+                  <app-audio-player
+                    [text]="stimulus.text"
+                    [lang]="stimulus.lang"
+                    [rate]="stimulus.rate"
+                    [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
+                    [allowSlow]="c.kind !== 'EXAM'"
+                    [initialPlays]="exercise.signals.listenPlays ?? 0"
+                    [disabled]="formLocked()"
+                    (played)="recordListen(exercise, $event.slow)"
+                  />
+                }
+                <p class="question">{{ exercise.question }}</p>
               }
-              @if (exercise.presentation === 'LISTEN' && exercise.stimulus; as stimulus) {
-                <app-audio-player
-                  [text]="stimulus.text"
-                  [lang]="stimulus.lang"
-                  [rate]="stimulus.rate"
-                  [maxPlays]="c.kind === 'EXAM' && editable() ? examMaxPlays : null"
-                  [allowSlow]="c.kind !== 'EXAM'"
-                  [initialPlays]="exercise.signals.listenPlays ?? 0"
-                  [disabled]="formLocked()"
-                  (played)="recordListen(exercise, $event.slow)"
-                />
-              }
-              <p class="question">{{ exercise.question }}</p>
 
               @if ((editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
                 @if (openLesson() === exercise.id && lessonFor(exercise); as lesson) {
@@ -272,7 +296,29 @@ const RESULT_LABELS: Record<string, string> = {
               }
 
               @if (editable()) {
-                @if (exercise.response === 'SPEAK') {
+                @if (exercise.type === 'conversation') {
+                  <div class="chat-bubble student">
+                    <span class="speaker">Vos</span>
+                    @if (exercise.response === 'SPEAK') {
+                      <app-audio-recorder
+                        [busy]="formLocked() || audioSavingId() === exercise.id"
+                        [confirmed]="confirmedSpeaking().has(exercise.id)"
+                        (recordingStarted)="beginSpeaking(exercise.id)"
+                        (pendingChange)="markPendingSpeaking(exercise.id, $event)"
+                        (accepted)="confirmSpeaking(exercise, $event)"
+                      />
+                    } @else {
+                      <textarea
+                        class="input conversation-input"
+                        rows="2"
+                        [ngModel]="answers()[exercise.id]"
+                        (ngModelChange)="onAnswer(exercise.id, $event)"
+                        [disabled]="formLocked()"
+                        placeholder="Respondé naturalmente en inglés…"
+                      ></textarea>
+                    }
+                  </div>
+                } @else if (exercise.response === 'SPEAK') {
                   <app-audio-recorder
                     [busy]="formLocked() || audioSavingId() === exercise.id"
                     [confirmed]="confirmedSpeaking().has(exercise.id)"
@@ -314,6 +360,11 @@ const RESULT_LABELS: Record<string, string> = {
                   }
                 }
                 }
+              } @else if (exercise.type === 'conversation') {
+                <div class="chat-bubble student">
+                  <span class="speaker">Vos</span>
+                  <strong>{{ exercise.answer || '(sin respuesta)' }}</strong>
+                </div>
               } @else {
                 <p class="your-answer">
                   <span class="muted small">Tu respuesta:</span>
@@ -388,6 +439,12 @@ const RESULT_LABELS: Record<string, string> = {
                     </button>
                   }
                 </div>
+                @if (exercise.type === 'conversation' && exercise.conversation?.closing; as closing) {
+                  <div class="chat-bubble partner closing">
+                    <span class="speaker">Interlocutor</span>
+                    <span>{{ closing }}</span>
+                  </div>
+                }
               }
             </article>
           }
@@ -460,6 +517,14 @@ const RESULT_LABELS: Record<string, string> = {
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
     .transcript em { font-style: normal; }
+    .conversation-thread { display: flex; flex-direction: column; gap: 0.55rem; }
+    .chat-bubble { max-width: min(88%, 42rem); padding: 0.75rem 0.9rem; border-radius: 1rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .chat-bubble.partner { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); border-bottom-left-radius: 0.3rem; }
+    .chat-bubble.student { align-self: flex-end; margin-left: auto; background: var(--info-bg); border: 1px solid var(--border); border-bottom-right-radius: 0.3rem; width: min(88%, 42rem); }
+    .chat-bubble.closing { margin-top: 0.2rem; }
+    .speaker { font-size: 0.75rem; font-weight: 700; color: var(--muted); }
+    .chat-text { margin: 0; font-size: 1.05rem; }
+    .conversation-input { resize: vertical; background: var(--surface); }
     .lesson-btn {
       align-self: flex-start;
       display: inline-flex; align-items: center; gap: 0.4rem;
@@ -746,11 +811,16 @@ export class ClassComponent implements OnDestroy {
     }
   }
 
-  /** Áreas + modalidades transversales (Escucha/Habla) en las barras del resultado del examen. */
+  /** Áreas + dimensiones visibles + modalidades transversales en el resultado del examen. */
   examRows(result: NonNullable<ClassDetail['examResult']>) {
     return [
       ...result.areas,
-      ...(result.modalities ?? []).map((m) => ({ ...m, key: 'modality-' + m.key, name: m.name + ' (todo lo escuchado)' }))
+      ...(result.dimensions ?? []).map((d) => ({ ...d, key: 'dimension-' + d.key })),
+      ...(result.modalities ?? []).map((m) => ({
+        ...m,
+        key: 'modality-' + m.key,
+        name: m.name + (m.key === 'LISTEN' ? ' (todo lo escuchado)' : ' (todo lo hablado)')
+      }))
     ];
   }
 
