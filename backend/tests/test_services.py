@@ -192,6 +192,17 @@ def test_service_has_no_request_limit_field(client) -> None:
     assert listed.status_code == 200
     assert all("dailyRequestLimit" not in row for row in listed.json())
 
+    legacy = client.post(
+        f"{API}/platform/services",
+        json={
+            "name": "No debe aceptar límite",
+            "source": "PLATFORM",
+            "dailyRequestLimit": 25,
+        },
+        headers=owner,
+    )
+    assert legacy.status_code == 422
+
 
 def test_granted_days_expire_back_to_own_keys(client) -> None:
     from app.db import SessionLocal
