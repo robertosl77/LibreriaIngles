@@ -299,24 +299,8 @@ def platform_requests(db: Session, account_id: int, *, since) -> int:
     )
 
 
-def service_limit_reason(db: Session, account: Account) -> str | None:
-    """Tope diario del servicio sobre la IA de la plataforma (T-004), o None."""
-    if account.platform_role == PlatformRole.PLATFORM_OWNER:
-        return None
-    limit = effective_service(db, account).daily_request_limit
-    if limit is None:
-        return None
-    if platform_requests(db, account.id, since=utcnow() - LIMIT_WINDOW) >= limit:
-        return "alcanzaste el tope diario de tu servicio"
-    return None
-
-
 def limit_reason(db: Session, connection: AIConnection, account: Account) -> str | None:
     """Motivo por el que la conexión no puede usarse ahora por límites, o None."""
-    if connection.owner_type == AIConnectionOwnerType.PLATFORM:
-        reason = service_limit_reason(db, account)
-        if reason:
-            return reason
     if connection.daily_request_limit is None and connection.per_account_daily_limit is None:
         return None
     since = utcnow() - LIMIT_WINDOW

@@ -1,6 +1,7 @@
 """PLATFORM_OWNER: catálogo de servicios y asignación manual de beneficios (T-004).
 
-Un Servicio define capacidades (vínculo × fuente de IA + límites). La duración vive únicamente en
+Un Servicio define vínculo × fuente de IA y metadatos comerciales. Los límites de consumo de la
+IA de plataforma pertenecen exclusivamente a cada conexión de IA. La duración vive únicamente en
 Benefit. Los otorgamientos manuales, campañas e invitaciones aplican un Benefit y terminan en
 `grant_service`.
 """
@@ -37,7 +38,6 @@ class ServiceIn(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     source: AISource
     linkType: ServiceLinkType = ServiceLinkType.PERSONAL
-    dailyRequestLimit: int | None = Field(default=None, ge=1, le=100000)
     description: str | None = Field(default=None, max_length=300)
     active: bool = True
 
@@ -58,7 +58,6 @@ def _service_out(db, plan: Plan) -> dict:
         "name": plan.name,
         "source": plan.ai_source.value,
         "linkType": plan.link_type.value,
-        "dailyRequestLimit": plan.daily_request_limit,
         "description": plan.description,
         "active": plan.active,
         "activeAccounts": int(holders or 0),
@@ -72,7 +71,6 @@ def _apply(plan: Plan, payload: ServiceIn) -> None:
     plan.name = payload.name.strip()
     plan.ai_source = payload.source
     plan.link_type = payload.linkType
-    plan.daily_request_limit = payload.dailyRequestLimit
     plan.description = (payload.description or "").strip() or None
     plan.active = payload.active
 

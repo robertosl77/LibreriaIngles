@@ -99,7 +99,6 @@ def test_service_does_not_define_duration_and_manual_grant_uses_benefit(client) 
         json={
             "name": "Servicio sin vigencia",
             "source": "PLATFORM",
-            "dailyRequestLimit": 25,
             "description": "La vigencia no pertenece al servicio.",
             "active": True,
         },
@@ -179,23 +178,19 @@ def test_hybrid_uses_own_first_then_platform(client) -> None:
     assert _new_class(client, alice)["generatedBy"] == PLATFORM_LABEL
 
 
-def test_service_daily_cap_limits_platform_usage(client) -> None:
+def test_service_has_no_request_limit_field(client) -> None:
     owner = login(client, OWNER)
-    _connection(client, owner, "Plataforma", platform=True)
     created = client.post(
         f"{API}/platform/services",
-        json={"name": "Prueba 1 por día", "source": "PLATFORM", "dailyRequestLimit": 1},
+        json={"name": "Sin límites de consumo", "source": "PLATFORM"},
         headers=owner,
     )
     assert created.status_code == 201, created.text
-    alice = _student(client)
-    _grant(client, owner, "alice@example.com", created.json()["id"])
-    assert _new_class(client, alice)["status"] == "READY"
-    second = _new_class(client, alice)
-    assert second["status"] == "GENERATION_FAILED"
-    assert "tope" in second["generationError"]
-    me = client.get(f"{API}/me", headers=alice).json()["service"]
-    assert me["dailyRequestLimit"] == 1 and me["platformRequests24h"] == 1
+    assert "dailyRequestLimit" not in created.json()
+
+    listed = client.get(f"{API}/platform/services", headers=owner)
+    assert listed.status_code == 200
+    assert all("dailyRequestLimit" not in row for row in listed.json())
 
 
 def test_granted_days_expire_back_to_own_keys(client) -> None:

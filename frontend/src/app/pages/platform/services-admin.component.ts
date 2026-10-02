@@ -27,7 +27,6 @@ function emptyDraft(): PlatformServiceDraft {
     name: '',
     source: 'PLATFORM',
     linkType: 'PERSONAL',
-    dailyRequestLimit: null,
     description: null,
     active: true
   };
@@ -48,8 +47,8 @@ function numberOrNull(value: unknown): number | null {
         <div>
           <h2>Servicios</h2>
           <p class="muted small">
-            Define <strong>qué capacidades existen</strong>: vínculo, fuente de IA y límites.
-            La duración se configura únicamente en Beneficios.
+            Define <strong>qué servicio existe</strong>: vínculo, fuente de IA y descripción.
+            La duración se configura en Beneficios y los límites de consumo en cada conexión de IA.
           </p>
         </div>
         @if (editingId() === null) {
@@ -71,11 +70,6 @@ function numberOrNull(value: unknown): number | null {
                 <option value="PLATFORM">Plataforma</option>
                 <option value="HYBRID">Híbrido (propias, si fallan plataforma)</option>
               </select>
-            </label>
-            <label class="field">
-              Tope diario de pedidos a la plataforma
-              <input class="input" type="number" min="1" name="sLimit" placeholder="sin tope"
-                [(ngModel)]="draft.dailyRequestLimit" />
             </label>
           </div>
 
@@ -109,7 +103,6 @@ function numberOrNull(value: unknown): number | null {
               <tr>
                 <th>Servicio</th>
                 <th>Fuente</th>
-                <th>Tope diario</th>
                 <th>Cuentas</th>
                 <th>Estado</th>
                 <th></th>
@@ -123,7 +116,6 @@ function numberOrNull(value: unknown): number | null {
                     @if (s.description) { <div class="muted small">{{ s.description }}</div> }
                   </td>
                   <td>{{ sourceShort[s.source] }}</td>
-                  <td>{{ s.dailyRequestLimit ?? '—' }}</td>
                   <td>{{ s.activeAccounts }}</td>
                   <td>
                     <span [class]="s.active ? 'chip chip-ok' : 'chip'">
@@ -400,7 +392,6 @@ export class ServicesAdminComponent implements OnInit {
     const draft: PlatformServiceDraft = {
       ...this.draft,
       name: this.draft.name.trim(),
-      dailyRequestLimit: numberOrNull(this.draft.dailyRequestLimit),
       description: this.draft.description?.trim() || null
     };
     this.saving.set(true);

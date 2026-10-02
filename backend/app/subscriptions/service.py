@@ -89,7 +89,6 @@ class EffectiveService:
     subscription_id: int | None = None
     expires_at: datetime | None = None
     origin: SubscriptionOrigin | None = None
-    daily_request_limit: int | None = None
     # Último servicio otorgado que venció hace poco (para avisar).
     expired_name: str | None = None
     expired_at: datetime | None = None
@@ -107,7 +106,6 @@ class EffectiveService:
             "granted": self.granted,
             "origin": self.origin.value if self.origin else None,
             "expiresAt": self.expires_at,
-            "dailyRequestLimit": self.daily_request_limit,
             "ownKeys": OWN_KEYS_ROLE[self.source],
             "expired": (
                 {"name": self.expired_name, "at": self.expired_at} if self.expired_name else None
@@ -165,7 +163,6 @@ def effective_service(db: Session, account: Account) -> EffectiveService:
             subscription_id=subscription.id,
             expires_at=_as_utc(subscription.expires_at),
             origin=subscription.origin,
-            daily_request_limit=plan.daily_request_limit,
         )
 
     expired = db.execute(

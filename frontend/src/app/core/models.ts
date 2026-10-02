@@ -34,7 +34,6 @@ export interface ServiceStatus {
   granted: boolean;
   origin: 'MANUAL' | 'CAMPAIGN' | 'INVITATION' | 'PAYMENT' | null;
   expiresAt: string | null;
-  dailyRequestLimit: number | null;
   /** Rol de las keys propias: required (BYOK) · optional (Híbrido) · unused (Plataforma). */
   ownKeys: 'required' | 'optional' | 'unused';
   expired: { name: string; at: string } | null;
@@ -52,7 +51,6 @@ export interface PlatformService {
   name: string;
   source: AiSource;
   linkType: LinkType;
-  dailyRequestLimit: number | null;
   description: string | null;
   active: boolean;
   activeAccounts: number;

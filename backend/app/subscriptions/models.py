@@ -59,8 +59,6 @@ class Plan(Base):
     link_type: Mapped[ServiceLinkType] = mapped_column(
         SqlEnum(ServiceLinkType, native_enum=False), default=ServiceLinkType.PERSONAL
     )
-    # Tope provisorio de pedidos a la IA de la plataforma por día (hasta tener tokens, T-049).
-    daily_request_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     description: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
