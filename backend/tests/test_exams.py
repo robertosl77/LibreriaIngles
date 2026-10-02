@@ -58,6 +58,8 @@ def _answers(exam: dict, *, correct: bool) -> dict[str, str]:
                 answers[str(item["id"])] = "zzz"
             elif exercise.exercise_type == "short_writing":
                 answers[str(item["id"])] = "My name is Ana. I live in Rosario and I work in an office."
+            elif exercise.exercise_type == "conversation":
+                answers[str(item["id"])] = "Hi! I'm Ana. I'm from Argentina."
             else:
                 answers[str(item["id"])] = exercise.answer_key["acceptedAnswers"][0]
     return answers
@@ -141,6 +143,9 @@ def test_pass_exam_issues_verifiable_certificate(client) -> None:
     assert result["score"] >= service.PASS_SCORE
     assert {a["key"] for a in result["areas"]} == set(service.EXAM_BLUEPRINT)
     modalities = {m["key"]: m for m in result["modalities"]}
+    dimensions = {d["key"]: d for d in result["dimensions"]}
+    assert dimensions["ORTHOGRAPHY"]["items"] >= 1
+    assert dimensions["ORTHOGRAPHY"]["passed"] is True
     assert modalities["LISTEN"]["items"] >= service.EXAM_MIN_LISTEN
     # Con conexión de audio disponible, el examen también incluye al menos una respuesta hablada.
     assert modalities["SPEAK"]["items"] >= service.EXAM_MIN_SPEAK

@@ -28,7 +28,7 @@ from app.learning.models import (
     SessionKind,
     stronger_assistance,
 )
-from app.progress.service import recompute_skill
+from app.progress.service import recompute_skill, secondary_skill_keys
 
 
 class ClassStateError(Exception):
@@ -254,8 +254,10 @@ def evaluate_pending(db: Session, account: Account, session: ClassSession) -> bo
             continue
         apply_evaluation(attempt, evaluation)
         # El examen es independiente: no alimenta el progreso de las clases.
-        if exercise.skill_key and session.kind != SessionKind.EXAM:
-            touched_skills.add(exercise.skill_key)
+        if session.kind != SessionKind.EXAM:
+            if exercise.skill_key:
+                touched_skills.add(exercise.skill_key)
+            touched_skills.update(secondary_skill_keys(attempt.evaluation_result))
         db.commit()
 
     for skill_key in touched_skills:
@@ -359,8 +361,19 @@ def appeal(db: Session, study: StudyContext, session: ClassSession, exercise_id:
     current = [a for a in attempts_of(db, session) if a.attempt_number == session.current_attempt]
     if current and all(a.score is not None for a in current):
         session.score = round(sum(a.score for a in current) / len(current), 1)
-    if exercise.skill_key and session.kind != SessionKind.EXAM:
-        recompute_skill(db, study_profile_id=session.study_profile_id, skill_key=exercise.skill_key)
+    if session.kind != SessionKind.EXAM:
+        touched = ({exercise.skill_key} if exercise.skill_key else set()) | secondary_skill_keys(
+            attempt.evaluation_result
+        )
+        for skill_key in touched:
+            recompute_skill(db, study_profile_id=session.study_profile_id, skill_key=skill_key)
+            if session.organization_id is not None:
+                recompute_skill(
+                    db,
+                    study_profile_id=session.study_profile_id,
+                    skill_key=skill_key,
+                    organization_id=session.organization_id,
+                )
     db.commit()
     if session.kind == SessionKind.EXAM and session.status == ClassSessionStatus.COMPLETED:
         from app.exams.service import finalize_exam

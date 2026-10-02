@@ -1412,6 +1412,276 @@
             }
           ]
         }
+      ,
+        {
+          "key": "orthography",
+          "name": "Orthography",
+          "skills": [
+            {
+              "key": "capitalization",
+              "name": "Mayúsculas",
+              "objectives": ["usar mayúscula al comenzar una oración", "escribir I y nombres propios con mayúscula"],
+              "exerciseTypes": ["rewrite"],
+              "examples": [
+                {
+                  "type": "rewrite",
+                  "instruction": "Rewrite the sentence with correct capitalization.",
+                  "question": "i am lucas and i live in rosario.",
+                  "acceptedAnswers": ["I am Lucas and I live in Rosario."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["capitalization"]
+                },
+                {
+                  "type": "rewrite",
+                  "instruction": "Rewrite the sentence with correct capitalization.",
+                  "question": "my friend anna is from argentina.",
+                  "acceptedAnswers": ["My friend Anna is from Argentina."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["capitalization"]
+                }
+              ]
+            },
+            {
+              "key": "basic_spelling",
+              "name": "Spelling básico",
+              "objectives": ["escribir correctamente palabras frecuentes de A1", "reconocer errores ortográficos simples"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "examples": [
+                {
+                  "type": "fill_blank",
+                  "instruction": "Complete with the correctly spelled word.",
+                  "question": "My best ___ is Ana. (friend)",
+                  "acceptedAnswers": ["friend"],
+                  "commonErrors": [
+                    {
+                      "answer": "freind",
+                      "feedback": "La palabra correcta es 'friend'.",
+                      "conceptResults": [
+                        {
+                          "concept": "basic_spelling",
+                          "status": "incorrect"
+                        }
+                      ]
+                    }
+                  ],
+                  "expectedConcepts": ["basic_spelling"]
+                },
+                {
+                  "type": "multiple_choice",
+                  "instruction": "Choose the correctly spelled word.",
+                  "question": "Which word is correct?",
+                  "options": ["because", "becouse", "beacuse"],
+                  "acceptedAnswers": ["because"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["basic_spelling"]
+                }
+              ]
+            },
+            {
+              "key": "punctuation",
+              "name": "Puntuación básica",
+              "objectives": ["cerrar oraciones con punto o signo de pregunta", "usar signos básicos según la intención"],
+              "exerciseTypes": ["rewrite"],
+              "examples": [
+                {
+                  "type": "rewrite",
+                  "instruction": "Rewrite with correct punctuation.",
+                  "question": "Where are you from",
+                  "acceptedAnswers": ["Where are you from?"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["basic_punctuation"]
+                },
+                {
+                  "type": "rewrite",
+                  "instruction": "Rewrite with correct punctuation.",
+                  "question": "I live in Buenos Aires",
+                  "acceptedAnswers": ["I live in Buenos Aires."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["basic_punctuation"]
+                }
+              ]
+            },
+            {
+              "key": "apostrophes",
+              "name": "Apóstrofes y contracciones",
+              "objectives": ["usar el apóstrofe en contracciones frecuentes", "distinguir formas como I'm, don't, isn't y can't"],
+              "exerciseTypes": ["rewrite"],
+              "examples": [
+                {
+                  "type": "rewrite",
+                  "instruction": "Rewrite using a contraction.",
+                  "question": "I am from Argentina.",
+                  "acceptedAnswers": ["I'm from Argentina."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["apostrophes_contractions"]
+                },
+                {
+                  "type": "rewrite",
+                  "instruction": "Rewrite using a contraction.",
+                  "question": "She is not at home.",
+                  "acceptedAnswers": ["She isn't at home.", "She's not at home."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["apostrophes_contractions"]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ,
+    {
+      "key": "conversation",
+      "name": "Conversation",
+      "topics": [
+        {
+          "key": "social_basics",
+          "name": "Social basics",
+          "skills": [
+            {
+              "key": "greetings",
+              "name": "Saludos y respuestas",
+              "objectives": ["responder a un saludo de manera apropiada", "devolver un saludo simple"],
+              "exerciseTypes": ["conversation"],
+              "examples": [
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "Hi! How are you?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_greeting"],
+                  "closing": "Nice to see you. Bye!"
+                },
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "Good morning! How are you today?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_greeting"],
+                  "closing": "Have a good day!"
+                }
+              ]
+            },
+            {
+              "key": "introductions",
+              "name": "Presentarse",
+              "objectives": ["decir el nombre al presentarse", "responder a una presentación simple"],
+              "exerciseTypes": ["conversation"],
+              "examples": [
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "Hi, I'm Emma. What's your name?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["give_name"],
+                  "closing": "Nice to meet you!"
+                },
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "Hello! My name is Tom. And you?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["give_name"],
+                  "closing": "Nice to meet you. Bye!"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "personal_information",
+          "name": "Personal information",
+          "skills": [
+            {
+              "key": "basic_details",
+              "name": "Datos personales básicos",
+              "objectives": ["responder preguntas simples sobre país, ciudad o edad", "mantener el tema de una presentación"],
+              "exerciseTypes": ["conversation"],
+              "examples": [
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "Where are you from?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["answer_personal_information"],
+                  "closing": "That's nice. Thanks!"
+                },
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "How old are you?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["answer_personal_information"],
+                  "closing": "Thanks for telling me."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "everyday_exchanges",
+          "name": "Everyday exchanges",
+          "skills": [
+            {
+              "key": "simple_requests",
+              "name": "Pedir y responder algo simple",
+              "objectives": ["hacer o responder pedidos cotidianos simples", "usar expresiones básicas de cortesía"],
+              "exerciseTypes": ["conversation"],
+              "examples": [
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "Can I have some water, please?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_simple_request"],
+                  "closing": "Thank you!"
+                },
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "Can you help me, please?",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_simple_request"],
+                  "closing": "Thanks for your help!"
+                }
+              ]
+            },
+            {
+              "key": "farewells",
+              "name": "Cerrar una conversación",
+              "objectives": ["responder a una despedida", "cerrar un intercambio breve de manera apropiada"],
+              "exerciseTypes": ["conversation"],
+              "examples": [
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "It was nice talking to you. See you tomorrow!",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_farewell"],
+                  "closing": "Bye!"
+                },
+                {
+                  "type": "conversation",
+                  "instruction": "Reply naturally.",
+                  "question": "I have to go now. Have a nice day!",
+                  "acceptedAnswers": [],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_farewell"],
+                  "closing": "See you!"
+                }
+              ]
+            }
+          ]
+        }
       ]
     }
   ]

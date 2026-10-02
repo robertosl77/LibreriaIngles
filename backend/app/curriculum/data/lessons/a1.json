@@ -1099,5 +1099,276 @@
       ],
       "tip": "Primero encontrá el sujeto y el verbo; el resto se acomoda después."
     }
+  ,
+    "a1.writing.orthography.capitalization": {
+      "title": "Mayúsculas básicas",
+      "explanation": "En inglés, las oraciones empiezan con mayúscula. El pronombre 'I' y los nombres propios también se escriben con mayúscula.",
+      "rules": [
+        "Primera palabra de una oración → mayúscula",
+        "El pronombre I siempre va en mayúscula",
+        "Nombres de personas, ciudades y países → mayúscula"
+      ],
+      "examples": [
+        {
+          "en": "I am Ana.",
+          "es": "Soy Ana."
+        },
+        {
+          "en": "My friend lives in Córdoba.",
+          "es": "Mi amiga vive en Córdoba."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "i am ana.",
+          "right": "I am Ana.",
+          "why": "I y los nombres propios llevan mayúscula."
+        }
+      ],
+      "tip": "Después de escribir, revisá el comienzo de cada oración, cada 'I' y los nombres propios."
+    },
+    "a1.writing.orthography.basic_spelling": {
+      "title": "Spelling básico",
+      "explanation": "La ortografía también forma parte de escribir bien. En A1 conviene fijar la forma correcta de las palabras más frecuentes.",
+      "rules": [
+        "Prestá atención al orden de las letras",
+        "No cambies una palabra conocida por cómo suena en español",
+        "Revisá palabras frecuentes que ya estudiaste"
+      ],
+      "examples": [
+        {
+          "en": "friend",
+          "es": "amigo/a"
+        },
+        {
+          "en": "because",
+          "es": "porque"
+        },
+        {
+          "en": "family",
+          "es": "familia"
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "freind",
+          "right": "friend",
+          "why": "En 'friend', la i va antes de la e."
+        },
+        {
+          "wrong": "becouse",
+          "right": "because",
+          "why": "La forma correcta es 'because'."
+        }
+      ],
+      "tip": "Si dudás, compará la palabra con la forma que viste en las lecciones y ejercicios."
+    },
+    "a1.writing.orthography.punctuation": {
+      "title": "Puntuación básica",
+      "explanation": "Una oración escrita necesita una marca de cierre. Las preguntas terminan con '?' y las afirmaciones normalmente con '.'.",
+      "rules": [
+        "Afirmación → punto final",
+        "Pregunta → signo de pregunta",
+        "No hace falta exagerar la puntuación"
+      ],
+      "examples": [
+        {
+          "en": "I live in Buenos Aires.",
+          "es": "Vivo en Buenos Aires."
+        },
+        {
+          "en": "Where are you from?",
+          "es": "¿De dónde sos?"
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "Where are you from.",
+          "right": "Where are you from?",
+          "why": "Es una pregunta: termina con '?'."
+        }
+      ],
+      "tip": "Antes de enviar, preguntate si escribiste una afirmación o una pregunta."
+    },
+    "a1.writing.orthography.apostrophes": {
+      "title": "Apóstrofes y contracciones",
+      "explanation": "Muchas formas frecuentes del inglés unen dos palabras con un apóstrofe.",
+      "rules": [
+        "I am → I'm",
+        "is not → isn't",
+        "do not → don't",
+        "cannot → can't"
+      ],
+      "examples": [
+        {
+          "en": "I'm from Argentina.",
+          "es": "Soy de Argentina."
+        },
+        {
+          "en": "She isn't at home.",
+          "es": "Ella no está en casa."
+        },
+        {
+          "en": "I don't like coffee.",
+          "es": "No me gusta el café."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "Im from Argentina.",
+          "right": "I'm from Argentina.",
+          "why": "La contracción de I am lleva apóstrofe."
+        },
+        {
+          "wrong": "dont",
+          "right": "don't",
+          "why": "La contracción de do not lleva apóstrofe."
+        }
+      ],
+      "tip": "Si usás una contracción, comprobá que el apóstrofe esté en su lugar."
+    },
+    "a1.conversation.social_basics.greetings": {
+      "title": "Responder saludos",
+      "explanation": "Una conversación básica empieza por reconocer el saludo y responder de forma adecuada.",
+      "rules": [
+        "Respondé al saludo",
+        "Podés agregar cómo estás",
+        "Mantené la respuesta breve y natural"
+      ],
+      "examples": [
+        {
+          "en": "Hi! I'm fine, thanks. And you?",
+          "es": "¡Hola! Estoy bien, gracias. ¿Y vos?"
+        },
+        {
+          "en": "Good morning! I'm good, thank you.",
+          "es": "¡Buen día! Estoy bien, gracias."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "I am from Argentina.",
+          "right": "I'm fine, thanks.",
+          "why": "La respuesta habla de otra cosa y no responde al saludo."
+        }
+      ],
+      "tip": "Primero respondé a lo que la otra persona acaba de decir."
+    },
+    "a1.conversation.social_basics.introductions": {
+      "title": "Presentarse",
+      "explanation": "En A1 alcanza con poder decir tu nombre y responder cuando otra persona se presenta.",
+      "rules": [
+        "My name is... / I'm...",
+        "Podés devolver el saludo",
+        "No hace falta repetir exactamente la frase de la otra persona"
+      ],
+      "examples": [
+        {
+          "en": "Hi Emma, I'm Robert.",
+          "es": "Hola Emma, soy Robert."
+        },
+        {
+          "en": "My name is Ana. Nice to meet you.",
+          "es": "Me llamo Ana. Mucho gusto."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "I have Robert.",
+          "right": "I'm Robert.",
+          "why": "Para decir tu nombre se usa 'I'm...' o 'My name is...'."
+        }
+      ],
+      "tip": "Lo importante es que la otra persona entienda quién sos y que tu respuesta encaje en el intercambio."
+    },
+    "a1.conversation.personal_information.basic_details": {
+      "title": "Intercambiar datos personales",
+      "explanation": "Las conversaciones de A1 usan preguntas muy directas sobre país, ciudad, edad u otros datos básicos.",
+      "rules": [
+        "Where are you from? → I'm from...",
+        "Where do you live? → I live in...",
+        "How old are you? → I'm ... years old"
+      ],
+      "examples": [
+        {
+          "en": "I'm from Argentina.",
+          "es": "Soy de Argentina."
+        },
+        {
+          "en": "I live in Rosario.",
+          "es": "Vivo en Rosario."
+        },
+        {
+          "en": "I'm thirty years old.",
+          "es": "Tengo treinta años."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "I am live in Rosario.",
+          "right": "I live in Rosario.",
+          "why": "Con 'live' en presente simple no se usa 'am'."
+        }
+      ],
+      "tip": "Escuchá qué dato te preguntaron y respondé solo ese dato con una oración simple."
+    },
+    "a1.conversation.everyday_exchanges.simple_requests": {
+      "title": "Pedidos simples",
+      "explanation": "En una interacción cotidiana hay que entender qué pide la otra persona y responder de manera útil y cortés.",
+      "rules": [
+        "Can I have...? → aceptar o rechazar de forma clara",
+        "Can you...? → decir si podés hacerlo",
+        "please / sure / sorry ayudan a sonar cortés"
+      ],
+      "examples": [
+        {
+          "en": "Sure. Here you are.",
+          "es": "Claro. Acá tenés."
+        },
+        {
+          "en": "Yes, of course.",
+          "es": "Sí, por supuesto."
+        },
+        {
+          "en": "Sorry, I can't.",
+          "es": "Perdón, no puedo."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "I like water.",
+          "right": "Sure. Here you are.",
+          "why": "La frase puede ser correcta, pero no responde al pedido."
+        }
+      ],
+      "tip": "Una conversación no se evalúa solo por gramática: la respuesta también tiene que servir para ese turno."
+    },
+    "a1.conversation.everyday_exchanges.farewells": {
+      "title": "Cerrar una conversación",
+      "explanation": "Las despedidas cierran el intercambio. En A1 alcanza con reconocerlas y responder con una fórmula simple.",
+      "rules": [
+        "Bye / Goodbye",
+        "See you / See you tomorrow",
+        "Have a nice day → You too"
+      ],
+      "examples": [
+        {
+          "en": "See you tomorrow!",
+          "es": "¡Nos vemos mañana!"
+        },
+        {
+          "en": "Bye! Have a nice day.",
+          "es": "¡Chau! Que tengas un buen día."
+        }
+      ],
+      "commonMistakes": [
+        {
+          "wrong": "Good morning.",
+          "right": "Bye! See you.",
+          "why": "Es un saludo de inicio, no una respuesta de despedida."
+        }
+      ],
+      "tip": "Si la otra persona está cerrando la charla, acompañá ese cierre."
+    }
   }
 }

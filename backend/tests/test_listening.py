@@ -120,14 +120,15 @@ def test_listening_class_flow_and_ability_progress(client) -> None:
         assert item["response"] in ("WRITE", "SPEAK")
 
     with SessionLocal() as db:
-        answers = {
-            str(e["id"]): (
-                "My name is Ana. I live in Rosario and I work in an office."
-                if db.get(Exercise, e["id"]).exercise_type == "short_writing"
-                else db.get(Exercise, e["id"]).answer_key["acceptedAnswers"][0]
-            )
-            for e in klass["exercises"]
-        }
+        answers = {}
+        for e in klass["exercises"]:
+            exercise = db.get(Exercise, e["id"])
+            if exercise.exercise_type == "short_writing":
+                answers[str(e["id"])] = "My name is Ana. I live in Rosario and I work in an office."
+            elif exercise.exercise_type == "conversation":
+                answers[str(e["id"])] = "Hi! I'm Ana. I'm fine, thanks."
+            else:
+                answers[str(e["id"])] = exercise.answer_key["acceptedAnswers"][0]
     result = client.post(
         f"{API}/classes/{klass['id']}/submit", json={"answers": answers}, headers=headers
     ).json()

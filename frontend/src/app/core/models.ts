@@ -157,6 +157,7 @@ export interface ExerciseResult {
   errors: { type: string; fragment: string | null; correction: string | null; explanation: string; occurrences?: number }[];
   suggestions: { type: string; text: string }[];
   conceptResults: { concept: string; status: string }[];
+  secondarySkillResults: { skillKey: string; status: string; score: number; reason: string }[];
   evaluationSource: string | null;
   ai: AiEngineTrace | null;
   appeal: { accepted: boolean; feedback?: string } | null;
@@ -185,7 +186,8 @@ export interface Exercise {
     | 'multiple_choice'
     | 'reading_multiple_choice'
     | 'rewrite'
-    | 'short_writing';
+    | 'short_writing'
+    | 'conversation';
   area: string | null;
   skillKey: string | null;
   skillName: string | null;
@@ -198,6 +200,8 @@ export interface Exercise {
   /** LISTEN: se sintetiza con voz y el texto se muestra recién tras la corrección. */
   stimulus: { mode: 'READ' | 'LISTEN'; text: string; lang: string; rate: number } | null;
   options: string[] | null;
+  /** T-048: dos ejercicios enlazados forman una microconversación. */
+  conversation: { group: string; turn: number; total: number; closing: string | null } | null;
   answer: string;
   audioDurationMs: number | null;
   pronunciationResult: PronunciationResult | null;
@@ -276,6 +280,16 @@ export interface Dashboard {
     attemptCount: number;
     topics: { key: string; name: string; score: number | null; skills: SkillProgress[] }[];
   }[];
+  /** Ortografía vive dentro de Writing pero tiene indicador explícito (T-048). */
+  orthography: {
+    name: string;
+    score: number | null;
+    skillsPracticed: number;
+    skillsTotal: number;
+    attemptCount: number;
+    assistedRecent: number;
+    status: SkillProgress['status'];
+  };
   /** Progreso por habilidad del idioma (T-034): un ejercicio deja evidencia en varias. */
   abilities: AbilityProgress[];
 }
@@ -346,6 +360,7 @@ export interface ExamResult {
   areaMinScore: number;
   areas: ExamArea[];
   modalities?: ExamArea[];
+  dimensions?: ExamArea[];
 }
 
 export interface ExamCheck {
