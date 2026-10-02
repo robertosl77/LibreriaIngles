@@ -1,6 +1,8 @@
 """Alta e ingreso de cuentas personales."""
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import logging
 
 import httpx
 from sqlalchemy import select
@@ -23,6 +25,7 @@ from app.study_profiles.models import (
 
 GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+logger = logging.getLogger(__name__)
 
 
 class AuthError(Exception):
@@ -124,7 +127,28 @@ def login_personal(
             account.display_name = display_name
         account.status = AccountStatus.ACTIVE
 
+    first_login = account.first_login_at is None
+    now = datetime.now(timezone.utc)
+    if first_login:
+        account.first_login_at = now
+    account.last_login_at = now
+
     _apply_platform_role(account)
     _ensure_profile(db, account)
+
+    # Los datos esenciales del login deben quedar fuera del savepoint de campañas.
+    db.flush()
+
+    # Una campaña es un beneficio accesorio: nunca puede impedir el ingreso.
+    from app.campaigns.service import evaluate_login_campaigns
+
+    try:
+        with db.begin_nested():
+            evaluate_login_campaigns(db, account, first_login=first_login)
+    except Exception:
+        logger.exception(
+            "Falló la evaluación de campañas durante login para account_id=%s",
+            account.id,
+        )
     db.commit()
     return account

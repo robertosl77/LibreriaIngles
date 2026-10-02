@@ -59,6 +59,11 @@ class Settings(BaseSettings):
         return self.mock_ai_enabled and not self.is_production
 
     @property
+    def dev_account_purge_allowed(self) -> bool:
+        """Borrado físico de cuentas de prueba: solo local/dev/test, nunca QA o producción."""
+        return self.app_env.lower() in {"local", "dev", "development", "test"}
+
+    @property
     def platform_owner_email_set(self) -> set[str]:
         return {
             email.strip().lower()

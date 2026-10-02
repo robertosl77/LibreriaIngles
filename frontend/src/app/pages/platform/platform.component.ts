@@ -5,18 +5,19 @@ import { ApiService, errorMessage } from '../../core/api.service';
 import { PlatformOverview } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
+import { CampaignsAdminComponent } from './campaigns-admin.component';
 import { ServicesAdminComponent } from './services-admin.component';
 
 @Component({
   selector: 'app-platform',
-  imports: [ConnectionsManagerComponent, ServicesAdminComponent],
+  imports: [ConnectionsManagerComponent, ServicesAdminComponent, CampaignsAdminComponent],
   template: `
     <main class="page stack">
       <div class="page-header">
         <div>
           <h1>Plataforma</h1>
           <p class="muted">
-            IA provista por Librería Inglés: servicios, conexiones, límites de consumo y uso. Cada
+            IA provista por Librería Inglés: servicios, campañas, conexiones, límites de consumo y uso. Cada
             cuenta usa la IA que indica su servicio: propias keys, plataforma o híbrido.
           </p>
         </div>
@@ -117,6 +118,8 @@ import { ServicesAdminComponent } from './services-admin.component';
       }
 
       <app-services-admin />
+
+      <app-campaigns-admin />
 
       <app-connections-manager scope="platform" title="Conexiones de la plataforma" (changed)="load()" />
     </main>
