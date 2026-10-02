@@ -14,182 +14,90 @@
             {
               "key": "affirmative",
               "name": "Afirmativo (am / is / are)",
-              "objectives": [
-                "elegir am/is/are según el sujeto"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["elegir am/is/are según el sujeto"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with am, is or are.",
                   "question": "My sister ___ a nurse.",
-                  "acceptedAnswers": [
-                    "is"
-                  ],
+                  "acceptedAnswers": ["is"],
                   "commonErrors": [
-                    {
-                      "answer": "are",
-                      "feedback": "Con he/she/it o un sustantivo singular se usa 'is'.",
-                      "conceptResults": [
-                        {
-                          "concept": "be_agreement",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "are", "feedback": "Con he/she/it o un sustantivo singular se usa 'is'.", "conceptResults": [{"concept": "be_agreement", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "be_agreement"
-                  ]
+                  "expectedConcepts": ["be_agreement"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with am, is or are.",
                   "question": "We ___ from Argentina.",
-                  "acceptedAnswers": [
-                    "are"
-                  ],
+                  "acceptedAnswers": ["are"],
                   "commonErrors": [
-                    {
-                      "answer": "is",
-                      "feedback": "Con we/you/they se usa 'are'.",
-                      "conceptResults": [
-                        {
-                          "concept": "be_agreement",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "is", "feedback": "Con we/you/they se usa 'are'.", "conceptResults": [{"concept": "be_agreement", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "be_agreement"
-                  ]
+                  "expectedConcepts": ["be_agreement"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose am, is or are.",
                   "question": "I ___ a student.",
-                  "options": [
-                    "am",
-                    "is",
-                    "are"
-                  ],
-                  "acceptedAnswers": [
-                    "am"
-                  ],
+                  "options": ["am", "is", "are"],
+                  "acceptedAnswers": ["am"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "be_agreement"
-                  ]
+                  "expectedConcepts": ["be_agreement"]
                 }
               ]
             },
             {
               "key": "negative",
               "name": "Negativo",
-              "objectives": [
-                "formar negativo con not",
-                "usar contracciones isn't / aren't"
-              ],
-              "exerciseTypes": [
-                "rewrite",
-                "fill_blank"
-              ],
+              "objectives": ["formar negativo con not", "usar contracciones isn't / aren't"],
+              "exerciseTypes": ["rewrite", "fill_blank"],
               "examples": [
                 {
                   "type": "rewrite",
                   "instruction": "Make the sentence negative.",
                   "question": "They are at home.",
-                  "acceptedAnswers": [
-                    "They are not at home.",
-                    "They aren't at home.",
-                    "They're not at home."
-                  ],
+                  "acceptedAnswers": ["They are not at home.", "They aren't at home.", "They're not at home."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "be_negative",
-                    "word_order"
-                  ]
+                  "expectedConcepts": ["be_negative", "word_order"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with isn't or aren't.",
                   "question": "My parents ___ at work today.",
-                  "acceptedAnswers": [
-                    "aren't",
-                    "are not"
-                  ],
+                  "acceptedAnswers": ["aren't", "are not"],
                   "commonErrors": [
-                    {
-                      "answer": "isn't",
-                      "feedback": "'My parents' es plural (they): se usa 'aren't'.",
-                      "conceptResults": [
-                        {
-                          "concept": "be_negative",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "isn't", "feedback": "'My parents' es plural (they): se usa 'aren't'.", "conceptResults": [{"concept": "be_negative", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "be_negative"
-                  ]
+                  "expectedConcepts": ["be_negative"]
                 }
               ]
             },
             {
               "key": "questions",
               "name": "Preguntas",
-              "objectives": [
-                "invertir sujeto y verbo to be"
-              ],
-              "exerciseTypes": [
-                "rewrite",
-                "multiple_choice"
-              ],
+              "objectives": ["invertir sujeto y verbo to be"],
+              "exerciseTypes": ["rewrite", "multiple_choice"],
               "examples": [
                 {
                   "type": "rewrite",
                   "instruction": "Make a question.",
                   "question": "He is your brother.",
-                  "acceptedAnswers": [
-                    "Is he your brother?"
-                  ],
+                  "acceptedAnswers": ["Is he your brother?"],
                   "commonErrors": [
-                    {
-                      "answer": "He is your brother?",
-                      "feedback": "En las preguntas, 'is' va antes del sujeto.",
-                      "conceptResults": [
-                        {
-                          "concept": "be_question_inversion",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "He is your brother?", "feedback": "En las preguntas, 'is' va antes del sujeto.", "conceptResults": [{"concept": "be_question_inversion", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "be_question_inversion"
-                  ]
+                  "expectedConcepts": ["be_question_inversion"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct word to start the question.",
                   "question": "___ your brother a doctor?",
-                  "options": [
-                    "Is",
-                    "Are",
-                    "Am"
-                  ],
-                  "acceptedAnswers": [
-                    "Is"
-                  ],
+                  "options": ["Is", "Are", "Am"],
+                  "acceptedAnswers": ["Is"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "be_question_inversion"
-                  ]
+                  "expectedConcepts": ["be_question_inversion"]
                 }
               ]
             }
@@ -202,201 +110,84 @@
             {
               "key": "third_person_singular",
               "name": "Tercera persona (-s / -es)",
-              "objectives": [
-                "agregar -s/-es con he/she/it",
-                "verbo base con I/you/we/they"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["agregar -s/-es con he/she/it", "verbo base con I/you/we/they"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with the correct form of the verb in brackets.",
                   "question": "Tom ___ (watch) TV every evening.",
-                  "acceptedAnswers": [
-                    "watches"
-                  ],
+                  "acceptedAnswers": ["watches"],
                   "commonErrors": [
-                    {
-                      "answer": "watch",
-                      "feedback": "Con he/she/it, los verbos terminados en -ch agregan -es.",
-                      "conceptResults": [
-                        {
-                          "concept": "third_person_s",
-                          "status": "incorrect"
-                        }
-                      ]
-                    },
-                    {
-                      "answer": "watchs",
-                      "feedback": "Los verbos terminados en -ch llevan -es, no -s.",
-                      "conceptResults": [
-                        {
-                          "concept": "third_person_s",
-                          "status": "correct"
-                        },
-                        {
-                          "concept": "spelling_es",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "watch", "feedback": "Con he/she/it, los verbos terminados en -ch agregan -es.", "conceptResults": [{"concept": "third_person_s", "status": "incorrect"}]},
+                    {"answer": "watchs", "feedback": "Los verbos terminados en -ch llevan -es, no -s.", "conceptResults": [{"concept": "third_person_s", "status": "correct"}, {"concept": "spelling_es", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "third_person_s",
-                    "spelling_es"
-                  ]
+                  "expectedConcepts": ["third_person_s", "spelling_es"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct form of the verb.",
                   "question": "My dad ___ TV every night.",
-                  "options": [
-                    "watch",
-                    "watches",
-                    "watching"
-                  ],
-                  "acceptedAnswers": [
-                    "watches"
-                  ],
+                  "options": ["watch", "watches", "watching"],
+                  "acceptedAnswers": ["watches"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "third_person_s"
-                  ]
+                  "expectedConcepts": ["third_person_s"]
                 }
               ]
             },
             {
               "key": "negative",
               "name": "Negativo (don't / doesn't)",
-              "objectives": [
-                "usar don't/doesn't",
-                "verbo base después de doesn't"
-              ],
-              "exerciseTypes": [
-                "rewrite",
-                "fill_blank"
-              ],
+              "objectives": ["usar don't/doesn't", "verbo base después de doesn't"],
+              "exerciseTypes": ["rewrite", "fill_blank"],
               "examples": [
                 {
                   "type": "rewrite",
                   "instruction": "Make the sentence negative.",
                   "question": "She plays tennis.",
-                  "acceptedAnswers": [
-                    "She doesn't play tennis.",
-                    "She does not play tennis."
-                  ],
+                  "acceptedAnswers": ["She doesn't play tennis.", "She does not play tennis."],
                   "commonErrors": [
-                    {
-                      "answer": "She doesn't plays tennis.",
-                      "feedback": "Después de 'doesn't' va el verbo en forma base.",
-                      "conceptResults": [
-                        {
-                          "concept": "doesnt",
-                          "status": "correct"
-                        },
-                        {
-                          "concept": "base_verb_after_doesnt",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "She doesn't plays tennis.", "feedback": "Después de 'doesn't' va el verbo en forma base.", "conceptResults": [{"concept": "doesnt", "status": "correct"}, {"concept": "base_verb_after_doesnt", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "doesnt",
-                    "base_verb_after_doesnt"
-                  ]
+                  "expectedConcepts": ["doesnt", "base_verb_after_doesnt"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with don't or doesn't.",
                   "question": "Anna ___ like coffee.",
-                  "acceptedAnswers": [
-                    "doesn't",
-                    "does not"
-                  ],
+                  "acceptedAnswers": ["doesn't", "does not"],
                   "commonErrors": [
-                    {
-                      "answer": "don't",
-                      "feedback": "Con he/she/it (Anna) se usa 'doesn't'.",
-                      "conceptResults": [
-                        {
-                          "concept": "doesnt",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "don't", "feedback": "Con he/she/it (Anna) se usa 'doesn't'.", "conceptResults": [{"concept": "doesnt", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "doesnt"
-                  ]
+                  "expectedConcepts": ["doesnt"]
                 }
               ]
             },
             {
               "key": "questions_do_does",
               "name": "Preguntas con do / does",
-              "objectives": [
-                "elegir do/does",
-                "verbo base después de does"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "rewrite"
-              ],
+              "objectives": ["elegir do/does", "verbo base después de does"],
+              "exerciseTypes": ["fill_blank", "rewrite"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete the question with do or does.",
                   "question": "___ she work on Saturdays?",
-                  "acceptedAnswers": [
-                    "Does"
-                  ],
+                  "acceptedAnswers": ["Does"],
                   "commonErrors": [
-                    {
-                      "answer": "Do",
-                      "feedback": "Con he/she/it se usa 'does'.",
-                      "conceptResults": [
-                        {
-                          "concept": "do_does_choice",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "Do", "feedback": "Con he/she/it se usa 'does'.", "conceptResults": [{"concept": "do_does_choice", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "do_does_choice"
-                  ]
+                  "expectedConcepts": ["do_does_choice"]
                 },
                 {
                   "type": "rewrite",
                   "instruction": "Make a question.",
                   "question": "Your parents live in Rosario.",
-                  "acceptedAnswers": [
-                    "Do your parents live in Rosario?"
-                  ],
+                  "acceptedAnswers": ["Do your parents live in Rosario?"],
                   "commonErrors": [
-                    {
-                      "answer": "Does your parents live in Rosario?",
-                      "feedback": "'Your parents' es plural: se usa 'do'.",
-                      "conceptResults": [
-                        {
-                          "concept": "do_does_choice",
-                          "status": "incorrect"
-                        },
-                        {
-                          "concept": "base_verb_after_do",
-                          "status": "correct"
-                        }
-                      ]
-                    }
+                    {"answer": "Does your parents live in Rosario?", "feedback": "'Your parents' es plural: se usa 'do'.", "conceptResults": [{"concept": "do_does_choice", "status": "incorrect"}, {"concept": "base_verb_after_do", "status": "correct"}]}
                   ],
-                  "expectedConcepts": [
-                    "do_does_choice",
-                    "base_verb_after_do"
-                  ]
+                  "expectedConcepts": ["do_does_choice", "base_verb_after_do"]
                 }
               ]
             }
@@ -409,113 +200,53 @@
             {
               "key": "affirmative",
               "name": "Afirmativo (am/is/are + -ing)",
-              "objectives": [
-                "am/is/are + verbo-ing",
-                "ortografía de -ing"
-              ],
-              "exerciseTypes": [
-                "fill_blank"
-              ],
+              "objectives": ["am/is/are + verbo-ing", "ortografía de -ing"],
+              "exerciseTypes": ["fill_blank"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with the present continuous of the verb in brackets.",
                   "question": "Look! The children ___ (run) in the park.",
-                  "acceptedAnswers": [
-                    "are running",
-                    "'re running"
-                  ],
+                  "acceptedAnswers": ["are running", "'re running"],
                   "commonErrors": [
-                    {
-                      "answer": "are runing",
-                      "feedback": "Se duplica la consonante final: run → running.",
-                      "conceptResults": [
-                        {
-                          "concept": "be_plus_ing",
-                          "status": "correct"
-                        },
-                        {
-                          "concept": "ing_spelling",
-                          "status": "incorrect"
-                        }
-                      ]
-                    },
-                    {
-                      "answer": "running",
-                      "feedback": "Falta am/is/are antes del verbo con -ing.",
-                      "conceptResults": [
-                        {
-                          "concept": "be_plus_ing",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "are runing", "feedback": "Se duplica la consonante final: run → running.", "conceptResults": [{"concept": "be_plus_ing", "status": "correct"}, {"concept": "ing_spelling", "status": "incorrect"}]},
+                    {"answer": "running", "feedback": "Falta am/is/are antes del verbo con -ing.", "conceptResults": [{"concept": "be_plus_ing", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "be_plus_ing",
-                    "ing_spelling"
-                  ]
+                  "expectedConcepts": ["be_plus_ing", "ing_spelling"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with the present continuous of the verb in brackets.",
                   "question": "They ___ (play) football in the park now.",
-                  "acceptedAnswers": [
-                    "are playing"
-                  ],
+                  "acceptedAnswers": ["are playing"],
                   "commonErrors": [
-                    {
-                      "answer": "playing",
-                      "feedback": "Falta el verbo 'to be': 'are playing'.",
-                      "conceptResults": [
-                        {
-                          "concept": "be_plus_ing",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "playing", "feedback": "Falta el verbo 'to be': 'are playing'.", "conceptResults": [{"concept": "be_plus_ing", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "be_plus_ing"
-                  ]
+                  "expectedConcepts": ["be_plus_ing"]
                 }
               ]
             },
             {
               "key": "questions",
               "name": "Preguntas",
-              "objectives": [
-                "am/is/are antes del sujeto"
-              ],
-              "exerciseTypes": [
-                "rewrite"
-              ],
+              "objectives": ["am/is/are antes del sujeto"],
+              "exerciseTypes": ["rewrite"],
               "examples": [
                 {
                   "type": "rewrite",
                   "instruction": "Make a question.",
                   "question": "You are listening to music.",
-                  "acceptedAnswers": [
-                    "Are you listening to music?"
-                  ],
+                  "acceptedAnswers": ["Are you listening to music?"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "be_question_inversion",
-                    "be_plus_ing"
-                  ]
+                  "expectedConcepts": ["be_question_inversion", "be_plus_ing"]
                 },
                 {
                   "type": "rewrite",
                   "instruction": "Make a question.",
                   "question": "She is cooking dinner.",
-                  "acceptedAnswers": [
-                    "Is she cooking dinner?"
-                  ],
+                  "acceptedAnswers": ["Is she cooking dinner?"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "be_question_inversion",
-                    "be_plus_ing"
-                  ]
+                  "expectedConcepts": ["be_question_inversion", "be_plus_ing"]
                 }
               ]
             }
@@ -528,55 +259,27 @@
             {
               "key": "ability",
               "name": "Habilidad",
-              "objectives": [
-                "can/can't + verbo base"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["can/can't + verbo base"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct option.",
                   "question": "My grandmother ___ use a computer. She never learned.",
-                  "options": [
-                    "can",
-                    "can't",
-                    "cans"
-                  ],
-                  "acceptedAnswers": [
-                    "can't"
-                  ],
+                  "options": ["can", "can't", "cans"],
+                  "acceptedAnswers": ["can't"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "can_meaning"
-                  ]
+                  "expectedConcepts": ["can_meaning"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with can or can't.",
                   "question": "Fish ___ walk.",
-                  "acceptedAnswers": [
-                    "can't",
-                    "cannot",
-                    "can not"
-                  ],
+                  "acceptedAnswers": ["can't", "cannot", "can not"],
                   "commonErrors": [
-                    {
-                      "answer": "can",
-                      "feedback": "Los peces no pueden caminar: 'can't'.",
-                      "conceptResults": [
-                        {
-                          "concept": "can_meaning",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "can", "feedback": "Los peces no pueden caminar: 'can't'.", "conceptResults": [{"concept": "can_meaning", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "can_meaning"
-                  ]
+                  "expectedConcepts": ["can_meaning"]
                 }
               ]
             }
@@ -589,55 +292,27 @@
             {
               "key": "basic",
               "name": "Uso básico",
-              "objectives": [
-                "there is + singular",
-                "there are + plural"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["there is + singular", "there are + plural"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with there is or there are.",
                   "question": "___ two banks near my house.",
-                  "acceptedAnswers": [
-                    "There are",
-                    "There're"
-                  ],
+                  "acceptedAnswers": ["There are", "There're"],
                   "commonErrors": [
-                    {
-                      "answer": "There is",
-                      "feedback": "'Two banks' es plural: se usa 'there are'.",
-                      "conceptResults": [
-                        {
-                          "concept": "there_agreement",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "There is", "feedback": "'Two banks' es plural: se usa 'there are'.", "conceptResults": [{"concept": "there_agreement", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "there_agreement"
-                  ]
+                  "expectedConcepts": ["there_agreement"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct word.",
                   "question": "There ___ two bedrooms in my flat.",
-                  "options": [
-                    "is",
-                    "are",
-                    "am"
-                  ],
-                  "acceptedAnswers": [
-                    "are"
-                  ],
+                  "options": ["is", "are", "am"],
+                  "acceptedAnswers": ["are"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "there_agreement"
-                  ]
+                  "expectedConcepts": ["there_agreement"]
                 }
               ]
             }
@@ -650,53 +325,27 @@
             {
               "key": "a_an",
               "name": "a / an",
-              "objectives": [
-                "a antes de sonido consonante",
-                "an antes de sonido vocal"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["a antes de sonido consonante", "an antes de sonido vocal"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with a or an.",
                   "question": "She is ___ engineer.",
-                  "acceptedAnswers": [
-                    "an"
-                  ],
+                  "acceptedAnswers": ["an"],
                   "commonErrors": [
-                    {
-                      "answer": "a",
-                      "feedback": "'Engineer' empieza con sonido vocal: se usa 'an'.",
-                      "conceptResults": [
-                        {
-                          "concept": "a_an_sound",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "a", "feedback": "'Engineer' empieza con sonido vocal: se usa 'an'.", "conceptResults": [{"concept": "a_an_sound", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "a_an_sound"
-                  ]
+                  "expectedConcepts": ["a_an_sound"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose a or an.",
                   "question": "I eat ___ apple every day.",
-                  "options": [
-                    "a",
-                    "an"
-                  ],
-                  "acceptedAnswers": [
-                    "an"
-                  ],
+                  "options": ["a", "an"],
+                  "acceptedAnswers": ["an"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "a_an_sound"
-                  ]
+                  "expectedConcepts": ["a_an_sound"]
                 }
               ]
             }
@@ -709,53 +358,27 @@
             {
               "key": "possessive_adjectives",
               "name": "my / your / his / her / our / their",
-              "objectives": [
-                "elegir el posesivo según el poseedor"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["elegir el posesivo según el poseedor"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct option.",
                   "question": "Anna and Mark live with ___ parents.",
-                  "options": [
-                    "their",
-                    "there",
-                    "they"
-                  ],
-                  "acceptedAnswers": [
-                    "their"
-                  ],
+                  "options": ["their", "there", "they"],
+                  "acceptedAnswers": ["their"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "possessive_choice"
-                  ]
+                  "expectedConcepts": ["possessive_choice"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with his or her.",
                   "question": "Maria loves ___ job.",
-                  "acceptedAnswers": [
-                    "her"
-                  ],
+                  "acceptedAnswers": ["her"],
                   "commonErrors": [
-                    {
-                      "answer": "his",
-                      "feedback": "El poseedor es María (she): 'her'.",
-                      "conceptResults": [
-                        {
-                          "concept": "possessive_choice",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "his", "feedback": "El poseedor es María (she): 'her'.", "conceptResults": [{"concept": "possessive_choice", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "possessive_choice"
-                  ]
+                  "expectedConcepts": ["possessive_choice"]
                 }
               ]
             }
@@ -768,55 +391,27 @@
             {
               "key": "in_on_at",
               "name": "in / on / at",
-              "objectives": [
-                "at + hora",
-                "on + día",
-                "in + mes/año/parte del día"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["at + hora", "on + día", "in + mes/año/parte del día"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with in, on or at.",
                   "question": "The meeting is ___ Monday.",
-                  "acceptedAnswers": [
-                    "on"
-                  ],
+                  "acceptedAnswers": ["on"],
                   "commonErrors": [
-                    {
-                      "answer": "in",
-                      "feedback": "Con los días de la semana se usa 'on'.",
-                      "conceptResults": [
-                        {
-                          "concept": "time_preposition",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "in", "feedback": "Con los días de la semana se usa 'on'.", "conceptResults": [{"concept": "time_preposition", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "time_preposition"
-                  ]
+                  "expectedConcepts": ["time_preposition"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct preposition.",
                   "question": "My birthday is ___ June.",
-                  "options": [
-                    "in",
-                    "on",
-                    "at"
-                  ],
-                  "acceptedAnswers": [
-                    "in"
-                  ],
+                  "options": ["in", "on", "at"],
+                  "acceptedAnswers": ["in"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "time_preposition"
-                  ]
+                  "expectedConcepts": ["time_preposition"]
                 }
               ]
             }
@@ -829,42 +424,25 @@
             {
               "key": "basic",
               "name": "what / where / who / when / how",
-              "objectives": [
-                "elegir la palabra interrogativa correcta"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["elegir la palabra interrogativa correcta"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct question word.",
                   "question": "___ do you live? — In Buenos Aires.",
-                  "options": [
-                    "Where",
-                    "When",
-                    "Who"
-                  ],
-                  "acceptedAnswers": [
-                    "Where"
-                  ],
+                  "options": ["Where", "When", "Who"],
+                  "acceptedAnswers": ["Where"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "wh_word_choice"
-                  ]
+                  "expectedConcepts": ["wh_word_choice"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with where, when or who.",
                   "question": "___ do you live? — In Córdoba.",
-                  "acceptedAnswers": [
-                    "Where"
-                  ],
+                  "acceptedAnswers": ["Where"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "wh_word_choice"
-                  ]
+                  "expectedConcepts": ["wh_word_choice"]
                 }
               ]
             }
@@ -877,53 +455,27 @@
             {
               "key": "subject_pronouns",
               "name": "Pronombres personales (sujeto)",
-              "objectives": [
-                "reemplazar un sustantivo por I, you, he, she, it, we, they"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["reemplazar un sustantivo por I, you, he, she, it, we, they"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct pronoun.",
                   "question": "Maria is my friend. ___ is from Chile.",
-                  "options": [
-                    "She",
-                    "He",
-                    "It"
-                  ],
-                  "acceptedAnswers": [
-                    "She"
-                  ],
+                  "options": ["She", "He", "It"],
+                  "acceptedAnswers": ["She"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "subject_pronoun"
-                  ]
+                  "expectedConcepts": ["subject_pronoun"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with the correct pronoun.",
                   "question": "Tom and I are brothers. ___ live in Salta.",
-                  "acceptedAnswers": [
-                    "We"
-                  ],
+                  "acceptedAnswers": ["We"],
                   "commonErrors": [
-                    {
-                      "answer": "They",
-                      "feedback": "'Tom and I' te incluye a vos: 'We'.",
-                      "conceptResults": [
-                        {
-                          "concept": "subject_pronoun",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "They", "feedback": "'Tom and I' te incluye a vos: 'We'.", "conceptResults": [{"concept": "subject_pronoun", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "subject_pronoun"
-                  ]
+                  "expectedConcepts": ["subject_pronoun"]
                 }
               ]
             }
@@ -936,54 +488,27 @@
             {
               "key": "plurals",
               "name": "Singular y plural",
-              "objectives": [
-                "formar plurales con -s, -es, -ies",
-                "plurales irregulares frecuentes"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["formar plurales con -s, -es, -ies", "plurales irregulares frecuentes"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Write the plural.",
                   "question": "one box → two ___",
-                  "acceptedAnswers": [
-                    "boxes"
-                  ],
+                  "acceptedAnswers": ["boxes"],
                   "commonErrors": [
-                    {
-                      "answer": "boxs",
-                      "feedback": "Después de -x se agrega -es: 'boxes'.",
-                      "conceptResults": [
-                        {
-                          "concept": "plural_form",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "boxs", "feedback": "Después de -x se agrega -es: 'boxes'.", "conceptResults": [{"concept": "plural_form", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "plural_form"
-                  ]
+                  "expectedConcepts": ["plural_form"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct plural.",
                   "question": "I have three ___.",
-                  "options": [
-                    "childs",
-                    "children",
-                    "childrens"
-                  ],
-                  "acceptedAnswers": [
-                    "children"
-                  ],
+                  "options": ["childs", "children", "childrens"],
+                  "acceptedAnswers": ["children"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "plural_form"
-                  ]
+                  "expectedConcepts": ["plural_form"]
                 }
               ]
             }
@@ -996,51 +521,26 @@
             {
               "key": "basic",
               "name": "Have got",
-              "objectives": [
-                "have got / has got para posesión",
-                "negativo y preguntas con have got"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "rewrite"
-              ],
+              "objectives": ["have got / has got para posesión", "negativo y preguntas con have got"],
+              "exerciseTypes": ["fill_blank", "rewrite"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with have got or has got.",
                   "question": "My sister ___ a new phone.",
-                  "acceptedAnswers": [
-                    "has got",
-                    "'s got"
-                  ],
+                  "acceptedAnswers": ["has got", "'s got"],
                   "commonErrors": [
-                    {
-                      "answer": "have got",
-                      "feedback": "Con he/she/it (my sister) se usa 'has got'.",
-                      "conceptResults": [
-                        {
-                          "concept": "have_got_agreement",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "have got", "feedback": "Con he/she/it (my sister) se usa 'has got'.", "conceptResults": [{"concept": "have_got_agreement", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "have_got_agreement"
-                  ]
+                  "expectedConcepts": ["have_got_agreement"]
                 },
                 {
                   "type": "rewrite",
                   "instruction": "Make the sentence negative.",
                   "question": "They have got a car.",
-                  "acceptedAnswers": [
-                    "They haven't got a car.",
-                    "They have not got a car."
-                  ],
+                  "acceptedAnswers": ["They haven't got a car.", "They have not got a car."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "have_got_negative"
-                  ]
+                  "expectedConcepts": ["have_got_negative"]
                 }
               ]
             }
@@ -1053,43 +553,25 @@
             {
               "key": "basic",
               "name": "Imperativos",
-              "objectives": [
-                "dar instrucciones con el verbo base",
-                "prohibir con Don't + verbo"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["dar instrucciones con el verbo base", "prohibir con Don't + verbo"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct instruction.",
                   "question": "The baby is sleeping. ___ noise!",
-                  "options": [
-                    "Don't make",
-                    "Make",
-                    "Doesn't make"
-                  ],
-                  "acceptedAnswers": [
-                    "Don't make"
-                  ],
+                  "options": ["Don't make", "Make", "Doesn't make"],
+                  "acceptedAnswers": ["Don't make"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "imperative_negative"
-                  ]
+                  "expectedConcepts": ["imperative_negative"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete the instruction with the verb in brackets.",
                   "question": "___ (open) your books at page ten.",
-                  "acceptedAnswers": [
-                    "Open"
-                  ],
+                  "acceptedAnswers": ["Open"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "imperative_form"
-                  ]
+                  "expectedConcepts": ["imperative_form"]
                 }
               ]
             }
@@ -1102,55 +584,27 @@
             {
               "key": "this_that",
               "name": "this / that / these / those",
-              "objectives": [
-                "this/these para lo cercano",
-                "that/those para lo lejano",
-                "singular vs plural"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["this/these para lo cercano", "that/those para lo lejano", "singular vs plural"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct word.",
                   "question": "Look at ___ birds in the sky over there!",
-                  "options": [
-                    "this",
-                    "these",
-                    "those"
-                  ],
-                  "acceptedAnswers": [
-                    "those"
-                  ],
+                  "options": ["this", "these", "those"],
+                  "acceptedAnswers": ["those"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "demonstrative_choice"
-                  ]
+                  "expectedConcepts": ["demonstrative_choice"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with this or these.",
                   "question": "I love ___ shoes! They are really comfortable.",
-                  "acceptedAnswers": [
-                    "these"
-                  ],
+                  "acceptedAnswers": ["these"],
                   "commonErrors": [
-                    {
-                      "answer": "this",
-                      "feedback": "'shoes' es plural: 'these'.",
-                      "conceptResults": [
-                        {
-                          "concept": "demonstrative_choice",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "this", "feedback": "'shoes' es plural: 'these'.", "conceptResults": [{"concept": "demonstrative_choice", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "demonstrative_choice"
-                  ]
+                  "expectedConcepts": ["demonstrative_choice"]
                 }
               ]
             }
@@ -1163,42 +617,25 @@
             {
               "key": "basic",
               "name": "in / on / under / next to / behind",
-              "objectives": [
-                "ubicar objetos con preposiciones de lugar básicas"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["ubicar objetos con preposiciones de lugar básicas"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct preposition.",
                   "question": "The keys are ___ my bag. I can't see them because the bag is closed.",
-                  "options": [
-                    "in",
-                    "on",
-                    "under"
-                  ],
-                  "acceptedAnswers": [
-                    "in"
-                  ],
+                  "options": ["in", "on", "under"],
+                  "acceptedAnswers": ["in"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "place_preposition"
-                  ]
+                  "expectedConcepts": ["place_preposition"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with in, on or under.",
                   "question": "The picture is ___ the wall.",
-                  "acceptedAnswers": [
-                    "on"
-                  ],
+                  "acceptedAnswers": ["on"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "place_preposition"
-                  ]
+                  "expectedConcepts": ["place_preposition"]
                 }
               ]
             }
@@ -1211,42 +648,25 @@
             {
               "key": "basic",
               "name": "and / but / or / because",
-              "objectives": [
-                "unir ideas con and, but, or, because"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["unir ideas con and, but, or, because"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct word.",
                   "question": "I like tea, ___ I don't like coffee.",
-                  "options": [
-                    "and",
-                    "but",
-                    "because"
-                  ],
-                  "acceptedAnswers": [
-                    "but"
-                  ],
+                  "options": ["and", "but", "because"],
+                  "acceptedAnswers": ["but"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "connector_choice"
-                  ]
+                  "expectedConcepts": ["connector_choice"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with and, but, or or because.",
                   "question": "I'm tired ___ I worked all day.",
-                  "acceptedAnswers": [
-                    "because"
-                  ],
+                  "acceptedAnswers": ["because"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "connector_choice"
-                  ]
+                  "expectedConcepts": ["connector_choice"]
                 }
               ]
             }
@@ -1265,184 +685,103 @@
             {
               "key": "routines",
               "name": "Rutinas",
-              "objectives": [
-                "verbos y expresiones de rutina diaria"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["verbos y expresiones de rutina diaria"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the best word.",
                   "question": "I ___ up at 7 o'clock every day.",
-                  "options": [
-                    "get",
-                    "go",
-                    "make"
-                  ],
-                  "acceptedAnswers": [
-                    "get"
-                  ],
+                  "options": ["get", "go", "make"],
+                  "acceptedAnswers": ["get"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "routine_collocation"
-                  ]
+                  "expectedConcepts": ["routine_collocation"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with the missing word.",
                   "question": "I ___ up at seven o'clock every morning.",
-                  "acceptedAnswers": [
-                    "get",
-                    "wake"
-                  ],
+                  "acceptedAnswers": ["get", "wake"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "routine_collocation"
-                  ]
+                  "expectedConcepts": ["routine_collocation"]
                 }
               ]
             },
             {
               "key": "family",
               "name": "Familia",
-              "objectives": [
-                "nombres de miembros de la familia"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["nombres de miembros de la familia"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with a family word.",
                   "question": "My mother's brother is my ___.",
-                  "acceptedAnswers": [
-                    "uncle"
-                  ],
+                  "acceptedAnswers": ["uncle"],
                   "commonErrors": [
-                    {
-                      "answer": "aunt",
-                      "feedback": "'Aunt' es tía. El hermano de tu mamá es tu 'uncle'.",
-                      "conceptResults": [
-                        {
-                          "concept": "family_word",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "aunt", "feedback": "'Aunt' es tía. El hermano de tu mamá es tu 'uncle'.", "conceptResults": [{"concept": "family_word", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "family_word"
-                  ]
+                  "expectedConcepts": ["family_word"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct word.",
                   "question": "My father's mother is my ___.",
-                  "options": [
-                    "grandmother",
-                    "aunt",
-                    "sister"
-                  ],
-                  "acceptedAnswers": [
-                    "grandmother"
-                  ],
+                  "options": ["grandmother", "aunt", "sister"],
+                  "acceptedAnswers": ["grandmother"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "family_word"
-                  ]
+                  "expectedConcepts": ["family_word"]
                 }
               ]
             },
             {
               "key": "food",
               "name": "Comida",
-              "objectives": [
-                "alimentos y comidas del día"
-              ],
-              "exerciseTypes": [
-                "multiple_choice"
-              ],
+              "objectives": ["alimentos y comidas del día"],
+              "exerciseTypes": ["multiple_choice"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct answer.",
                   "question": "Which one is a drink?",
-                  "options": [
-                    "milk",
-                    "bread",
-                    "cheese"
-                  ],
-                  "acceptedAnswers": [
-                    "milk"
-                  ],
+                  "options": ["milk", "bread", "cheese"],
+                  "acceptedAnswers": ["milk"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "food_category"
-                  ]
+                  "expectedConcepts": ["food_category"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct answer.",
                   "question": "Which one is a fruit?",
-                  "options": [
-                    "banana",
-                    "potato",
-                    "rice"
-                  ],
-                  "acceptedAnswers": [
-                    "banana"
-                  ],
+                  "options": ["banana", "potato", "rice"],
+                  "acceptedAnswers": ["banana"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "food_category"
-                  ]
+                  "expectedConcepts": ["food_category"]
                 }
               ]
             },
             {
               "key": "jobs",
               "name": "Trabajos",
-              "objectives": [
-                "profesiones comunes y lugares de trabajo"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["profesiones comunes y lugares de trabajo"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with the job.",
                   "question": "A ___ works in a hospital and helps doctors.",
-                  "acceptedAnswers": [
-                    "nurse"
-                  ],
+                  "acceptedAnswers": ["nurse"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "job_word"
-                  ]
+                  "expectedConcepts": ["job_word"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct job.",
                   "question": "A ___ works in a school and teaches children.",
-                  "options": [
-                    "teacher",
-                    "doctor",
-                    "waiter"
-                  ],
-                  "acceptedAnswers": [
-                    "teacher"
-                  ],
+                  "options": ["teacher", "doctor", "waiter"],
+                  "acceptedAnswers": ["teacher"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "job_word"
-                  ]
+                  "expectedConcepts": ["job_word"]
                 }
               ]
             }
@@ -1455,42 +794,25 @@
             {
               "key": "introductions",
               "name": "Saludos y presentaciones",
-              "objectives": [
-                "saludar, presentarse y responder saludos"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["saludar, presentarse y responder saludos"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the best answer.",
                   "question": "A: Nice to meet you. B: ___",
-                  "options": [
-                    "Nice to meet you too.",
-                    "I'm fine, thanks.",
-                    "Goodbye."
-                  ],
-                  "acceptedAnswers": [
-                    "Nice to meet you too."
-                  ],
+                  "options": ["Nice to meet you too.", "I'm fine, thanks.", "Goodbye."],
+                  "acceptedAnswers": ["Nice to meet you too."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "greeting_response"
-                  ]
+                  "expectedConcepts": ["greeting_response"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete the dialogue.",
                   "question": "A: How ___ you? B: I'm fine, thanks.",
-                  "acceptedAnswers": [
-                    "are"
-                  ],
+                  "acceptedAnswers": ["are"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "greeting_phrases"
-                  ]
+                  "expectedConcepts": ["greeting_phrases"]
                 }
               ]
             }
@@ -1503,95 +825,52 @@
             {
               "key": "numbers",
               "name": "Números",
-              "objectives": [
-                "números del 1 al 100 escritos y hablados"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["números del 1 al 100 escritos y hablados"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Write the number in words.",
                   "question": "15 → ___",
-                  "acceptedAnswers": [
-                    "fifteen"
-                  ],
+                  "acceptedAnswers": ["fifteen"],
                   "commonErrors": [
-                    {
-                      "answer": "fifty",
-                      "feedback": "'fifty' es 50; 15 es 'fifteen'.",
-                      "conceptResults": [
-                        {
-                          "concept": "numbers",
-                          "status": "incorrect"
-                        }
-                      ]
-                    }
+                    {"answer": "fifty", "feedback": "'fifty' es 50; 15 es 'fifteen'.", "conceptResults": [{"concept": "numbers", "status": "incorrect"}]}
                   ],
-                  "expectedConcepts": [
-                    "numbers"
-                  ]
+                  "expectedConcepts": ["numbers"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct word.",
                   "question": "How do you write 40 in words?",
-                  "options": [
-                    "forty",
-                    "fourteen",
-                    "fourty"
-                  ],
-                  "acceptedAnswers": [
-                    "forty"
-                  ],
+                  "options": ["forty", "fourteen", "fourty"],
+                  "acceptedAnswers": ["forty"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "numbers"
-                  ]
+                  "expectedConcepts": ["numbers"]
                 }
               ]
             },
             {
               "key": "days_months",
               "name": "Días, meses y fechas",
-              "objectives": [
-                "días de la semana y meses del año"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["días de la semana y meses del año"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete the list.",
                   "question": "Monday, Tuesday, ___, Thursday",
-                  "acceptedAnswers": [
-                    "Wednesday"
-                  ],
+                  "acceptedAnswers": ["Wednesday"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "days_of_week"
-                  ]
+                  "expectedConcepts": ["days_of_week"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct answer.",
                   "question": "Which month comes after March?",
-                  "options": [
-                    "April",
-                    "May",
-                    "February"
-                  ],
-                  "acceptedAnswers": [
-                    "April"
-                  ],
+                  "options": ["April", "May", "February"],
+                  "acceptedAnswers": ["April"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "months"
-                  ]
+                  "expectedConcepts": ["months"]
                 }
               ]
             }
@@ -1604,87 +883,50 @@
             {
               "key": "colours",
               "name": "Colores",
-              "objectives": [
-                "colores básicos"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["colores básicos"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct colour.",
                   "question": "The sky is ___ on a sunny day.",
-                  "options": [
-                    "blue",
-                    "green",
-                    "black"
-                  ],
-                  "acceptedAnswers": [
-                    "blue"
-                  ],
+                  "options": ["blue", "green", "black"],
+                  "acceptedAnswers": ["blue"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "colours"
-                  ]
+                  "expectedConcepts": ["colours"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with a colour.",
                   "question": "Ripe bananas are ___.",
-                  "acceptedAnswers": [
-                    "yellow"
-                  ],
+                  "acceptedAnswers": ["yellow"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "colours"
-                  ]
+                  "expectedConcepts": ["colours"]
                 }
               ]
             },
             {
               "key": "clothes",
               "name": "Ropa",
-              "objectives": [
-                "prendas de ropa frecuentes"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["prendas de ropa frecuentes"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct word.",
                   "question": "You wear ___ on your feet.",
-                  "options": [
-                    "shoes",
-                    "a hat",
-                    "a shirt"
-                  ],
-                  "acceptedAnswers": [
-                    "shoes"
-                  ],
+                  "options": ["shoes", "a hat", "a shirt"],
+                  "acceptedAnswers": ["shoes"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "clothes"
-                  ]
+                  "expectedConcepts": ["clothes"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with the correct word.",
                   "question": "It's very cold. Put on your ___.",
-                  "acceptedAnswers": [
-                    "coat",
-                    "jacket",
-                    "jumper",
-                    "sweater"
-                  ],
+                  "acceptedAnswers": ["coat", "jacket", "jumper", "sweater"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "clothes"
-                  ]
+                  "expectedConcepts": ["clothes"]
                 }
               ]
             }
@@ -1697,43 +939,25 @@
             {
               "key": "rooms_furniture",
               "name": "La casa",
-              "objectives": [
-                "ambientes y muebles de la casa"
-              ],
-              "exerciseTypes": [
-                "multiple_choice",
-                "fill_blank"
-              ],
+              "objectives": ["ambientes y muebles de la casa"],
+              "exerciseTypes": ["multiple_choice", "fill_blank"],
               "examples": [
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correct room.",
                   "question": "You cook in the ___.",
-                  "options": [
-                    "kitchen",
-                    "bedroom",
-                    "bathroom"
-                  ],
-                  "acceptedAnswers": [
-                    "kitchen"
-                  ],
+                  "options": ["kitchen", "bedroom", "bathroom"],
+                  "acceptedAnswers": ["kitchen"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "home_vocabulary"
-                  ]
+                  "expectedConcepts": ["home_vocabulary"]
                 },
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with the correct word.",
                   "question": "I sleep in my ___ every night.",
-                  "acceptedAnswers": [
-                    "bed",
-                    "bedroom"
-                  ],
+                  "acceptedAnswers": ["bed", "bedroom"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "home_vocabulary"
-                  ]
+                  "expectedConcepts": ["home_vocabulary"]
                 }
               ]
             }
@@ -1759,9 +983,7 @@
                 "fill_blank",
                 "multiple_choice"
               ],
-              "presentations": [
-                "LISTEN"
-              ],
+              "presentations": ["LISTEN"],
               "examples": [
                 {
                   "type": "fill_blank",
@@ -1820,9 +1042,7 @@
                 "fill_blank",
                 "multiple_choice"
               ],
-              "presentations": [
-                "LISTEN"
-              ],
+              "presentations": ["LISTEN"],
               "examples": [
                 {
                   "type": "fill_blank",
@@ -1868,9 +1088,7 @@
               "exerciseTypes": [
                 "multiple_choice"
               ],
-              "presentations": [
-                "LISTEN"
-              ],
+              "presentations": ["LISTEN"],
               "examples": [
                 {
                   "type": "multiple_choice",
@@ -1920,9 +1138,7 @@
                 "fill_blank",
                 "multiple_choice"
               ],
-              "presentations": [
-                "LISTEN"
-              ],
+              "presentations": ["LISTEN"],
               "examples": [
                 {
                   "type": "fill_blank",
@@ -1983,48 +1199,28 @@
             {
               "key": "comprehension",
               "name": "Comprensión de textos breves",
-              "objectives": [
-                "identificar información concreta en un texto corto"
-              ],
-              "exerciseTypes": [
-                "reading_multiple_choice"
-              ],
+              "objectives": ["identificar información concreta en un texto corto"],
+              "exerciseTypes": ["reading_multiple_choice"],
               "examples": [
                 {
                   "type": "reading_multiple_choice",
                   "instruction": "Read the text and answer the question.",
                   "passage": "Hi, I'm Lucía. I'm 28 and I live in Córdoba. I work in a small café. I start work at 8 a.m. and finish at 4 p.m. After work, I go to the gym.",
                   "question": "What does Lucía do after work?",
-                  "options": [
-                    "She goes to the gym.",
-                    "She works in a café.",
-                    "She starts work."
-                  ],
-                  "acceptedAnswers": [
-                    "She goes to the gym."
-                  ],
+                  "options": ["She goes to the gym.", "She works in a café.", "She starts work."],
+                  "acceptedAnswers": ["She goes to the gym."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "detail_comprehension"
-                  ]
+                  "expectedConcepts": ["detail_comprehension"]
                 },
                 {
                   "type": "reading_multiple_choice",
                   "instruction": "Read the text and answer the question.",
                   "passage": "Tom lives in a small house near the sea. He works in a restaurant in the town centre. Every morning he walks to work because it is only ten minutes from his house. In the evening he plays the guitar with his friends.",
                   "question": "How does Tom go to work?",
-                  "options": [
-                    "He walks.",
-                    "He drives.",
-                    "He takes the bus."
-                  ],
-                  "acceptedAnswers": [
-                    "He walks."
-                  ],
+                  "options": ["He walks.", "He drives.", "He takes the bus."],
+                  "acceptedAnswers": ["He walks."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "detail_comprehension"
-                  ]
+                  "expectedConcepts": ["detail_comprehension"]
                 }
               ]
             }
@@ -2043,13 +1239,8 @@
             {
               "key": "simple_sentences",
               "name": "Oraciones simples sobre uno mismo",
-              "objectives": [
-                "escribir 2-3 oraciones simples",
-                "usar presente simple y to be correctamente"
-              ],
-              "exerciseTypes": [
-                "short_writing"
-              ],
+              "objectives": ["escribir 2-3 oraciones simples", "usar presente simple y to be correctamente"],
+              "exerciseTypes": ["short_writing"],
               "examples": [
                 {
                   "type": "short_writing",
@@ -2057,11 +1248,7 @@
                   "question": "Describe your typical morning.",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "present_simple_use",
-                    "sentence_structure",
-                    "task_completion"
-                  ]
+                  "expectedConcepts": ["present_simple_use", "sentence_structure", "task_completion"]
                 },
                 {
                   "type": "short_writing",
@@ -2069,11 +1256,7 @@
                   "question": "Describe your family: who are they and what do they do?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "present_simple_use",
-                    "sentence_structure",
-                    "task_completion"
-                  ]
+                  "expectedConcepts": ["present_simple_use", "sentence_structure", "task_completion"]
                 }
               ]
             }
@@ -2086,13 +1269,8 @@
             {
               "key": "routine",
               "name": "Contar tu rutina",
-              "objectives": [
-                "escribir 2-3 oraciones sobre hábitos",
-                "usar presente simple con expresiones de frecuencia y hora"
-              ],
-              "exerciseTypes": [
-                "short_writing"
-              ],
+              "objectives": ["escribir 2-3 oraciones sobre hábitos", "usar presente simple con expresiones de frecuencia y hora"],
+              "exerciseTypes": ["short_writing"],
               "examples": [
                 {
                   "type": "short_writing",
@@ -2100,11 +1278,7 @@
                   "question": "What do you usually do on Saturdays?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "present_simple_use",
-                    "frequency_adverbs",
-                    "task_completion"
-                  ]
+                  "expectedConcepts": ["present_simple_use", "frequency_adverbs", "task_completion"]
                 },
                 {
                   "type": "short_writing",
@@ -2112,11 +1286,7 @@
                   "question": "What do you do after work or school?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "present_simple_use",
-                    "time_expressions",
-                    "task_completion"
-                  ]
+                  "expectedConcepts": ["present_simple_use", "time_expressions", "task_completion"]
                 }
               ]
             }
@@ -2129,13 +1299,8 @@
             {
               "key": "short_messages",
               "name": "Mensajes cortos",
-              "objectives": [
-                "escribir un mensaje breve a un amigo o familiar",
-                "invitar, avisar o pedir algo con oraciones simples"
-              ],
-              "exerciseTypes": [
-                "short_writing"
-              ],
+              "objectives": ["escribir un mensaje breve a un amigo o familiar", "invitar, avisar o pedir algo con oraciones simples"],
+              "exerciseTypes": ["short_writing"],
               "examples": [
                 {
                   "type": "short_writing",
@@ -2143,11 +1308,7 @@
                   "question": "Write a message to a friend. Invite them to the cinema on Saturday.",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "invitation",
-                    "time_expressions",
-                    "task_completion"
-                  ]
+                  "expectedConcepts": ["invitation", "time_expressions", "task_completion"]
                 },
                 {
                   "type": "short_writing",
@@ -2155,11 +1316,7 @@
                   "question": "Write a note to your family. You are late for dinner: say why and when you arrive.",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "present_continuous_use",
-                    "time_expressions",
-                    "task_completion"
-                  ]
+                  "expectedConcepts": ["present_continuous_use", "time_expressions", "task_completion"]
                 }
               ]
             }
@@ -2172,13 +1329,8 @@
             {
               "key": "people_places",
               "name": "Describir personas y lugares",
-              "objectives": [
-                "describir a una persona o un lugar con 2-3 oraciones",
-                "usar to be, have got y there is/are con adjetivos"
-              ],
-              "exerciseTypes": [
-                "short_writing"
-              ],
+              "objectives": ["describir a una persona o un lugar con 2-3 oraciones", "usar to be, have got y there is/are con adjetivos"],
+              "exerciseTypes": ["short_writing"],
               "examples": [
                 {
                   "type": "short_writing",
@@ -2186,12 +1338,7 @@
                   "question": "Describe your best friend: what does he or she look like?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "be_use",
-                    "have_got_use",
-                    "adjective_order",
-                    "task_completion"
-                  ]
+                  "expectedConcepts": ["be_use", "have_got_use", "adjective_order", "task_completion"]
                 },
                 {
                   "type": "short_writing",
@@ -2199,11 +1346,7 @@
                   "question": "Describe your house or flat: how many rooms are there?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "there_is_are",
-                    "adjective_order",
-                    "task_completion"
-                  ]
+                  "expectedConcepts": ["there_is_are", "adjective_order", "task_completion"]
                 }
               ]
             }
@@ -2216,21 +1359,14 @@
             {
               "key": "word_order",
               "name": "Armar oraciones",
-              "objectives": [
-                "ordenar palabras para formar una oración correcta",
-                "escribir oraciones y preguntas completas con mayúscula y punto"
-              ],
-              "exerciseTypes": [
-                "rewrite"
-              ],
+              "objectives": ["ordenar palabras para formar una oración correcta", "escribir oraciones y preguntas completas con mayúscula y punto"],
+              "exerciseTypes": ["rewrite"],
               "examples": [
                 {
                   "type": "rewrite",
                   "instruction": "Put the words in order to make a sentence.",
                   "question": "work / I / in / an office",
-                  "acceptedAnswers": [
-                    "I work in an office."
-                  ],
+                  "acceptedAnswers": ["I work in an office."],
                   "commonErrors": [
                     {
                       "answer": "I in an office work.",
@@ -2243,17 +1379,13 @@
                       ]
                     }
                   ],
-                  "expectedConcepts": [
-                    "word_order"
-                  ]
+                  "expectedConcepts": ["word_order"]
                 },
                 {
                   "type": "rewrite",
                   "instruction": "Put the words in order to make a question.",
                   "question": "you / do / like / pizza",
-                  "acceptedAnswers": [
-                    "Do you like pizza?"
-                  ],
+                  "acceptedAnswers": ["Do you like pizza?"],
                   "commonErrors": [
                     {
                       "answer": "You like pizza?",
@@ -2266,28 +1398,21 @@
                       ]
                     }
                   ],
-                  "expectedConcepts": [
-                    "question_word_order"
-                  ]
+                  "expectedConcepts": ["question_word_order"]
                 },
                 {
                   "type": "rewrite",
                   "instruction": "Put the words in order to make a sentence.",
                   "question": "is / from / she / Spain",
-                  "acceptedAnswers": [
-                    "She is from Spain.",
-                    "She's from Spain."
-                  ],
+                  "acceptedAnswers": ["She is from Spain.", "She's from Spain."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "word_order",
-                    "be_use"
-                  ]
+                  "expectedConcepts": ["word_order", "be_use"]
                 }
               ]
             }
           ]
-        },
+        }
+      ,
         {
           "key": "orthography",
           "name": "Orthography",
@@ -2295,59 +1420,38 @@
             {
               "key": "capitalization",
               "name": "Mayúsculas",
-              "objectives": [
-                "usar mayúscula al comenzar una oración",
-                "escribir I y nombres propios con mayúscula"
-              ],
-              "exerciseTypes": [
-                "rewrite"
-              ],
+              "objectives": ["usar mayúscula al comenzar una oración", "escribir I y nombres propios con mayúscula"],
+              "exerciseTypes": ["rewrite"],
               "examples": [
                 {
                   "type": "rewrite",
                   "instruction": "Rewrite the sentence with correct capitalization.",
                   "question": "i am lucas and i live in rosario.",
-                  "acceptedAnswers": [
-                    "I am Lucas and I live in Rosario."
-                  ],
+                  "acceptedAnswers": ["I am Lucas and I live in Rosario."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "capitalization"
-                  ]
+                  "expectedConcepts": ["capitalization"]
                 },
                 {
                   "type": "rewrite",
                   "instruction": "Rewrite the sentence with correct capitalization.",
                   "question": "my friend anna is from argentina.",
-                  "acceptedAnswers": [
-                    "My friend Anna is from Argentina."
-                  ],
+                  "acceptedAnswers": ["My friend Anna is from Argentina."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "capitalization"
-                  ]
+                  "expectedConcepts": ["capitalization"]
                 }
               ]
             },
             {
               "key": "basic_spelling",
               "name": "Spelling básico",
-              "objectives": [
-                "escribir correctamente palabras frecuentes de A1",
-                "reconocer errores ortográficos simples"
-              ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "objectives": ["escribir correctamente palabras frecuentes de A1", "reconocer errores ortográficos simples"],
+              "exerciseTypes": ["fill_blank", "multiple_choice"],
               "examples": [
                 {
                   "type": "fill_blank",
                   "instruction": "Complete with the correctly spelled word.",
                   "question": "My best ___ is Ana. (friend)",
-                  "acceptedAnswers": [
-                    "friend"
-                  ],
+                  "acceptedAnswers": ["friend"],
                   "commonErrors": [
                     {
                       "answer": "freind",
@@ -2360,108 +1464,72 @@
                       ]
                     }
                   ],
-                  "expectedConcepts": [
-                    "basic_spelling"
-                  ]
+                  "expectedConcepts": ["basic_spelling"]
                 },
                 {
                   "type": "multiple_choice",
                   "instruction": "Choose the correctly spelled word.",
                   "question": "Which word is correct?",
-                  "options": [
-                    "because",
-                    "becouse",
-                    "beacuse"
-                  ],
-                  "acceptedAnswers": [
-                    "because"
-                  ],
+                  "options": ["because", "becouse", "beacuse"],
+                  "acceptedAnswers": ["because"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "basic_spelling"
-                  ]
+                  "expectedConcepts": ["basic_spelling"]
                 }
               ]
             },
             {
               "key": "punctuation",
               "name": "Puntuación básica",
-              "objectives": [
-                "cerrar oraciones con punto o signo de pregunta",
-                "usar signos básicos según la intención"
-              ],
-              "exerciseTypes": [
-                "rewrite"
-              ],
+              "objectives": ["cerrar oraciones con punto o signo de pregunta", "usar signos básicos según la intención"],
+              "exerciseTypes": ["rewrite"],
               "examples": [
                 {
                   "type": "rewrite",
                   "instruction": "Rewrite with correct punctuation.",
                   "question": "Where are you from",
-                  "acceptedAnswers": [
-                    "Where are you from?"
-                  ],
+                  "acceptedAnswers": ["Where are you from?"],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "basic_punctuation"
-                  ]
+                  "expectedConcepts": ["basic_punctuation"]
                 },
                 {
                   "type": "rewrite",
                   "instruction": "Rewrite with correct punctuation.",
                   "question": "I live in Buenos Aires",
-                  "acceptedAnswers": [
-                    "I live in Buenos Aires."
-                  ],
+                  "acceptedAnswers": ["I live in Buenos Aires."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "basic_punctuation"
-                  ]
+                  "expectedConcepts": ["basic_punctuation"]
                 }
               ]
             },
             {
               "key": "apostrophes",
               "name": "Apóstrofes y contracciones",
-              "objectives": [
-                "usar el apóstrofe en contracciones frecuentes",
-                "distinguir formas como I'm, don't, isn't y can't"
-              ],
-              "exerciseTypes": [
-                "rewrite"
-              ],
+              "objectives": ["usar el apóstrofe en contracciones frecuentes", "distinguir formas como I'm, don't, isn't y can't"],
+              "exerciseTypes": ["rewrite"],
               "examples": [
                 {
                   "type": "rewrite",
                   "instruction": "Rewrite using a contraction.",
                   "question": "I am from Argentina.",
-                  "acceptedAnswers": [
-                    "I'm from Argentina."
-                  ],
+                  "acceptedAnswers": ["I'm from Argentina."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "apostrophes_contractions"
-                  ]
+                  "expectedConcepts": ["apostrophes_contractions"]
                 },
                 {
                   "type": "rewrite",
                   "instruction": "Rewrite using a contraction.",
                   "question": "She is not at home.",
-                  "acceptedAnswers": [
-                    "She isn't at home.",
-                    "She's not at home."
-                  ],
+                  "acceptedAnswers": ["She isn't at home.", "She's not at home."],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "apostrophes_contractions"
-                  ]
+                  "expectedConcepts": ["apostrophes_contractions"]
                 }
               ]
             }
           ]
         }
       ]
-    },
+    }
+  ,
     {
       "key": "conversation",
       "name": "Conversation",
@@ -2473,13 +1541,8 @@
             {
               "key": "greetings",
               "name": "Saludos y respuestas",
-              "objectives": [
-                "responder a un saludo de manera apropiada",
-                "devolver un saludo simple"
-              ],
-              "exerciseTypes": [
-                "conversation"
-              ],
+              "objectives": ["responder a un saludo de manera apropiada", "devolver un saludo simple"],
+              "exerciseTypes": ["conversation"],
               "examples": [
                 {
                   "type": "conversation",
@@ -2487,9 +1550,7 @@
                   "question": "Hi! How are you?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "respond_to_greeting"
-                  ],
+                  "expectedConcepts": ["respond_to_greeting"],
                   "closing": "Nice to see you. Bye!"
                 },
                 {
@@ -2498,9 +1559,7 @@
                   "question": "Good morning! How are you today?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "respond_to_greeting"
-                  ],
+                  "expectedConcepts": ["respond_to_greeting"],
                   "closing": "Have a good day!"
                 }
               ]
@@ -2508,13 +1567,8 @@
             {
               "key": "introductions",
               "name": "Presentarse",
-              "objectives": [
-                "decir el nombre al presentarse",
-                "responder a una presentación simple"
-              ],
-              "exerciseTypes": [
-                "conversation"
-              ],
+              "objectives": ["decir el nombre al presentarse", "responder a una presentación simple"],
+              "exerciseTypes": ["conversation"],
               "examples": [
                 {
                   "type": "conversation",
@@ -2522,9 +1576,7 @@
                   "question": "Hi, I'm Emma. What's your name?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "give_name"
-                  ],
+                  "expectedConcepts": ["give_name"],
                   "closing": "Nice to meet you!"
                 },
                 {
@@ -2533,9 +1585,7 @@
                   "question": "Hello! My name is Tom. And you?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "give_name"
-                  ],
+                  "expectedConcepts": ["give_name"],
                   "closing": "Nice to meet you. Bye!"
                 }
               ]
@@ -2549,13 +1599,8 @@
             {
               "key": "basic_details",
               "name": "Datos personales básicos",
-              "objectives": [
-                "responder preguntas simples sobre país, ciudad o edad",
-                "mantener el tema de una presentación"
-              ],
-              "exerciseTypes": [
-                "conversation"
-              ],
+              "objectives": ["responder preguntas simples sobre país, ciudad o edad", "mantener el tema de una presentación"],
+              "exerciseTypes": ["conversation"],
               "examples": [
                 {
                   "type": "conversation",
@@ -2563,9 +1608,7 @@
                   "question": "Where are you from?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "answer_personal_information"
-                  ],
+                  "expectedConcepts": ["answer_personal_information"],
                   "closing": "That's nice. Thanks!"
                 },
                 {
@@ -2574,9 +1617,7 @@
                   "question": "How old are you?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "answer_personal_information"
-                  ],
+                  "expectedConcepts": ["answer_personal_information"],
                   "closing": "Thanks for telling me."
                 }
               ]
@@ -2590,13 +1631,8 @@
             {
               "key": "simple_requests",
               "name": "Pedir y responder algo simple",
-              "objectives": [
-                "hacer o responder pedidos cotidianos simples",
-                "usar expresiones básicas de cortesía"
-              ],
-              "exerciseTypes": [
-                "conversation"
-              ],
+              "objectives": ["hacer o responder pedidos cotidianos simples", "usar expresiones básicas de cortesía"],
+              "exerciseTypes": ["conversation"],
               "examples": [
                 {
                   "type": "conversation",
@@ -2604,9 +1640,7 @@
                   "question": "Can I have some water, please?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "respond_to_simple_request"
-                  ],
+                  "expectedConcepts": ["respond_to_simple_request"],
                   "closing": "Thank you!"
                 },
                 {
@@ -2615,9 +1649,7 @@
                   "question": "Can you help me, please?",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "respond_to_simple_request"
-                  ],
+                  "expectedConcepts": ["respond_to_simple_request"],
                   "closing": "Thanks for your help!"
                 }
               ]
@@ -2625,13 +1657,8 @@
             {
               "key": "farewells",
               "name": "Cerrar una conversación",
-              "objectives": [
-                "responder a una despedida",
-                "cerrar un intercambio breve de manera apropiada"
-              ],
-              "exerciseTypes": [
-                "conversation"
-              ],
+              "objectives": ["responder a una despedida", "cerrar un intercambio breve de manera apropiada"],
+              "exerciseTypes": ["conversation"],
               "examples": [
                 {
                   "type": "conversation",
@@ -2639,9 +1666,7 @@
                   "question": "It was nice talking to you. See you tomorrow!",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "respond_to_farewell"
-                  ],
+                  "expectedConcepts": ["respond_to_farewell"],
                   "closing": "Bye!"
                 },
                 {
@@ -2650,9 +1675,7 @@
                   "question": "I have to go now. Have a nice day!",
                   "acceptedAnswers": [],
                   "commonErrors": [],
-                  "expectedConcepts": [
-                    "respond_to_farewell"
-                  ],
+                  "expectedConcepts": ["respond_to_farewell"],
                   "closing": "See you!"
                 }
               ]
