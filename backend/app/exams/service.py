@@ -207,8 +207,9 @@ def exam_slots(level: str, rng=None, *, allow_speaking: bool = False) -> list[di
             orthography = [s for s in pool if ".writing.orthography." in s.key]
             others = [s for s in pool if s not in orthography]
             if orthography:
-                pool = [rng.choice(orthography)] + others + [
-                    s for s in orthography if s.key != pool[0].key
+                chosen_orthography = rng.choice(orthography)
+                pool = [chosen_orthography] + others + [
+                    s for s in orthography if s.key != chosen_orthography.key
                 ]
         for index in range(count):
             slots.append(
