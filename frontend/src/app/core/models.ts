@@ -72,6 +72,52 @@ export interface PlatformAccount {
   service: ServiceStatus;
 }
 
+export type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
+export type CampaignTrigger = 'FIRST_LOGIN' | 'LOGIN' | 'SCHEDULED';
+export type CampaignNotification = 'NONE' | 'IN_APP' | 'EMAIL' | 'IN_APP_EMAIL';
+
+export interface CampaignRule {
+  field: string;
+  operator: string;
+  value: string | number | boolean;
+}
+
+export interface PlatformCampaign {
+  id: number;
+  code: string;
+  name: string;
+  serviceId: number;
+  serviceName: string;
+  status: CampaignStatus;
+  trigger: CampaignTrigger;
+  rules: CampaignRule[];
+  grantDays: number | null;
+  priority: number;
+  stackable: boolean;
+  maxRecipients: number | null;
+  recipients: number;
+  startsAt: string | null;
+  endsAt: string | null;
+  notification: CampaignNotification;
+  message: string | null;
+  pendingEmails: number;
+  overlapWarnings: { id: number; name: string; priority: number; stackable: boolean }[];
+}
+
+export type PlatformCampaignDraft = Omit<
+  PlatformCampaign,
+  'id' | 'code' | 'serviceName' | 'status' | 'recipients' | 'pendingEmails' | 'overlapWarnings'
+>;
+
+export interface CampaignNotice {
+  grantId: number;
+  campaignId: number;
+  campaign: string;
+  message: string;
+  benefit: string;
+  appliedAt: string;
+}
+
 export interface AuthConfig {
   googleClientId: string | null;
   devLoginEnabled: boolean;

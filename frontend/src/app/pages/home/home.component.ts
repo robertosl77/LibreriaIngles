@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { ClassSummary } from '../../core/models';
+import { CampaignNotice, ClassSummary } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { ExamCardComponent } from '../../shared/exam-card.component';
 import { MyServiceComponent } from '../../shared/my-service.component';
@@ -31,6 +31,9 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
     .steps li.done strong { color: var(--muted); }
     @media (max-width: 640px) { .new-class { align-items: flex-start; } }
     .chip-exam { margin-left: 0.4rem; background: #fbf3dc; color: #8a6a1f; }
+    .campaign-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .campaign-notice p { margin: 0.15rem 0 0; }
+    @media (max-width: 640px) { .campaign-notice { align-items: flex-start; flex-direction: column; } }
   `,
   template: `
     <main class="page stack">
@@ -57,6 +60,16 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
           }
         </div>
       </div>
+
+      @for (notice of notices(); track notice.grantId) {
+        <div class="banner banner-info campaign-notice">
+          <div>
+            <strong>{{ notice.campaign }}</strong>
+            <p class="small">{{ notice.message }}</p>
+          </div>
+          <button class="btn btn-sm" type="button" (click)="dismissNotice(notice)">Entendido</button>
+        </div>
+      }
 
       @if (!setupDone()) {
         <section class="card setup">
@@ -211,6 +224,7 @@ export class HomeComponent implements OnInit {
   readonly labels = STATUS_LABELS;
   readonly statusChip = statusChip;
   readonly classes = signal<ClassSummary[]>([]);
+  readonly notices = signal<CampaignNotice[]>([]);
   readonly loading = signal(true);
   readonly creating = signal(false);
   readonly overall = signal<number | null>(null);
@@ -237,16 +251,27 @@ export class HomeComponent implements OnInit {
           await this.auth.refreshMe();
         }
       }
-      const [classes, progress] = await Promise.all([
+      const [classes, progress, notices] = await Promise.all([
         firstValueFrom(this.api.classes()),
-        firstValueFrom(this.api.progress())
+        firstValueFrom(this.api.progress()),
+        firstValueFrom(this.api.campaignNotices())
       ]);
       this.classes.set(classes);
       this.overall.set(progress.overallScore);
+      this.notices.set(notices);
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  async dismissNotice(notice: CampaignNotice): Promise<void> {
+    try {
+      await firstValueFrom(this.api.readCampaignNotice(notice.grantId));
+      this.notices.update((items) => items.filter((item) => item.grantId !== notice.grantId));
+    } catch (err) {
+      this.toast.error(errorMessage(err));
     }
   }
 

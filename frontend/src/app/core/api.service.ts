@@ -8,6 +8,7 @@ import {
   AiConnection,
   AuthConfig,
   Certificate,
+  CampaignNotice,
   ClassDetail,
   ClassSummary,
   ConnectionDraft,
@@ -19,6 +20,8 @@ import {
   Me,
   ModelOption,
   PlatformAccount,
+  PlatformCampaign,
+  PlatformCampaignDraft,
   PlatformOverview,
   PlatformService,
   PlatformServiceDraft,
@@ -274,5 +277,38 @@ export class ApiService {
 
   revokeService(accountId: number): Observable<PlatformAccount> {
     return this.http.delete<PlatformAccount>(`${this.base}/platform/accounts/${accountId}/service`);
+  }
+
+  // Campañas (T-004 etapa 2)
+  platformCampaigns(): Observable<PlatformCampaign[]> {
+    return this.http.get<PlatformCampaign[]>(`${this.base}/platform/campaigns`);
+  }
+
+  createPlatformCampaign(draft: PlatformCampaignDraft): Observable<PlatformCampaign> {
+    return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns`, draft);
+  }
+
+  updatePlatformCampaign(id: number, draft: PlatformCampaignDraft): Observable<PlatformCampaign> {
+    return this.http.put<PlatformCampaign>(`${this.base}/platform/campaigns/${id}`, draft);
+  }
+
+  activatePlatformCampaign(id: number): Observable<PlatformCampaign> {
+    return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns/${id}/activate`, {});
+  }
+
+  pausePlatformCampaign(id: number): Observable<PlatformCampaign> {
+    return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns/${id}/pause`, {});
+  }
+
+  finishPlatformCampaign(id: number): Observable<PlatformCampaign> {
+    return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns/${id}/finish`, {});
+  }
+
+  campaignNotices(): Observable<CampaignNotice[]> {
+    return this.http.get<CampaignNotice[]>(`${this.base}/campaign-notices`);
+  }
+
+  readCampaignNotice(grantId: number): Observable<void> {
+    return this.http.post<void>(`${this.base}/campaign-notices/${grantId}/read`, {});
   }
 }
