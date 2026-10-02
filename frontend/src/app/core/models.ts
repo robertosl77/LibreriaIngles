@@ -35,6 +35,8 @@ export interface ServiceStatus {
   origin: 'MANUAL' | 'CAMPAIGN' | 'INVITATION' | 'PAYMENT' | null;
   expiresAt: string | null;
   dailyRequestLimit: number | null;
+  /** Rol de las keys propias: required (BYOK) · optional (Híbrido) · unused (Plataforma). */
+  ownKeys: 'required' | 'optional' | 'unused';
   expired: { name: string; at: string } | null;
 }
 

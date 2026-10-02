@@ -97,6 +97,11 @@ def _me_payload(study, db) -> dict:
     service_payload = service.payload()
     service_payload["usesOwnKeys"] = uses_own
     service_payload["usesPlatform"] = uses_platform
+    if account.platform_role == PlatformRole.PLATFORM_OWNER:
+        # El dueño no tiene servicio: usa sus keys y las de la plataforma (T-004: "empresa dueña").
+        service_payload.update(
+            name="Dueño de la plataforma", source="HYBRID", ownKeys="optional", granted=False
+        )
     if service.daily_request_limit is not None:
         service_payload["platformRequests24h"] = platform_requests(
             db, account.id, since=utcnow() - LIMIT_WINDOW

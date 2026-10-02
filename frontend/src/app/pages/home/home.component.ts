@@ -78,11 +78,27 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
               <span class="check" aria-hidden="true">{{ hasAi() ? '✓' : '2' }}</span>
               <div>
                 <strong>Conectá una IA</strong>
-                @if (!hasAi()) {
-                  <p class="muted small">Cargá tu API key de OpenAI, Gemini o Anthropic. Es la que genera y corrige tus clases.</p>
+                @switch (ownKeys()) {
+                  @case ('unused') {
+                    <p class="muted small">Tu servicio usa la IA de Librería Inglés: no tenés que configurar nada.</p>
+                  }
+                  @case ('optional') {
+                    <p class="muted small">
+                      Tu servicio usa la IA de Librería Inglés. Si cargás tus propias API keys, se usan primero.
+                    </p>
+                  }
+                  @default {
+                    @if (!hasAi()) {
+                      <p class="muted small">Cargá tu API key de OpenAI, Gemini o Anthropic. Es la que genera y corrige tus clases.</p>
+                    }
+                  }
                 }
               </div>
-              @if (!hasAi()) { <a class="btn btn-sm" [class.btn-primary]="hasLevel()" routerLink="/app/ia">Configurar IA</a> }
+              @if (ownKeys() === 'optional') {
+                <a class="btn btn-sm" routerLink="/app/ia">Agregar mis keys</a>
+              } @else if (!hasAi()) {
+                <a class="btn btn-sm" [class.btn-primary]="hasLevel()" routerLink="/app/ia">Configurar IA</a>
+              }
             </li>
             <li>
               <span class="check" aria-hidden="true">3</span>
@@ -199,7 +215,11 @@ export class HomeComponent implements OnInit {
   readonly creating = signal(false);
   readonly overall = signal<number | null>(null);
   readonly hasLevel = computed(() => !!this.auth.me()?.studyProfile.operationalLevel);
-  readonly hasAi = computed(() => (this.auth.me()?.ai.connections ?? 0) > 0);
+  readonly ownKeys = computed(() => this.auth.me()?.service.ownKeys ?? 'required');
+  /** Paso 2 listo: el servicio no exige keys propias, o ya cargó alguna. */
+  readonly hasAi = computed(
+    () => this.ownKeys() !== 'required' || (this.auth.me()?.ai.own ?? 0) > 0
+  );
   readonly setupDone = computed(() => this.hasLevel() && this.hasAi());
   readonly canCreate = computed(() => this.setupDone());
   readonly name = computed(() => this.auth.me()?.account.displayName?.split(' ')[0] ?? '');

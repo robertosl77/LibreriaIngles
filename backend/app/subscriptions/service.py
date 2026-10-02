@@ -41,6 +41,15 @@ DEFAULT_SERVICES = [
 RECENT_EXPIRY = timedelta(days=14)
 
 
+# Qué rol cumplen las keys propias según la fuente. Único lugar a tocar si aparece una fuente
+# nueva: el frontend decide la pantalla por estas banderas, no por el nombre del servicio.
+OWN_KEYS_ROLE = {
+    AISource.BYOK: "required",  # sin keys propias no hay IA
+    AISource.HYBRID: "optional",  # se usan primero; si no hay, plataforma (ver T-054)
+    AISource.PLATFORM: "unused",  # se ignoran
+}
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -98,6 +107,7 @@ class EffectiveService:
             "origin": self.origin.value if self.origin else None,
             "expiresAt": self.expires_at,
             "dailyRequestLimit": self.daily_request_limit,
+            "ownKeys": OWN_KEYS_ROLE[self.source],
             "expired": (
                 {"name": self.expired_name, "at": self.expired_at} if self.expired_name else None
             ),

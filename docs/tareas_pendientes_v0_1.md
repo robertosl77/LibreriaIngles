@@ -2099,6 +2099,34 @@ datos de terceros.
 
 ---
 
+## T-054 — Servicio Híbrido sin API keys propias: ¿funciona o no?
+
+**Prioridad:** P2 — Media (definir antes de otorgar Híbrido a usuarios reales)  
+**Estado:** Pendiente de decisión (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
+**Relación:** T-004 (membresías: servicio = vínculo + fuente de IA; Híbrido = propias primero,
+plataforma si fallan), T-049 (tokens y costo por uso), T-047 (avisos claros cuando no hay IA)
+
+Situación: una cuenta tiene el servicio **Individual · Híbrido** pero **no cargó ninguna API key
+propia**. Hoy (etapa 1) el router simplemente salta a la IA de la plataforma: el alumno usa
+Librería Inglés (con el tope del servicio), igual que con el servicio Plataforma.
+
+```text
+Híbrido + keys propias OK        → usa las propias            (esperado)
+Híbrido + keys propias fallan    → usa la plataforma          (esperado, con aviso y tope)
+Híbrido + SIN keys propias       → ¿?                          ← a decidir
+```
+
+Opciones a discutir:
+
+1. Funciona igual, todo por plataforma (como hoy). Riesgo: Híbrido = Plataforma encubierto.
+2. No genera clases hasta que cargue una key: Inicio muestra "Conectá una IA" como obligatorio.
+3. Funciona por plataforma con un tope más bajo / período de gracia (N días) para cargar su key.
+
+Además: el paso 2 de "Primeros pasos" en Inicio debe reflejar la decisión (hoy, para Híbrido,
+se muestra como opcional).
+
+---
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:

@@ -57,6 +57,14 @@ def test_default_service_is_personal_byok(client) -> None:
     assert service["linkType"] == "PERSONAL"
     assert service["granted"] is False
     assert service["usesOwnKeys"] is True and service["usesPlatform"] is False
+    assert service["ownKeys"] == "required"
+
+
+def test_owner_is_shown_as_platform_owner(client) -> None:
+    owner = login(client, OWNER)
+    service = client.get(f"{API}/me", headers=owner).json()["service"]
+    assert service["name"] == "Dueño de la plataforma"
+    assert service["usesOwnKeys"] is True and service["usesPlatform"] is True
 
 
 def test_portal_is_only_for_platform_owner(client) -> None:
@@ -83,6 +91,7 @@ def test_source_decides_which_keys_are_used(client) -> None:
 
     # Plataforma: ignora las propias.
     _grant(client, owner, "alice@example.com", services["INDIVIDUAL_PLATFORM"]["id"])
+    assert client.get(f"{API}/me", headers=alice).json()["service"]["ownKeys"] == "unused"
     assert _new_class(client, alice)["generatedBy"] == "Plataforma"
 
     # Volver a propias keys.
