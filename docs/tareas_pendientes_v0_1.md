@@ -2030,11 +2030,14 @@ Ideas anotadas para no perderlas (Roberto, 2026-10-01):
 
 **Prioridad:** P3 — Baja  
 **Estado:** Pendiente  
-**Relación:** T-004 (invitaciones por link), T-050 (avisos y promociones)
+**Relación:** T-004 (invitaciones/campañas), T-050 (avisos y promociones),
+T-059 (campañas programadas y reportes periódicos por empresa)
 
 La app no envía emails. Hace falta un servicio para: invitaciones (llevan el mismo link que hoy se
-copia a mano), avisos de vencimiento, recuperación de cuenta y campañas de fidelización. Remitente:
-la cuenta real de sr.macros. Elegir proveedor (SMTP propio o servicio transaccional) y plantillas.
+copia a mano), avisos de vencimiento, recuperación de cuenta, campañas de fidelización y **entrega
+automática de reportes generados por campañas programadas** (caso guía: resumen mensual de progreso
+de empleados para los ADMIN de una empresa, definido en T-059). Remitente: la cuenta real de
+sr.macros. Elegir proveedor (SMTP propio o servicio transaccional) y plantillas.
 
 ---
 
@@ -2346,7 +2349,8 @@ nivel que Grammar, Vocabulary, Listening y el resto, sin un tratamiento especial
 
 **Prioridad:** P2 — Media  
 **Estado:** Para analizar / diseñar  
-**Relación:** T-004 (campañas), T-050 (fidelización), T-051 (emails)
+**Relación:** T-004 (campañas), T-050 (fidelización), T-051 (emails),
+T-053 (dashboard/consumo por cliente; posible fuente adicional de métricas)
 
 Objetivo: separar del motor de campañas el concepto de **cuándo se evalúan campañas programadas**.
 Las campañas no deben depender únicamente de eventos como login/registro: hace falta un segundo motor
@@ -2442,6 +2446,99 @@ Las campañas precargadas:
 **Criterio de aceptación:** el sistema puede ejecutar campañas tanto por eventos como por una
 programación independiente y configurable, y una empresa nueva recibe campañas de ejemplo inactivas
 que muestran al ADMIN cómo configurarlas dentro de su propio tenant.
+
+
+### C. Caso de uso guía: reporte mensual de progreso por empresa
+
+Usar como caso de diseño principal una campaña modelo precargada para organizaciones:
+
+```text
+CAMPAÑA
+"Resumen mensual de progreso"
+
+SCOPE
+organization_id = Empresa X
+
+TRIGGER
+SCHEDULED
+
+SCHEDULE
+1 vez por mes
+ej. día 1 a las 08:00
+
+TARGET / DATOS
+empleados activos de Empresa X
+
+ACTION
+GENERATE_REPORT
+
+CONTENIDO POSIBLE
+- empleados totales
+- cuántos avanzaron
+- cuántos están estancados
+- cuántos no tuvieron actividad
+- clases realizadas
+- progreso / niveles
+- opcionalmente consumo de IA (T-053)
+
+DELIVERY
+EMAIL a ADMIN(s) de Empresa X
+```
+
+Esta campaña debe crearse al dar de alta una empresa como **BORRADOR / INACTIVA** y funcionar como
+ejemplo editable: el ADMIN puede activarla, pausarla, cambiar periodicidad/destinatarios, duplicarla
+o eliminarla. La copia pertenece al tenant de la empresa; modificarla nunca afecta a otras empresas.
+
+Este caso debe guiar la evolución del motor porque obliga a resolver en conjunto tres capacidades:
+
+1. **Campañas ejemplo por tenant:** una organización nueva recibe configuraciones reales de referencia.
+2. **Scheduler/batch configurable (T-059):** frecuencia, días, horarios, ciclos y vigencia no deben
+   quedar hardcodeados dentro de la campaña.
+3. **Entrega por email (T-051):** el resultado generado debe poder enviarse automáticamente a
+   destinatarios definidos, por ejemplo los ADMIN de la organización.
+
+Además fuerza una generalización importante de T-004: una campaña no debe quedar limitada a
+`GRANT_SERVICE`. El concepto de acción debe poder crecer, por ejemplo:
+
+```text
+GRANT_SERVICE
+GENERATE_REPORT
+SEND_NOTIFICATION
+CREATE_INVITATION
+APPLY_DISCOUNT
+...
+```
+
+y la entrega/comunicación debe mantenerse separada de la acción:
+
+```text
+NONE
+IN_APP
+EMAIL
+IN_APP + EMAIL
+```
+
+Flujo conceptual:
+
+```text
+TRIGGER / SCHEDULE
+        ↓
+SCOPE / TARGET
+        ↓
+CONDITIONS
+        ↓
+ACTION
+        ↓
+DELIVERY
+```
+
+**Decisión de diseño:** no hardcodear "reporte mensual" como una función especial. Debe surgir de la
+combinación `schedule + scope + target/conditions + action + delivery`. Este caso se usará como
+prueba de que T-004, T-059 y T-051 quedan suficientemente genéricos y combinables.
+
+**Criterio de aceptación adicional:** al crear una empresa existe al menos una campaña modelo de
+reporte periódico, inactiva y limitada a su tenant, que pueda configurarse para generar un resumen de
+sus empleados y enviarlo por email a sus administradores.
 
 ---
 
