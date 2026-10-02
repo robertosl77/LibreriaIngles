@@ -25,6 +25,7 @@ from app.classes.generation import (
     ensure_listening,
     ensure_speaking,
     generate_content,
+    pair_conversation_slots,
     slot_for,
 )
 from app.core.deps import StudyContext
@@ -37,12 +38,13 @@ from app.learning.models import (
     Exercise,
     SessionKind,
 )
-from app.progress.service import progress_by_skill
+from app.progress.service import progress_by_skill, secondary_skill_results
 
 # Estructura del examen: ejercicios por área (se omiten áreas sin skills en el nivel).
-EXAM_BLUEPRINT = {"grammar": 5, "vocabulary": 3, "listening": 2, "reading": 2, "writing": 2}
+EXAM_BLUEPRINT = {"grammar": 5, "vocabulary": 3, "listening": 2, "reading": 2, "conversation": 2, "writing": 3}
 PASS_SCORE = 70  # promedio global mínimo
 AREA_MIN_SCORE = 60  # mínimo en cada área
+EXAM_PREVIEW_COVERAGE = 0.6  # desde acá se empieza a anticipar el examen en la UI
 ELIGIBLE_COVERAGE = 0.7  # porción de skills del nivel practicadas
 ELIGIBLE_SCORE = 70  # promedio de las skills practicadas
 RETRY_COOLDOWN = timedelta(hours=24)
@@ -114,6 +116,7 @@ def exam_status(db: Session, study: StudyContext) -> dict:
     total = len(curriculum.skills)
     coverage = len(practiced) / total if total else 0
     average = round(sum(practiced) / len(practiced), 1) if practiced else None
+    preview_needed = math.ceil(EXAM_PREVIEW_COVERAGE * total)
     needed = math.ceil(ELIGIBLE_COVERAGE * total)
     checks = [
         {
@@ -143,11 +146,30 @@ def exam_status(db: Session, study: StudyContext) -> dict:
         if until and until > utcnow():
             cooldown_until = until
 
+    show_proposal = (
+        coverage >= EXAM_PREVIEW_COVERAGE
+        or certificate is not None
+        or open_exam is not None
+        or bool(completed)
+    )
+
     return {
         "level": level,
         "available": True,
+        "showProposal": show_proposal,
         "eligible": eligible,
         "checks": checks,
+        "progress": {
+            "practiced": len(practiced),
+            "total": total,
+            "coveragePercent": round(coverage * 100, 1),
+            "previewCoveragePercent": int(EXAM_PREVIEW_COVERAGE * 100),
+            "requiredCoveragePercent": int(ELIGIBLE_COVERAGE * 100),
+            "previewNeeded": preview_needed,
+            "requiredNeeded": needed,
+            "averageScore": average,
+            "requiredAverageScore": ELIGIBLE_SCORE,
+        },
         "passed": certificate is not None,
         "certificateCode": certificate.code if certificate else None,
         "openExamId": open_exam.id if open_exam else None,
@@ -180,6 +202,15 @@ def exam_slots(level: str, rng=None, *, allow_speaking: bool = False) -> list[di
             continue
         pool = list(skills)
         rng.shuffle(pool)
+        if area == "writing":
+            # Ortografía tiene indicador propio en el dashboard: el examen debe medirla explícitamente.
+            orthography = [s for s in pool if ".writing.orthography." in s.key]
+            others = [s for s in pool if s not in orthography]
+            if orthography:
+                chosen_orthography = rng.choice(orthography)
+                pool = [chosen_orthography] + others + [
+                    s for s in orthography if s.key != chosen_orthography.key
+                ]
         for index in range(count):
             slots.append(
                 slot_for(pool[index % len(pool)], rng, allow_speaking=allow_speaking)
@@ -187,6 +218,7 @@ def exam_slots(level: str, rng=None, *, allow_speaking: bool = False) -> list[di
     ensure_listening(slots, list(curriculum.skills), EXAM_MIN_LISTEN, rng)
     if allow_speaking:
         ensure_speaking(slots, EXAM_MIN_SPEAK, rng)
+    pair_conversation_slots(slots)
     return slots
 
 
@@ -296,6 +328,29 @@ def finalize_exam(db: Session, session: ClassSession) -> dict:
             }
         )
 
+    # Dimensión explícita de Ortografía: vive curricularmente dentro de Writing,
+    # pero se muestra y se exige por separado porque también aparece así en el dashboard.
+    orthography_scores: list[float] = []
+    for attempt, exercise in attempts:
+        if ".writing.orthography." in (exercise.skill_key or ""):
+            orthography_scores.append(float(attempt.score or 0))
+            continue
+        for item in secondary_skill_results(attempt.evaluation_result):
+            if ".writing.orthography." in item["skillKey"]:
+                orthography_scores.append(float(item["score"]))
+    dimensions = []
+    if orthography_scores:
+        orthography_score = round(sum(orthography_scores) / len(orthography_scores), 1)
+        dimensions.append(
+            {
+                "key": "ORTHOGRAPHY",
+                "name": "Ortografía",
+                "score": orthography_score,
+                "items": len(orthography_scores),
+                "passed": orthography_score >= AREA_MIN_SCORE,
+            }
+        )
+
     total = [attempt.score or 0 for attempt, _ in attempts]
     score = round(sum(total) / len(total), 1) if total else 0.0
     passed = (
@@ -303,6 +358,7 @@ def finalize_exam(db: Session, session: ClassSession) -> dict:
         and score >= PASS_SCORE
         and all(a["passed"] for a in areas)
         and all(m["passed"] for m in modalities)
+        and all(d["passed"] for d in dimensions)
     )
     session.exam_result = {
         "passed": passed,
@@ -311,6 +367,7 @@ def finalize_exam(db: Session, session: ClassSession) -> dict:
         "areaMinScore": AREA_MIN_SCORE,
         "areas": areas,
         "modalities": modalities,
+        "dimensions": dimensions,
     }
 
     if passed and certificate_of(db, session.study_profile_id, session.target_level) is None:
@@ -324,7 +381,7 @@ def finalize_exam(db: Session, session: ClassSession) -> dict:
                 holder_name=holder_name(account),
                 level=session.target_level,
                 score=score,
-                area_scores={a["name"]: a["score"] for a in areas},
+                area_scores={a["name"]: a["score"] for a in areas} | {d["name"]: d["score"] for d in dimensions},
             )
         )
     db.commit()

@@ -56,10 +56,30 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
                 </div>
                 <span class="muted small">
                   {{ providerLabel(c.provider) }} · {{ c.model }}
-                  @if (c.credentialHint) { · {{ c.credentialHint }} }
                   @if (c.lastUsedAt) { · usada {{ c.lastUsedAt | date: 'dd/MM HH:mm' }} }
                   @if (c.backoffUntil && !c.usable) { · reintento {{ c.backoffUntil | date: 'HH:mm' }} }
                 </span>
+                @if (c.credentialHint) {
+                  <div class="credential-row small">
+                    <span class="muted">API key:</span>
+                    <code class="secret-value">{{ c.credentialHint }}</code>
+                    @if (isOwner()) {
+                      <button
+                        class="copy-key-btn"
+                        type="button"
+                        (click)="copyKey(c)"
+                        [disabled]="credentialBusyId() === c.id"
+                        [attr.aria-label]="'Copiar API key de ' + c.name"
+                        [attr.title]="'Copiar API key de ' + c.name"
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                          <rect x="9" y="9" width="10" height="10" rx="1.5"></rect>
+                          <path d="M15 9V6.5A1.5 1.5 0 0 0 13.5 5h-8A1.5 1.5 0 0 0 4 6.5v8A1.5 1.5 0 0 0 5.5 16H9"></path>
+                        </svg>
+                      </button>
+                    }
+                  </div>
+                }
                 @if (isPlatform()) {
                   <div class="limits">
                     <span class="small">
@@ -203,6 +223,19 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
     .prio { display: flex; align-items: center; gap: 0.4rem; }
     .prio .input { width: 4.5rem; padding: 0.35rem 0.5rem; }
     .limits { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-top: 0.3rem; }
+    .credential-row { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+    .secret-value {
+      max-width: min(100%, 36rem); overflow-wrap: anywhere; user-select: text;
+      padding: 0.2rem 0.35rem; border-radius: 0.35rem; background: var(--bg);
+    }
+    .copy-key-btn {
+      width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: 0.35rem;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent; color: var(--muted); cursor: pointer;
+    }
+    .copy-key-btn:hover:not(:disabled) { background: var(--bg); color: var(--text); }
+    .copy-key-btn:disabled { opacity: 0.45; cursor: wait; }
+    .copy-key-btn svg { fill: none; stroke: currentColor; stroke-width: 1.6; }
     .usage-bar { width: 120px; }
     .limit-field { display: flex; align-items: center; gap: 0.4rem; }
     .limit-field .input { width: 6.5rem; padding: 0.35rem 0.5rem; }
@@ -230,6 +263,8 @@ export class ConnectionsManagerComponent implements OnInit {
     this.providers().find((p) => p.key === this.selectedProviderKey())
   );
   readonly isPlatform = computed(() => this.scope() === 'platform');
+  readonly isOwner = computed(() => this.auth.me()?.account.isPlatformOwner ?? false);
+  readonly credentialBusyId = signal<number | null>(null);
 
   // Modelos disponibles (consultados al proveedor)
   readonly newModels = signal<ModelOption[] | null>(null);
@@ -263,6 +298,43 @@ export class ConnectionsManagerComponent implements OnInit {
       this.toast.error(errorMessage(err));
     }
     await this.reload();
+  }
+
+  async copyKey(connection: AiConnection): Promise<void> {
+    this.credentialBusyId.set(connection.id);
+    try {
+      const response = await firstValueFrom(
+        this.api.copyConnectionCredential(connection.id)
+      );
+      await this.copyText(response.apiKey);
+      this.toast.success(`API key de "${connection.name}" copiada.`);
+    } catch (err) {
+      this.toast.error(errorMessage(err, 'No se pudo copiar la API key.'));
+    } finally {
+      this.credentialBusyId.set(null);
+    }
+  }
+
+  private async copyText(value: string): Promise<void> {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      if (!document.execCommand('copy')) {
+        throw new Error('Clipboard API no disponible.');
+      }
+    } finally {
+      textarea.remove();
+    }
   }
 
   providerLabel(key: string): string {

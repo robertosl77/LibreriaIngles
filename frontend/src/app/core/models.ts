@@ -18,7 +18,58 @@ export interface Me {
     generationFailed: number;
     completed: number;
   };
-  ai: { connections: number; available: number };
+  ai: { connections: number; available: number; own: number };
+  service: MyService;
+}
+
+/** Servicio vigente de la cuenta (T-004): vínculo × fuente de IA. */
+export type AiSource = 'BYOK' | 'PLATFORM' | 'HYBRID';
+export type LinkType = 'PERSONAL' | 'CORPORATE';
+
+export interface ServiceStatus {
+  name: string;
+  code: string | null;
+  source: AiSource;
+  linkType: LinkType;
+  granted: boolean;
+  origin: 'MANUAL' | 'CAMPAIGN' | 'INVITATION' | 'PAYMENT' | null;
+  expiresAt: string | null;
+  dailyRequestLimit: number | null;
+  /** Rol de las keys propias: required (BYOK) · optional (Híbrido) · unused (Plataforma). */
+  ownKeys: 'required' | 'optional' | 'unused';
+  expired: { name: string; at: string } | null;
+}
+
+export interface MyService extends ServiceStatus {
+  usesOwnKeys: boolean;
+  usesPlatform: boolean;
+  platformRequests24h?: number;
+}
+
+export interface PlatformService {
+  id: number;
+  code: string;
+  name: string;
+  source: AiSource;
+  linkType: LinkType;
+  durationDays: number | null;
+  dailyRequestLimit: number | null;
+  description: string | null;
+  active: boolean;
+  activeAccounts: number;
+}
+
+export type PlatformServiceDraft = Omit<PlatformService, 'id' | 'code' | 'activeAccounts'>;
+
+export interface PlatformAccount {
+  id: number;
+  email: string;
+  displayName: string | null;
+  isPlatformOwner: boolean;
+  createdAt: string;
+  ownConnections: number;
+  platformRequests24h: number;
+  service: ServiceStatus;
 }
 
 export interface AuthConfig {
@@ -106,6 +157,7 @@ export interface ExerciseResult {
   errors: { type: string; fragment: string | null; correction: string | null; explanation: string; occurrences?: number }[];
   suggestions: { type: string; text: string }[];
   conceptResults: { concept: string; status: string }[];
+  secondarySkillResults: { skillKey: string; status: string; score: number; reason: string }[];
   evaluationSource: string | null;
   ai: AiEngineTrace | null;
   appeal: { accepted: boolean; feedback?: string } | null;
@@ -134,7 +186,8 @@ export interface Exercise {
     | 'multiple_choice'
     | 'reading_multiple_choice'
     | 'rewrite'
-    | 'short_writing';
+    | 'short_writing'
+    | 'conversation';
   area: string | null;
   skillKey: string | null;
   skillName: string | null;
@@ -147,12 +200,14 @@ export interface Exercise {
   /** LISTEN: se sintetiza con voz y el texto se muestra recién tras la corrección. */
   stimulus: { mode: 'READ' | 'LISTEN'; text: string; lang: string; rate: number } | null;
   options: string[] | null;
+  /** T-048: dos ejercicios enlazados forman una microconversación. */
+  conversation: { group: string; turn: number; total: number; closing: string | null } | null;
   answer: string;
   audioDurationMs: number | null;
   pronunciationResult: PronunciationResult | null;
   assistance: Assistance;
   /** Señales de la respuesta (T-034): escuchas, uso de lento, prácticas de pronunciación. */
-  signals: { listenPlays?: number; listenSlowPlays?: number; practiceScores?: number[] };
+  signals: { listenPlays?: number; listenSlowPlays?: number; practiceScores?: number[]; speakRetakes?: number };
   hasLesson: boolean;
   result: ExerciseResult | null;
 }
@@ -225,6 +280,16 @@ export interface Dashboard {
     attemptCount: number;
     topics: { key: string; name: string; score: number | null; skills: SkillProgress[] }[];
   }[];
+  /** Ortografía vive dentro de Writing pero tiene indicador explícito (T-048). */
+  orthography: {
+    name: string;
+    score: number | null;
+    skillsPracticed: number;
+    skillsTotal: number;
+    attemptCount: number;
+    assistedRecent: number;
+    status: SkillProgress['status'];
+  };
   /** Progreso por habilidad del idioma (T-034): un ejercicio deja evidencia en varias. */
   abilities: AbilityProgress[];
 }
@@ -295,6 +360,7 @@ export interface ExamResult {
   areaMinScore: number;
   areas: ExamArea[];
   modalities?: ExamArea[];
+  dimensions?: ExamArea[];
 }
 
 export interface ExamCheck {
@@ -304,9 +370,23 @@ export interface ExamCheck {
   detail: string;
 }
 
+export interface ExamProgress {
+  practiced: number;
+  total: number;
+  coveragePercent: number;
+  previewCoveragePercent: number;
+  requiredCoveragePercent: number;
+  previewNeeded: number;
+  requiredNeeded: number;
+  averageScore: number | null;
+  requiredAverageScore: number;
+}
+
 export interface ExamStatus {
   level: string | null;
   available: boolean;
+  showProposal?: boolean;
+  progress?: ExamProgress;
   eligible?: boolean;
   checks?: ExamCheck[];
   passed?: boolean;

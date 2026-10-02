@@ -99,6 +99,47 @@ class AIConnection(Base):
         return backoff is None or backoff <= utcnow()
 
 
+class AICredentialAuditEvent(Base):
+    """Auditoría de copia de credenciales por PLATFORM_OWNER.
+
+    Nunca guarda el secreto: solo quién, qué conexión, qué acción y cuándo.
+    """
+
+    __tablename__ = "ai_credential_audit_events"
+    __table_args__ = (
+        Index(
+            "ix_ai_credential_audit_connection_created",
+            "connection_id",
+            "created_at",
+        ),
+        Index(
+            "ix_ai_credential_audit_account_created",
+            "account_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    connection_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "ai_connections.id",
+            name="fk_ai_credential_audit_connection_id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+    )
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id", name="fk_ai_credential_audit_account_id"),
+        nullable=False,
+    )
+    connection_name: Mapped[str] = mapped_column(String(120))
+    owner_type: Mapped[str] = mapped_column(String(20))
+    action: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+
+
 class AIUsageEvent(Base):
     """Una llamada a un proveedor de IA (exitosa o fallida).
 

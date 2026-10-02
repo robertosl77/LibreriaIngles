@@ -1,5 +1,6 @@
 """T-024: examen de aprobación de nivel y certificado."""
 
+import math
 from datetime import timedelta
 
 from conftest import login
@@ -57,6 +58,8 @@ def _answers(exam: dict, *, correct: bool) -> dict[str, str]:
                 answers[str(item["id"])] = "zzz"
             elif exercise.exercise_type == "short_writing":
                 answers[str(item["id"])] = "My name is Ana. I live in Rosario and I work in an office."
+            elif exercise.exercise_type == "conversation":
+                answers[str(item["id"])] = "Hi! I'm Ana. I'm from Argentina."
             else:
                 answers[str(item["id"])] = exercise.answer_key["acceptedAnswers"][0]
     return answers
@@ -66,18 +69,45 @@ def test_exam_requires_eligibility(client) -> None:
     headers = _setup(client)
     status = client.get(f"{API}/exams/status", headers=headers).json()
     assert status["available"] is True
+    assert status["showProposal"] is False
     assert status["eligible"] is False
     assert status["canStart"] is False
+    assert status["progress"]["practiced"] == 0
+    assert status["progress"]["coveragePercent"] == 0
+    assert status["progress"]["previewCoveragePercent"] == 60
+    assert status["progress"]["requiredCoveragePercent"] == 70
     assert [c["ok"] for c in status["checks"]] == [False, False]
 
     response = client.post(f"{API}/exams", headers=headers)
     assert response.status_code == 409
 
 
+def test_exam_proposal_appears_when_student_is_close(client) -> None:
+    headers = _setup(client)
+    total = len(get_level("A1").skills)
+    preview = math.ceil(service.EXAM_PREVIEW_COVERAGE * total)
+    required = math.ceil(service.ELIGIBLE_COVERAGE * total)
+
+    _make_eligible(client, headers, skills=preview, score=83.3)
+    status = client.get(f"{API}/exams/status", headers=headers).json()
+
+    assert preview < required
+    assert status["showProposal"] is True
+    assert status["eligible"] is False
+    assert status["canStart"] is False
+    assert status["progress"]["practiced"] == preview
+    assert status["progress"]["requiredNeeded"] == required
+    assert status["progress"]["averageScore"] == 83.3
+    # El promedio ya puede venir bien, pero todavía no es un examen habilitado.
+    assert [c["ok"] for c in status["checks"]] == [False, True]
+
+
 def test_pass_exam_issues_verifiable_certificate(client) -> None:
     headers = _setup(client)
     _make_eligible(client, headers)
     status = client.get(f"{API}/exams/status", headers=headers).json()
+    assert status["showProposal"] is True
+    assert status["progress"]["coveragePercent"] >= status["progress"]["requiredCoveragePercent"]
     assert status["eligible"] is True and status["canStart"] is True
 
     created = client.post(f"{API}/exams", headers=headers)
@@ -113,6 +143,9 @@ def test_pass_exam_issues_verifiable_certificate(client) -> None:
     assert result["score"] >= service.PASS_SCORE
     assert {a["key"] for a in result["areas"]} == set(service.EXAM_BLUEPRINT)
     modalities = {m["key"]: m for m in result["modalities"]}
+    dimensions = {d["key"]: d for d in result["dimensions"]}
+    assert dimensions["ORTHOGRAPHY"]["items"] >= 1
+    assert dimensions["ORTHOGRAPHY"]["passed"] is True
     assert modalities["LISTEN"]["items"] >= service.EXAM_MIN_LISTEN
     # Con conexión de audio disponible, el examen también incluye al menos una respuesta hablada.
     assert modalities["SPEAK"]["items"] >= service.EXAM_MIN_SPEAK

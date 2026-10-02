@@ -6,10 +6,11 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ActiveAiConnections } from '../../core/models';
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
+import { MyServiceComponent } from '../../shared/my-service.component';
 
 @Component({
   selector: 'app-ai-settings',
-  imports: [ConnectionsManagerComponent, RouterLink],
+  imports: [ConnectionsManagerComponent, MyServiceComponent, RouterLink],
   template: `
     <main class="page stack">
       <div class="page-header">
@@ -17,10 +18,17 @@ import { ConnectionsManagerComponent } from '../../shared/connections-manager.co
           <h1>Conexiones de IA</h1>
           <p class="muted">
             Se usan en orden de prioridad (1 = primero). Si una falla o se queda sin cuota, la app
-            pasa sola a la siguiente. Las API keys se guardan cifradas y nunca vuelven al navegador.
+            pasa sola a la siguiente. Las API keys se guardan cifradas.
+            @if (isOwner()) {
+              Como dueño de la plataforma, podés copiarlas explícitamente desde el icono junto a cada credencial.
+            } @else {
+              Una vez guardadas, no vuelven al navegador.
+            }
           </p>
         </div>
       </div>
+
+      <app-my-service />
 
       @if (active().default; as current) {
         <p class="banner banner-info small">
@@ -68,6 +76,7 @@ export class AiSettingsComponent implements OnInit {
 
   async refreshActive(): Promise<void> {
     try {
+      void this.auth.refreshMe().catch(() => undefined);
       this.active.set(await firstValueFrom(this.api.activeAiConnections()));
     } catch {
       this.active.set({ default: null, audio: null });

@@ -32,7 +32,7 @@ class AnswerRequest(BaseModel):
 class SignalRequest(BaseModel):
     """Señal de la respuesta en curso (T-034)."""
 
-    kind: str = Field(pattern="^(listen|practice)$")
+    kind: str = Field(pattern="^(listen|practice|retake)$")
     slow: bool = False
     score: int | None = Field(default=None, ge=0, le=100)
 
@@ -64,6 +64,7 @@ def _result_payload(attempt: Attempt, exercise: Exercise) -> dict | None:
         "errors": result.get("errors") or [],
         "suggestions": result.get("suggestions") or [],
         "conceptResults": result.get("conceptResults") or [],
+        "secondarySkillResults": result.get("secondarySkillResults") or [],
         "evaluationSource": attempt.evaluation_source.value if attempt.evaluation_source else None,
         "ai": result.get("ai"),
         "appeal": result.get("appeal"),
@@ -122,6 +123,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 "response": exercise.response_mode.value,
                 "stimulus": _stimulus(exercise),
                 "options": (exercise.content or {}).get("options"),
+                "conversation": (exercise.content or {}).get("conversation"),
                 "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else ""),
                 "audioDurationMs": (
                     attempt.audio_duration_ms
@@ -412,6 +414,7 @@ def record_signal(
             listen_play=payload.kind == "listen",
             slow=payload.slow,
             practice_score=payload.score if payload.kind == "practice" else None,
+            retake=payload.kind == "retake",
         )
     except service.ClassStateError as exc:
         raise _conflict(exc)

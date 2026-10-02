@@ -42,6 +42,7 @@ EVALUATION_MODE_BY_TYPE = {
     "fill_blank": EvaluationMode.HYBRID,
     "rewrite": EvaluationMode.HYBRID,
     "short_writing": EvaluationMode.AI,
+    "conversation": EvaluationMode.AI,
 }
 
 # Velocidad sugerida de la voz por nivel (1.0 = normal del navegador).
@@ -51,7 +52,7 @@ STIMULUS_MAX = 600
 LISTEN_SHARE = 0.3
 # Respuestas habladas: solo sobre tipos que normalmente se escriben.
 SPEAK_SHARE = 0.3
-SPEAK_TYPES = {"fill_blank", "rewrite", "short_writing"}
+SPEAK_TYPES = {"fill_blank", "rewrite", "short_writing", "conversation"}
 
 
 class GenerationFailed(Exception):
@@ -203,14 +204,41 @@ def select_slots(
     for area in sorted(focus_areas):
         _force_area(chosen, skills, area, focus_areas, progress, rng)
 
-    # Orden pedagógico: gramática y vocabulario primero, escritura al final.
-    area_order = {"grammar": 0, "vocabulary": 1, "listening": 2, "reading": 3, "writing": 4}
+    # Conversation funciona mejor como microintercambio: si entró una sola skill de conversación,
+    # se reserva un segundo slot con otra skill conversacional para formar dos turnos.
+    conversation_indexes = [i for i, s in enumerate(chosen) if s.area_key == "conversation"]
+    if len(conversation_indexes) % 2 == 1 and len(chosen) >= 2:
+        used = {s.key for s in chosen}
+        candidates = [s for s in skills if s.area_key == "conversation" and s.key not in used]
+        replaceable = [
+            i for i, s in enumerate(chosen)
+            if s.area_key != "conversation" and s.area_key not in focus_areas
+        ]
+        if candidates and replaceable:
+            chosen[replaceable[-1]] = rng.choices(
+                candidates, weights=[weight(s) for s in candidates], k=1
+            )[0]
+
+    # Orden pedagógico: gramática y vocabulario primero; conversación y escritura hacia el final.
+    area_order = {
+        "grammar": 0,
+        "vocabulary": 1,
+        "listening": 2,
+        "reading": 3,
+        "conversation": 4,
+        "writing": 5,
+    }
     chosen.sort(key=lambda s: area_order.get(s.area_key, 9))
 
     # Si se refuerza Writing, la escritura no se pasa a hablada (lo hablado no es Writing).
     keep_written = {s.key for s in chosen if "WRITING" in focus_keys and s.area_key == "writing"}
     slots = [
-        slot_for(skill, rng, allow_speaking=allow_speaking and skill.key not in keep_written)
+        slot_for(
+            skill,
+            rng,
+            allow_speaking=allow_speaking and skill.key not in keep_written,
+            types=SPEAK_TYPES if skill.key in keep_written else None,
+        )
         for skill in chosen
     ]
     ensure_listening(slots, skills, 2 if "LISTENING" in focus_keys else 1, rng)
@@ -219,7 +247,28 @@ def select_slots(
         if focus_keys & SPEECH_ABILITIES:
             _make_speakable(slots, chosen, speak_min, rng, exclude=keep_written)
         ensure_speaking(slots, speak_min, rng, exclude=keep_written)
+    pair_conversation_slots(slots)
     return slots
+
+
+def pair_conversation_slots(slots: list[dict]) -> None:
+    """Agrupa los slots Conversation de a dos y sincroniza modalidad para mostrarlos como chat."""
+    conversation = [
+        slot for slot in slots
+        if slot.get("skillKey", "").split(".")[1:2] == ["conversation"]
+        and slot.get("allowedTypes") == ["conversation"]
+    ]
+    for pair_index in range(0, len(conversation) - 1, 2):
+        pair = conversation[pair_index:pair_index + 2]
+        group = f"conversation-{pair_index // 2 + 1}"
+        presentation = "LISTEN" if any(s.get("presentation") == "LISTEN" for s in pair) else "READ"
+        response = "SPEAK" if any(s.get("response") == "SPEAK" for s in pair) else "WRITE"
+        for turn, slot in enumerate(pair, start=1):
+            slot["conversationGroup"] = group
+            slot["conversationTurn"] = turn
+            slot["conversationTotal"] = 2
+            slot["presentation"] = presentation
+            slot["response"] = response
 
 
 def _make_speakable(
@@ -335,6 +384,7 @@ class ExerciseOut(BaseModel):
     acceptedAnswers: list[str] = []
     commonErrors: list[CommonErrorOut] = []
     expectedConcepts: list[str] = []
+    closing: str | None = None
 
     @field_validator("question")
     @classmethod
@@ -389,6 +439,11 @@ def _validate_exercise(raw: dict, slot: dict) -> ExerciseOut | None:
             return None
     elif item.type == "short_writing":
         item.acceptedAnswers = []
+    elif item.type == "conversation":
+        item.acceptedAnswers = []
+        item.options = None
+        if not item.instruction:
+            item.instruction = "Reply naturally."
     if not item.expectedConcepts:
         item.expectedConcepts = ["task_completion"]
     return item
@@ -411,8 +466,16 @@ def _match_slots(exercises: list, slots: list[dict]) -> list[tuple[dict, Exercis
 # ---------------------------------------------------------------- flujo
 
 
-def _content(item: ExerciseOut, level: str | None) -> dict:
+def _content(item: ExerciseOut, level: str | None, slot: dict | None = None) -> dict:
     content = {"options": item.options, "passage": item.passage}
+    slot = slot or {}
+    if slot.get("conversationGroup"):
+        content["conversation"] = {
+            "group": slot["conversationGroup"],
+            "turn": slot.get("conversationTurn", 1),
+            "total": slot.get("conversationTotal", 2),
+            "closing": item.closing if slot.get("conversationTurn") == slot.get("conversationTotal") else None,
+        }
     if item.stimulus:
         # LISTEN: se guarda el texto y la reproducción; el audio se regenera (documento funcional §15).
         content.update(
@@ -520,7 +583,7 @@ def generate_content(
                 exercise_type=item.type,
                 instruction=item.instruction,
                 prompt=item.question,
-                content=_content(item, request.get("level")),
+                content=_content(item, request.get("level"), slot),
                 presentation_mode=PresentationMode(slot.get("presentation", "READ")),
                 response_mode=ResponseMode(
                     slot.get("response", default_response_mode(item.type).value)

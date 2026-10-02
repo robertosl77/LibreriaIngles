@@ -31,6 +31,8 @@ def _listen_version(example: dict) -> dict:
         if answers and "___" in question:
             return {"stimulus": question.replace("___", answers[0], 1)}
         return {"stimulus": question, "question": "Choose the correct option for what you hear."}
+    if kind == "conversation":
+        return {"stimulus": question, "question": "Listen and reply naturally."}
     # rewrite / short_writing: se escucha la oración o la pregunta y no se muestra escrita.
     return {"stimulus": question, "question": "Listen and do the task with what you hear."}
 
@@ -106,10 +108,28 @@ class MockProvider:
         answer = (task.get("answer") or "").strip()
         concepts = exercise.get("expectedConcepts") or ["task_completion"]
 
+        if exercise.get("type") == "conversation":
+            ok = bool(answer) and answer.lower() not in {"zzz", "xx", "no sé"}
+            score = 100 if ok else 0
+            return {
+                "result": "correct" if ok else "incorrect",
+                "scoreSuggested": score,
+                "conceptResults": [
+                    {"concept": c, "status": "correct" if ok else "incorrect", "score": score}
+                    for c in concepts
+                ],
+                "errors": [],
+                "correctAnswer": None,
+                "feedback": "La respuesta mantiene el intercambio." if ok else "La respuesta no continúa la conversación.",
+                "suggestions": [],
+                "secondarySkillResults": [],
+            }
+
         if exercise.get("type") == "short_writing":
             words = len(answer.split())
             ok = words >= 6
-            score = 85 if ok else 40
+            # Puntaje fino por concepto (T-043): una respuesta bien hecha vale 100.
+            score = 100 if ok else 40
             return {
                 "result": "correct" if ok else "partially_correct",
                 "scoreSuggested": score,

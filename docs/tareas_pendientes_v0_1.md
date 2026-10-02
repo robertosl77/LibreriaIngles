@@ -139,8 +139,22 @@ porque puede introducir cambios incompatibles.
 ## T-003 — Ajustar el router de IA al alcance actual BYOK
 
 **Prioridad:** P1 — Alta  
-**Estado:** Pendiente  
+**Estado:** Resuelta (PR #23 a `develop`) · Claude  
 **Bloquea prueba local:** No
+
+Resolución (2026-10-01): hasta ahora **cualquier** cuenta sin conexiones propias usaba las de
+la plataforma (las del dueño). Ahora:
+
+```text
+usuario común   → solo sus conexiones propias (BYOK)
+PLATFORM_OWNER  → las suyas + las de la plataforma
+membresía paga  → (T-004) la habilitará; único punto a cambiar: platform_ai_allowed()
+```
+
+- `app/ai/service.py`: `platform_ai_allowed(account)` decide si la cuenta ve conexiones de
+  plataforma; lo usan generación, corrección, audio y el contador de IA del inicio.
+- Un usuario nuevo sin IA propia ve "Conectá una IA" y no puede crear clases hasta cargar la suya.
+- Los tests de topes de consumo (T-006) se mantienen simulando una membresía.
 
 El router actual considera conexiones:
 
@@ -170,36 +184,192 @@ No eliminar el modelo PLATFORM/HYBRID; solamente evitar que se active antes de i
 
 ---
 
-## T-004 — Hacer que PLAN/SUBSCRIPTION gobiernen la fuente de IA
+## T-004 — Membresías, servicios, campañas e invitaciones
 
-**Prioridad:** P2 — Media  
-**Estado:** Futuro, antes de monetización
+**Prioridad:** P1 — Alta (antes de publicar la app o cobrar)  
+**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · Etapa 1 (Servicios) resuelta (PR #26 a `develop`) · etapas 2–6 pendientes  
+**Responsable:** Claude  
+**Relación:** T-003 (cada usuario usa solo su IA propia: hoy decide `platform_ai_allowed()`),
+T-005 (conexiones de IA de una organización), T-006 (portal del dueño con las keys de
+plataforma), T-049 (tokens y costo por uso), T-050 (fidelización), T-051 (emails)
 
-Implementar:
+Base existente sin usar (migración inicial): tablas `plans` (`ai_source` BYOK / PLATFORM / HYBRID),
+`subscriptions` (cuenta u organización, estado, fechas), `organizations`, `memberships`
+(ADMIN/STUDENT) e `invitations`. Se reutilizan; los nombres de tablas pueden ajustarse.
 
-```pseudo
-plan = plan_que_cubre(actividad)
+### 1. El modelo
 
-switch plan.ai_source:
-    BYOK:
-        candidates = ACCOUNT / ORGANIZATION
-    PLATFORM:
-        candidates = PLATFORM
-    HYBRID:
-        candidates = orden_configurado(
-            ACCOUNT,
-            ORGANIZATION,
-            PLATFORM
-        )
+```text
+VÍNCULO      (no se elige: se deduce)
+   ¿vino invitado por una empresa?  sí → CORPORATIVO (empresa X)
+                                    no → PERSONAL (cliente independiente, "sin empresa")
 
-router(candidates)
-    -> priority
-    -> active
-    -> failover
-    -> backoff
+FUENTE DE IA (lo único que elige la persona)
+   BYOK        → sus propias keys (corporativo: las keys que carga la empresa)
+   PLATAFORMA  → las keys de sr.macros
+   HÍBRIDO     → las propias primero; si fallan de fondo, las de sr.macros
+
+SERVICIO     = vínculo + fuente + vigencia + tope de tokens + costo (futuro)
+
+OTORGAMIENTO (cómo alguien recibe un servicio)
+   PAGO        → lo contrata el cliente (futuro)
+   INVITACIÓN  → a una persona puntual, por link
+   CAMPAÑA     → automático a un grupo (ej. "todos los que se registren desde hoy")
 ```
 
-Esto debe quedar cerrado antes de cobrar planes o asumir costos de IA desde la plataforma.
+- **La membresía no se elige.** Personal o corporativa se deduce de si la persona vino por una
+  empresa. Es un ordenamiento interno de configuraciones, no una opción para el usuario.
+- **Hoy (sin pagos):** vínculo + fuente y ya funciona. **Con pagos:** triple restricción
+  vínculo × fuente × pago (el pago habilita el servicio por un período, ej. mensual).
+- Analogías: **home banking** (uno para personas, otro para empresas: el de empresas es el que
+  tiene una empresa de por medio), AWS (base fija + uso variable) y el celular (cuenta controlada
+  / línea libre).
+
+### 2. Servicios (catálogo configurable por sr.macros)
+
+Cada combinación vínculo × fuente es un servicio que después tendrá su costo:
+
+```text
+                │ BYOK              │ PLATAFORMA          │ HÍBRIDO
+────────────────┼───────────────────┼─────────────────────┼──────────────────────
+PERSONAL        │ servicio A        │ servicio B          │ servicio C
+CORPORATIVO     │ servicio D        │ servicio E          │ servicio F
+```
+
+- **Panel de servicios de sr.macros:** crear/editar servicios (nombre, vínculo, fuente, duración,
+  tope de tokens por día, costo futuro). Permite agregar combinaciones nuevas más adelante.
+  Nombres iniciales: **Individual** y **Corporativa**.
+- **Costos (futuro):** PLATAFORMA = cuota fija estimada para cubrir los tokens; HÍBRIDO = base +
+  uso a demanda de sr.macros, detallado como factura (T-049).
+- **BYOK corporativo:** las keys las carga la empresa (paga la capacitación, no el empleado) →
+  requiere T-005.
+
+### 3. Campañas (sr.macros otorga un servicio automáticamente a un grupo)
+
+```text
+CAMPAÑA
+  servicio     → uno del catálogo (ej. PERSONAL + PLATAFORMA, sin costo, 3 días, tope chico)
+  para quién   → ej. personas registradas a partir de que se activa la campaña
+  estado       → activa / pausada / terminada
+```
+
+- **Panel de campañas de sr.macros.** Una campaña se alimenta de un servicio del catálogo.
+- **La bienvenida es la primera campaña** (no algo fijo en el código): PERSONAL + PLATAFORMA,
+  sin costo, **3 días corridos**, con tope de tokens. Deja probar la app sin saber qué es una API
+  key. Como PedidosYa: cupones a todos al principio; después solo para fidelizar (T-050).
+
+### 4. Invitaciones (sr.macros o una empresa otorgan un servicio a una persona)
+
+```text
+INVITACIÓN
+  quién invita  → sr.macros | una empresa (futuro: usuarios con invitaciones de regalo)
+  servicio      → uno del catálogo (vínculo + fuente + días + costo)
+  cómo llega    → un LINK que se copia y se manda como quiera (WhatsApp, etc.)
+                  el envío por email (T-051) llevará el mismo link
+
+Ej.: sr.macros → amigo:    PERSONAL + PLATAFORMA, 30 días, sin costo
+     Empresa X → empleado:  CORPORATIVO + HÍBRIDO, mensual, la paga la empresa
+```
+
+La invitación no es una membresía: es el medio para otorgar un servicio. La corporativa llega al
+email corporativo (unir cuentas personal/corporativa de una misma persona, por ejemplo por DNI,
+queda por ver).
+
+### 5. Estructura: sr.macros como "empresa dueña"
+
+```text
+Librería Inglés (sr.macros, OWNER)  → servicios, campañas, invitaciones, keys de plataforma
+Empresa X (ADMIN / STUDENT)         → invitaciones a empleados, keys de la empresa (T-005)
+Cliente personal                    → "sin empresa" (NO es miembro de Librería Inglés:
+                                       un ADMIN ve la actividad de sus miembros y eso no aplica)
+```
+
+### 6. Vigencia y vencimiento
+
+- **Vigencia = duración del servicio otorgado** (invitación de 7 días: 07/10 → 14/10; pago
+  mensual: 07/10 → 07/11). El historial de pagos es otra cosa (con los pagos).
+- **Al vencer:** puede **ver** clases, resultados, progreso, historial y certificados; **no puede
+  crear** clases ni exámenes hasta renovar.
+- **Retención:** al año de vencida **se borra todo** (avisos previos: T-050).
+- **Usuarios que ya existen** (ej. robertosl77): son PERSONAL + BYOK → siguen funcionando, sin
+  borrar nada ni reconfigurar keys. sr.macros (OWNER) no vence nunca.
+
+### 7. Híbrido: cuándo salta a las keys de sr.macros
+
+```text
+falla temporal (caída, red, rate limit)  → NO salta: reintenta con las propias al rato
+falla de fondo (sin saldo, key inválida) → salta a sr.macros
+siempre:
+  · aviso visible: "Tus keys se quedaron sin saldo: estás usando la IA de la plataforma"
+  · tope de gasto mensual elegido por el cliente ("cuenta controlada" del celular)
+  · cada 10-15 min se prueban (ping) las propias para volver a ellas cuando respondan
+```
+
+### 8. Topes y frenos (para no perder plata ni sufrir abusos)
+
+1. **Tope de TOKENS por día** (no por cantidad de pedidos), configurable por servicio. Aplica a
+   todo lo que usa las keys de sr.macros: campañas (bienvenida), servicio plataforma y la parte de
+   plataforma del híbrido. Depende de T-049; hasta tenerlo, tope provisorio por pedidos.
+2. **Generar una clase ya gasta tokens del tope:** crear clases y no terminarlas consume el tope
+   igual (se frena solo).
+3. **Máximo de clases abiertas a la vez** (ej. 3, configurable): para crear otra, terminá o
+   descartá una.
+4. El tope se controla al **crear**: una clase ya generada se puede terminar y corregir aunque se
+   pase un poco (es acotado: ~6 ejercicios).
+5. Al alumno se le muestra en porcentaje ("usaste el 80 % de tu IA de hoy"), nunca en tokens.
+
+### 9. Consumo de tokens (T-049)
+
+Se registra en **todas** las fuentes: cuándo, proveedor, modelo, operación y tokens. El cliente ve
+su propio detalle; en híbrido es la base de la factura. La tabla de precios por modelo la mantiene
+sr.macros en su portal (más adelante).
+
+### 10. Dos vínculos a la vez (personal pagado + corporativo nuevo)
+
+Ej.: pagó su individual hasta el 15/10 y el 01/10 su empresa lo invita.
+
+- **Mantiene separados** su estudio personal y el corporativo → siguen los dos, cada uno con sus
+  clases y su progreso.
+- **Unifica** su estudio → manda el corporativo y los días pagados que le quedaban se convierten
+  en un **código de crédito** (cupón): queda guardado y visible en su cuenta; puede usarlo más
+  adelante o regalarlo a un amigo (es una invitación por esos días).
+
+### 11. Etapas (de a una, cada una con su OK)
+
+```text
+1. Servicios: catálogo + panel de sr.macros; vínculo y fuente efectivos;
+   platform_ai_allowed() pasa a mirar el servicio vigente; vencimiento en solo lectura
+2. Campañas: panel + bienvenida (3 días, plataforma, tope provisorio por pedidos)
+3. Invitaciones de sr.macros por link
+4. Tokens y costo por uso (T-049) → topes por tokens, frenos de clases abiertas, detalle al cliente
+5. Corporativo: empresas, keys de la empresa (T-005), invitaciones de empresa, unificar/separar
+6. Pagos (otro otorgamiento; débito automático a definir)
+```
+
+**Etapa 1 — Resuelta (PR #26 a `develop`):**
+
+```text
+migración 0012     plans: vínculo, duración, tope diario, descripción
+                   subscriptions: vence, origen (manual/campaña/invitación/pago), otorgado por, nota
+                   siembra: Individual · propias keys / · Plataforma / · Híbrido
+servicio vigente   effective_service(cuenta): suscripción activa; si no hay o venció →
+                   "Individual · propias keys" (+ aviso "venció" durante 14 días)
+router de IA       BYOK → propias · PLATAFORMA → plataforma · HÍBRIDO → propias y luego
+                   plataforma · dueño → ambas (reemplaza platform_ai_allowed de T-003)
+tope provisorio    pedidos exitosos a la plataforma por cuenta en 24 h (hasta T-049 tokens)
+portal sr.macros   Servicios (alta/edición) + Cuentas y servicios (buscar, otorgar N días, quitar)
+usuario            "Tu servicio" en IA e Inicio: nombre, vence, % de uso de hoy, aviso de vencido
+```
+
+Al vencer, por ahora vuelve a "Individual · propias keys": si tiene keys propias sigue; si
+no, no puede generar clases nuevas pero ve todo lo hecho (solo lectura de hecho).
+
+### 12. Pendiente de definir más adelante
+
+- Nombres comerciales definitivos de los servicios.
+- Tope inicial de la bienvenida (tokens/día) y máximo de clases abiertas.
+- Unión de cuentas personal/corporativa de una misma persona (¿por DNI?).
+- Débito automático y medios de pago.
 
 ---
 
@@ -900,6 +1070,11 @@ T-038 Publicación: servidor para backend con fonética + frontend (servidor pen
 T-039 Motor de pronunciación preciso OpenPronounce (futuro, rama archivo/t-027-openpronounce: NO BORRAR)
 T-043 Calibrar la corrección de escritura libre según el nivel (Claude)
 T-044 Apelación con justificación escrita o grabada (Claude)
+T-046 v2 Grabación de Speaking: corte más rápido y sin "Confirmar respuesta" (Claude)
+T-047 Avisos claros cuando no hay IA y reintento al entrar a la clase (Claude)
+T-049 Registro de tokens y costo por cada uso de IA (Claude)
+T-050 Fidelización: retención de datos, avisos y promociones (futuro)
+T-051 Sistema de envío de emails
 ```
 
 Referencias: documento funcional v0.3 §4.1, §5, §8, §15, §16, §17, §17.1, §39, §41 (Audio), §42 (Audio).
@@ -1509,13 +1684,14 @@ configurada y `modelo/motor` (por ejemplo `gemini-2.5-flash`).
 
 ---
 
-## T-042 — Permitir al PLATFORM_OWNER revelar y copiar API keys administradas
+## T-042 — Permitir al PLATFORM_OWNER copiar API keys administradas
 
 **Prioridad:** P3 — Baja  
-**Estado:** Pendiente
+**Estado:** Resuelta (PR #22 a `develop`)  
+**Responsable:** ChatGPT
 
-Objetivo: permitir que únicamente el dueño de la plataforma (`PLATFORM_OWNER`) pueda revelar
-y copiar desde la interfaz una API key ya guardada cuando necesite reutilizarla o administrarla.
+Objetivo: permitir que únicamente el dueño de la plataforma (`PLATFORM_OWNER`) pueda copiar
+al portapapeles una API key ya guardada cuando necesite reutilizarla o administrarla.
 
 Alcance y restricciones:
 
@@ -1523,18 +1699,19 @@ Alcance y restricciones:
    recuperar una credencial ya persistida.
 2. **Solo conexiones que el owner puede administrar:** conexiones PLATFORM y, si corresponde,
    conexiones ACCOUNT pertenecientes a su propia cuenta. Nunca permitir leer las BYOK de otros usuarios.
-3. **Acción explícita:** la key permanece enmascarada por defecto; botones `Mostrar` / `Copiar`
-   solicitan el secreto al backend únicamente al usarlos.
+3. **Solo copiar, nunca mostrar:** la key permanece siempre enmascarada en pantalla. Un icono
+   sutil de copiar (dos hojas superpuestas) solicita el secreto al backend únicamente al pulsarlo
+   y lo envía directamente al portapapeles.
 4. **No exponerla en listados:** el endpoint normal de conexiones sigue devolviendo únicamente
-   `credentialHint`; la credencial completa debe tener un endpoint específico protegido por rol.
-5. **Auditoría:** registrar quién reveló/copió una credencial, qué conexión y cuándo, sin guardar
-   el valor de la key en logs.
-6. **Frontend:** evitar persistir el secreto en estado más tiempo del necesario; limpiar el valor
-   después de copiar/ocultar y no almacenarlo en localStorage/sessionStorage.
+   `credentialHint`; la credencial completa tiene un endpoint específico protegido por rol.
+5. **Auditoría:** registrar quién copió una credencial, qué conexión y cuándo, sin guardar
+   el valor de la key en logs ni en la auditoría.
+6. **Frontend:** no persistir el secreto en estado, DOM, localStorage ni sessionStorage; usarlo
+   solo durante la operación de copia.
 
-**Criterio de seguridad:** esta capacidad es una excepción deliberada a la regla actual de que
-las API keys cifradas nunca regresan al navegador, y por eso debe quedar limitada al owner y a
-credenciales bajo su propia administración.
+**Criterio de seguridad:** esta capacidad es una excepción deliberada a la regla general de que
+las API keys cifradas no regresan al navegador. La excepción queda limitada al owner, a una
+acción explícita de copia y a credenciales bajo su propia administración.
 
 ---
 
@@ -1607,7 +1784,7 @@ nueva y repite su criterio. La apelación debe permitir explicar por qué la res
 ## T-045 — Presentar el examen de nivel solo cuando el alumno esté cerca de habilitarlo
 
 **Prioridad:** P2 — Media  
-**Estado:** En curso  
+**Estado:** Resuelta (PR #19 a `develop`)  
 **Responsable:** ChatGPT
 
 Problema detectado en prueba real: con muy poca práctica el inicio ya muestra el bloque
@@ -1635,6 +1812,376 @@ Solución acordada:
 **Criterio UX:** evitar que un alumno que recién empieza reciba señales prematuras de que
 ya está en condiciones de rendir, sin ocultar que su rendimiento actual viene bien cuando
 realmente se está acercando al requisito.
+
+---
+
+## T-046 — Detención automática por silencio en respuestas Speaking
+
+**Prioridad:** P2 — Media  
+**Estado:** Resuelta (PR #20 a `develop`)  
+**Responsable:** ChatGPT
+
+Problema detectado en uso real: en los ejercicios de Speaking el alumno debe iniciar la
+grabación y luego pulsar manualmente `Detener`, mientras que la práctica de pronunciación
+finaliza sola cuando el navegador detecta que terminó de hablar.
+
+Objetivo: mantener `MediaRecorder` para conservar el audio real de la respuesta, pero mejorar
+la experiencia agregando detección local de fin de habla.
+
+Solución:
+
+1. Detectar actividad de voz localmente con Web Audio API durante la grabación.
+2. No detener la grabación hasta haber detectado voz real al menos una vez.
+3. Después de detectar voz, detener automáticamente tras aproximadamente 1,8–2 segundos
+   continuos de silencio.
+4. Mantener siempre el botón `Detener` para corte manual.
+5. Mantener el límite máximo actual como salvaguarda.
+6. Si Web Audio API no está disponible, conservar el comportamiento manual actual sin bloquear
+   el ejercicio.
+7. La detección de silencio no debe enviar audio a servicios externos ni consumir IA.
+8. Después del auto-stop se conserva el flujo actual: escuchar, confirmar o volver a grabar.
+
+**Criterio UX:** una pausa normal al hablar no debe cortar prematuramente la respuesta; el
+auto-stop debe sentirse similar a la práctica de pronunciación sin sacrificar el audio final.
+
+---
+
+## T-046 v2 — Grabación de Speaking: corte más rápido y sin "Confirmar respuesta"
+
+**Prioridad:** P2 — Media  
+**Estado:** Resuelta (PR #21 a `develop`) · Claude  
+**Relación:** T-046 (auto-stop por silencio, ChatGPT), T-034 (evidencias/señales)
+
+Problemas detectados por Roberto al usar T-046:
+
+1. El corte automático tarda 1-2 s de más después de terminar de hablar.
+2. Paso de más: grabar → corta → **Confirmar respuesta**. La respuesta grabada ya es la
+   respuesta: se transcribe y corrige recién al enviar la clase, así que confirmar no aporta.
+
+Flujo nuevo:
+
+```text
+Grabar → hablar → corta solo (más rápido) → queda como respuesta ✓
+                                           └─ "Volver a grabar" (opcional)
+                                                 └─ cuenta como señal de esfuerzo en Speaking
+```
+
+1. Ajustar la detección de fin de habla para cortar antes sin cortar pausas normales.
+2. Quitar "Confirmar respuesta": la grabación se guarda sola al cortar (manual o automático).
+3. "Volver a grabar" se registra como señal (como las escuchas extra en Listening) y aparece en
+   el resumen de esfuerzo; muchas regrabaciones marcan Speaking como asistido.
+
+Resolución:
+
+1. Silencio para cortar: 1,8 s → **1,0 s** (`AUTO_STOP_SILENCE_MS`). Prueba con audio simulado
+   (1,5 s de voz + silencio): corta y guarda en ~2,9 s desde "Grabar" (antes ~3,7 s).
+2. Sin "Confirmar respuesta": al cortar (solo o con "Detener") la grabación se guarda sola en el
+   dispositivo y cuenta como respondida. Si el guardado falla, aparece "Reintentar".
+3. "Volver a grabar" sobre una respuesta ya guardada registra la señal `speakRetakes`
+   (`POST …/signals` con `kind: "retake"`); el resumen de esfuerzo muestra "grabaste tu respuesta
+   N veces". Más de 1 regrabación marca Speaking como asistido, sin bajar la nota.
+
+---
+
+## T-047 — Avisos claros cuando no hay IA y reintento al entrar a la clase
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Responsable:** Claude  
+**Relación:** T-003 (cada usuario usa solo su IA propia)
+
+Detectado al probar T-003 (2026-10-01) con un usuario con 2 APIs propias, una caída y otra sin saldo.
+Lo que ya funciona bien: las respuestas se guardan, lo que no necesita IA se corrige igual, el resto
+queda "Esperando corrección" y cada API queda en espera (caída 5 min, sin saldo 60 min).
+
+Problemas:
+
+1. **Mensaje sin motivo:** al pedir una clase nueva dice solo "No hay conexiones de IA disponibles."
+   (las APIs en espera ni siquiera se listan). Debe decir por qué y cuándo:
+   `Gemini mía: proveedor caído (se reintenta en 5 min) · OpenAI mía: sin saldo (cargá crédito o agregá otra API)`.
+2. **Promesa incumplida:** el cartel de una clase "Esperando corrección" dice "se reintenta
+   automáticamente cuando vuelvas a entrar", pero eso solo ocurre entrando por el Inicio; entrando
+   directo a la clase queda pendiente aunque la IA ya funcione. Al abrir la clase, si hay IA
+   disponible, debe corregir sola.
+
+---
+
+---
+
+## T-048 — Conversation A1 + ortografía transversal y evaluación integrada
+
+**Prioridad:** P1 — Alta  
+**Estado:** Resuelta (PR #25 a `develop`) · ChatGPT  
+**Responsable:** ChatGPT  
+**Relación:** T-019 (modalidades), T-020 (lección), T-021/T-043 (mecánica de escritura), T-024 (examen), T-034 (evidencias por habilidad)
+
+Objetivo: incorporar **Conversation** como contenido curricular real de A1, con microconversaciones
+controladas y escalables a niveles futuros, manteniendo Listening/Speaking/Pronunciation como
+habilidades transversales; además incorporar el seguimiento explícito de **Ortografía** dentro de
+Writing y hacerlo visible en progreso y examen.
+
+Diseño acordado:
+
+1. **Conversation es curricular, no una habilidad transversal.**
+   - A1 debe definir temas/skills conversacionales (saludos, presentaciones, información personal,
+     intercambios cotidianos breves, etc.).
+   - La práctica inicial será una microconversación corta y controlada, con aproximadamente dos
+     intervenciones reales del alumno y cierre.
+   - El formato debe poder crecer en A2+ sin rediseñar el contrato completo.
+2. **Modalidades independientes del contenido conversacional.**
+   - El turno recibido puede ser READ o LISTEN.
+   - La respuesta puede ser SELECT, WRITE o SPEAK cuando el ejercicio lo permita.
+   - Listening, Speaking y Pronunciation siguen alimentándose transversalmente según la modalidad
+     y las señales de esfuerzo existentes.
+3. **Evaluación semántica por IA.**
+   - No exigir una única frase exacta: evaluar si la intervención responde a la intención,
+     mantiene el contexto, es comprensible y es apropiada para A1.
+   - Evaluar además errores lingüísticos observables (Grammar, Vocabulary y Writing) sin confundir
+     pertinencia conversacional con corrección formal.
+   - Una respuesta puede ser conversacionalmente válida y dejar evidencias secundarias negativas
+     en otras skills.
+4. **Evidencias curriculares secundarias.**
+   - Extender el mecanismo actual para que un intento pueda dejar evidencia en skills curriculares
+     secundarias cuando la IA detecta un error concreto, además de la skill principal.
+   - No inventar evidencia cuando la modalidad no permite observarla (por ejemplo, capitalización
+     en una respuesta hablada).
+5. **Ortografía dentro de Writing.**
+   - Agregar skills específicas para convenciones de escritura A1: capitalización, spelling básico,
+     apóstrofes/contracciones y puntuación básica según corresponda al nivel.
+   - Errores como `i am Robert` deben afectar la skill de capitalización, no Grammar.
+   - El dashboard debe mostrar un indicador explícito **Ortografía** agregado desde esas skills,
+     aunque internamente pertenezcan a Writing.
+6. **Dashboard y adaptación de clases.**
+   - Conversation debe aparecer como área curricular con su avance.
+   - Ortografía debe ser visible como indicador propio.
+   - Las evidencias secundarias y la ayuda/esfuerzo deben participar del balanceo futuro de clases
+     de forma coherente con el mecanismo existente.
+7. **Examen de nivel.**
+   - Incluir Conversation y Ortografía en la cobertura/evaluación del nivel.
+   - Mantener los requisitos actuales para habilitar el examen: al menos 70 % de cobertura del
+     nivel y 70 % de promedio sobre lo practicado.
+   - El examen debe representar también Conversation/Ortografía de forma coherente con el dashboard
+     y seguir siendo independiente del progreso de las clases.
+8. **Frontend.**
+   - Presentar la microconversación como una interacción legible tipo chat/turnos, sin convertirla
+     todavía en un chat abierto ilimitado.
+   - Mantener autoguardado, señales de Listening/Speaking/Pronunciation y corrección final.
+9. **Tests.**
+   - Cubrir currícula A1, generación/validación del nuevo ejercicio, evaluación conversacional,
+     evidencias curriculares secundarias, ortografía, dashboard, balanceo y examen.
+   - Mantener compatibilidad con las clases existentes y ejecutar la suite configurada del proyecto.
+
+**Criterio:** una conversación debe medir interacción contextual y poder producir evidencias
+lingüísticas adicionales sin confundirlas con la habilidad principal; Ortografía debe quedar
+curricularmente dentro de Writing pero visible y evaluable como dimensión propia.
+
+---
+
+## T-049 — Registro de tokens y costo por cada uso de IA
+
+**Prioridad:** P2 — Media (imprescindible antes de vender el servicio híbrido de T-004)  
+**Estado:** Pendiente  
+**Responsable:** Claude  
+**Relación:** T-004 (membresías y facturación), T-006 (consumo en el portal del dueño), T-041
+(proveedor y modelo usados en cada clase)
+
+Hoy cada uso de IA se registra (`ai_usage_events`: cuándo, conexión, cuenta, operación, éxito,
+modelo), pero **sin tokens** y solo lo ve sr.macros.
+
+1. **Averiguar y guardar tokens** por respuesta: OpenAI (`usage.prompt_tokens` /
+   `completion_tokens`), Gemini (`usageMetadata`), Anthropic (`usage.input_tokens` /
+   `output_tokens`). Verificar también en transcripción de audio.
+2. Registrar en **todas** las fuentes: BYOK, plataforma e híbrido.
+3. **Costo estimado:** tokens × precio del modelo (tabla de precios mantenida por sr.macros en
+   su portal).
+4. **Detalle para el cliente**, como una factura:
+   `01/10 22:12 · Gemini (gemini-2.5-flash) · corregir ejercicio · 1.240 tokens · USD 0,0004`
+5. Nunca guardar prompts ni respuestas: solo metadatos y conteos.
+
+**Unidades visibles (pedido de Roberto, 2026-10-02):** en el portal de plataforma los números
+salen sin unidad ("24 h: 7 ok") y se confunden con tokens. Mostrar siempre la unidad y, cuando
+exista el registro de tokens, ambas: `7 pedidos · 12.340 tokens` (por conexión, por cuenta, en el
+gráfico diario y en el ranking de cuentas). Lo mismo en "Uso de hoy" del alumno y en T-053
+(dashboard de consumo por cliente).
+
+---
+
+## T-050 — Fidelización: retención de datos, avisos y promociones
+
+**Prioridad:** P4 — Muy baja (mucho más adelante)  
+**Estado:** Para analizar  
+**Relación:** T-004 (vencimiento de membresías), T-051 (emails)
+
+Ideas anotadas para no perderlas (Roberto, 2026-10-01):
+
+1. **Retención:** los datos de una membresía vencida se guardan 1 año. Al cumplirse **se borra
+   todo** (decisión de Roberto: no se anonimiza).
+2. **Aviso antes de perder los datos:** email un mes antes ("tus datos pueden perderse").
+3. **Campañas de fidelización:** ej. "dejaste de pagar hace 3 meses → 20 % de descuento".
+
+---
+
+## T-051 — Sistema de envío de emails
+
+**Prioridad:** P3 — Baja  
+**Estado:** Pendiente  
+**Relación:** T-004 (invitaciones por link), T-050 (avisos y promociones)
+
+La app no envía emails. Hace falta un servicio para: invitaciones (llevan el mismo link que hoy se
+copia a mano), avisos de vencimiento, recuperación de cuenta y campañas de fidelización. Remitente:
+la cuenta real de sr.macros. Elegir proveedor (SMTP propio o servicio transaccional) y plantillas.
+
+---
+
+
+
+## T-052 — Continuar a la siguiente clase desde el resultado
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Relación:** T-020 (lección por tema), T-034 (balanceo adaptativo)
+
+Al terminar y corregir una clase, la pantalla de resultado ofrece hoy **“Rehacer esta clase”** y
+**“Volver al inicio”**, pero no permite continuar directamente con el aprendizaje.
+
+Objetivo: agregar una acción **“Continuar a la siguiente clase”** en la pantalla de clase completada,
+sin obligar al alumno a volver al Inicio.
+
+Criterios:
+
+1. Mostrar el botón únicamente cuando la clase esté efectivamente corregida/completada.
+2. Al pulsarlo, reutilizar el flujo normal que determina o genera la próxima clase para el alumno,
+   respetando nivel, refuerzos y adaptación existentes; no asumir que la siguiente clase es
+   simplemente `id + 1`.
+3. Si la próxima clase ya existe, abrirla; si el flujo actual debe generarla, generarla y luego abrirla,
+   evitando duplicados o dobles solicitudes.
+4. Mantener disponibles **“Rehacer esta clase”** y **“Volver al inicio”**.
+5. Cubrir el flujo con tests de frontend y, si la resolución de la próxima clase requiere cambios de
+   API, agregar también los tests de backend correspondientes.
+
+**Criterio de aceptación:** desde el resultado de una clase completada, el alumno puede pasar a su
+próxima clase con una sola acción, usando exactamente las mismas reglas de selección/adaptación que
+el flujo normal de Inicio.
+
+---
+
+
+## T-053 — Dashboard de consumo de IA por cliente según modalidad de API
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Relación:** T-004 (membresías / modalidades BYOK, plataforma e híbrida), T-006 (portal del cliente),
+T-041 (proveedor y modelo usados), T-049 (tokens y costo por uso de IA)
+
+El PLATFORM_OWNER ya dispone de un panel con métricas de uso de IA, gráfico diario y ranking de
+cuentas que consumen IA de plataforma. Cada cliente debe disponer de una vista equivalente, pero
+**limitada a sus propios datos** y adaptada a la modalidad de API que tenga configurada.
+
+Objetivo: incorporar en el portal de cada cliente un dashboard de consumo de IA que permita entender
+cuánto está usando, de dónde sale ese consumo y cómo evoluciona en el tiempo.
+
+Criterios:
+
+1. **Aislamiento por cliente / tenant.**
+   - Nunca mostrar consumo global de la plataforma ni datos de otros clientes.
+   - En organizaciones con varios usuarios, las métricas y rankings internos deben limitarse a las
+     cuentas pertenecientes a ese mismo cliente.
+2. **Información distinta según modalidad de IA.**
+   - **BYOK / APIs propias:** mostrar requests y tokens consumidos por las conexiones propias del
+     cliente, discriminando cuando sea útil por proveedor/modelo.
+   - **IA de plataforma:** mostrar requests y tokens consumidos contra las conexiones de la
+     plataforma y la información económica o de cuota que corresponda al plan.
+   - **Híbrido:** separar claramente consumo propio y consumo de plataforma, tanto en los totales
+     como en la evolución diaria.
+3. **Gráfico temporal.**
+   - Incluir una vista por día similar al panel del PLATFORM_OWNER.
+   - El gráfico debe reflejar las métricas relevantes para la modalidad del cliente y permitir
+     distinguir origen del consumo cuando sea híbrido.
+4. **Detalle de tokens.**
+   - Adjuntar una tabla o desglose diario con tokens consumidos.
+   - Cuando T-049 esté disponible, reutilizar sus datos de input/output tokens, proveedor, modelo,
+     operación y costo estimado, sin guardar ni mostrar prompts o respuestas.
+5. **Resumen de consumo.**
+   - Mostrar totales recientes (por ejemplo requests, errores, tokens y consumo de plataforma)
+     usando etiquetas comprensibles para el cliente.
+   - No mostrar tarjetas sin sentido para una modalidad concreta; adaptar u ocultar métricas que no
+     apliquen.
+6. **Ranking / segundo bloque del panel.**
+   - Para clientes con múltiples cuentas, reutilizar el concepto de “cuentas que más usan IA”, pero
+     únicamente dentro de su organización.
+   - En cuentas personales o cuando no aporte información, ocultar ese bloque o reemplazarlo por un
+     desglose más útil de proveedor/modelo.
+7. **Permisos y tests.**
+   - Validar backend y frontend para impedir acceso cruzado entre clientes.
+   - Cubrir BYOK, plataforma e híbrido, incluyendo clientes personales y organizaciones con varios
+     usuarios.
+
+**Criterio de aceptación:** cada cliente puede entrar a su portal y entender su consumo de IA por día
+y en tokens, con una presentación coherente con su modalidad BYOK/plataforma/híbrida y sin acceso a
+datos de terceros.
+
+---
+
+## T-054 — Servicio Híbrido sin API keys propias: ¿funciona o no?
+
+**Prioridad:** P2 — Media (definir antes de otorgar Híbrido a usuarios reales)  
+**Estado:** Pendiente de decisión (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
+**Relación:** T-004 (membresías: servicio = vínculo + fuente de IA; Híbrido = propias primero,
+plataforma si fallan), T-049 (tokens y costo por uso), T-047 (avisos claros cuando no hay IA)
+
+Situación: una cuenta tiene el servicio **Individual · Híbrido** pero **no cargó ninguna API key
+propia**. Hoy (etapa 1) el router simplemente salta a la IA de la plataforma: el alumno usa
+Librería Inglés (con el tope del servicio), igual que con el servicio Plataforma.
+
+```text
+Híbrido + keys propias OK        → usa las propias            (esperado)
+Híbrido + keys propias fallan    → usa la plataforma          (esperado, con aviso y tope)
+Híbrido + SIN keys propias       → ¿?                          ← a decidir
+```
+
+Opciones a discutir:
+
+1. Funciona igual, todo por plataforma (como hoy). Riesgo: Híbrido = Plataforma encubierto.
+2. No genera clases hasta que cargue una key: Inicio muestra "Conectá una IA" como obligatorio.
+3. Funciona por plataforma con un tope más bajo / período de gracia (N días) para cargar su key.
+
+Además: el paso 2 de "Primeros pasos" en Inicio debe reflejar la decisión (hoy, para Híbrido,
+se muestra como opcional).
+
+---
+
+## T-055 — Pantalla "IA" según el servicio: no ofrecer configurar keys que no se usan
+
+**Prioridad:** P2 — Media (antes de otorgar servicios Plataforma a usuarios reales)  
+**Estado:** Pendiente (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
+**Relación:** T-004 (membresías: servicio = vínculo + fuente de IA, bandera `ownKeys`
+required / optional / unused), T-054 (Híbrido sin keys propias), T-005 (keys de la empresa)
+
+Problema: un alumno con servicio **Plataforma** (ej. 1 día otorgado por sr.macros) entra al
+menú **IA** y ve "Tus conexiones" + "Agregar conexión". Si carga una key, **no se usa** (el
+servicio Plataforma ignora las propias): confunde. Además el cartel "En uso ahora" muestra el
+nombre y el motor de la conexión de la plataforma (ej. `Google Gemini · gemini-3.5-flash-lite`),
+información interna de sr.macros / la empresa que el alumno no necesita ver.
+
+Qué debe mostrar el menú IA según el servicio (decidirlo por la bandera `ownKeys`, no por el
+nombre del servicio, para que un tipo nuevo no obligue a tocar pantallas):
+
+```text
+Propias keys (required)  → como hoy: "Tu servicio" + Tus conexiones + Agregar conexión
+Plataforma   (unused)    → solo "Tu servicio": "Usás la IA de Librería Inglés"
+                           (o "de tu empresa" cuando sea corporativo). Sin alta de keys.
+                           Sin nombre/motor de la conexión de plataforma.
+Híbrido      (optional)  → "Tu servicio" + Tus conexiones + Agregar conexión
+                           (se usan primero las propias; ver T-054 si no carga ninguna)
+```
+
+Criterios:
+- Con Plataforma no se ve el alta de conexiones; si el alumno ya tenía keys propias cargadas,
+  se avisa que quedan guardadas pero sin uso mientras dure el servicio (no se borran: al
+  vencer vuelve a usarlas).
+- "En uso ahora" solo nombra conexiones **propias**; si la que se usa es de plataforma o de
+  empresa, dice genéricamente "IA de Librería Inglés" / "IA de tu empresa".
+- La API tampoco expone nombre/modelo de conexiones de plataforma a cuentas que no son el dueño.
 
 ---
 

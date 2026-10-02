@@ -18,7 +18,10 @@ import {
   LessonResponse,
   Me,
   ModelOption,
+  PlatformAccount,
   PlatformOverview,
+  PlatformService,
+  PlatformServiceDraft,
   ProviderInfo,
   TokenResponse
 } from './models';
@@ -103,6 +106,13 @@ export class ApiService {
 
   connectionModels(id: number): Observable<ModelOption[]> {
     return this.http.get<ModelOption[]>(`${this.base}/ai/connections/${id}/models`);
+  }
+
+  copyConnectionCredential(id: number): Observable<{ apiKey: string }> {
+    return this.http.post<{ apiKey: string }>(
+      `${this.base}/ai/connections/${id}/credential/copy`,
+      {}
+    );
   }
 
   deleteConnection(id: number): Observable<void> {
@@ -196,7 +206,7 @@ export class ApiService {
   recordSignal(
     classId: number,
     exerciseId: number,
-    signal: { kind: 'listen'; slow: boolean } | { kind: 'practice'; score: number }
+    signal: { kind: 'listen'; slow: boolean } | { kind: 'practice'; score: number } | { kind: 'retake' }
   ): Observable<{ exerciseId: number; signals: Exercise['signals'] }> {
     return this.http.post<{ exerciseId: number; signals: Exercise['signals'] }>(
       `${this.base}/classes/${classId}/exercises/${exerciseId}/signals`,
@@ -234,5 +244,35 @@ export class ApiService {
   // Plataforma (PLATFORM_OWNER)
   platformOverview(): Observable<PlatformOverview> {
     return this.http.get<PlatformOverview>(`${this.base}/platform/overview`);
+  }
+
+  // Servicios (T-004)
+  platformServices(): Observable<PlatformService[]> {
+    return this.http.get<PlatformService[]>(`${this.base}/platform/services`);
+  }
+
+  createPlatformService(draft: PlatformServiceDraft): Observable<PlatformService> {
+    return this.http.post<PlatformService>(`${this.base}/platform/services`, draft);
+  }
+
+  updatePlatformService(id: number, draft: PlatformServiceDraft): Observable<PlatformService> {
+    return this.http.put<PlatformService>(`${this.base}/platform/services/${id}`, draft);
+  }
+
+  platformAccounts(q: string): Observable<PlatformAccount[]> {
+    return this.http.get<PlatformAccount[]>(`${this.base}/platform/accounts`, {
+      params: q.trim() ? { q: q.trim() } : {}
+    });
+  }
+
+  grantService(accountId: number, serviceId: number, days: number | null): Observable<PlatformAccount> {
+    return this.http.post<PlatformAccount>(`${this.base}/platform/accounts/${accountId}/service`, {
+      serviceId,
+      days
+    });
+  }
+
+  revokeService(accountId: number): Observable<PlatformAccount> {
+    return this.http.delete<PlatformAccount>(`${this.base}/platform/accounts/${accountId}/service`);
   }
 }

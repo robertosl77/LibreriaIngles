@@ -16,7 +16,7 @@ Return ONLY a JSON object with this shape:
   "exercises": [
     {
       "skillKey": "<one of the requested skill keys>",
-      "type": "fill_blank | multiple_choice | reading_multiple_choice | rewrite | short_writing",
+      "type": "fill_blank | multiple_choice | reading_multiple_choice | rewrite | short_writing | conversation",
       "instruction": "short instruction in simple English",
       "question": "the item shown to the student",
       "passage": "only for reading_multiple_choice: 40-80 word text",
@@ -28,7 +28,8 @@ Return ONLY a JSON object with this shape:
          "feedback": "explicación breve en español",
          "conceptResults": [{"concept": "<expected concept>", "status": "correct|incorrect"}]}
       ],
-      "expectedConcepts": ["snake_case concept names evaluated by this item"]
+      "expectedConcepts": ["snake_case concept names evaluated by this item"],
+      "closing": "only for the final turn of a conversation pair: short partner farewell/closure"
     }
   ]
 }
@@ -42,6 +43,14 @@ Rules:
 - rewrite: acceptedAnswers are full sentences; include contracted and full forms
   (e.g. "doesn't" and "does not").
 - short_writing: acceptedAnswers is []; the question is an open prompt for 2-3 sentences.
+- conversation: acceptedAnswers is []; the learner must produce a natural open reply. The "question"
+  is the partner's turn when presentation is READ. When presentation is LISTEN, put the partner's
+  actual turn in "stimulus" and use a neutral question such as "Reply naturally.".
+- Conversation slots may contain conversationGroup/conversationTurn/conversationTotal. Slots with the
+  same group form ONE microconversation and must be coherent in order. For A1, make two simple learner
+  turns. Turn 2 must continue naturally from a plausible correct reply to turn 1, but must NOT depend
+  on one exact wording from the learner. On the last turn, include a short "closing" line from the
+  partner so the exchange visibly ends after correction.
 - Each slot has a "presentation" and a "response". The exercise TYPE rules above never change;
   only how the student receives it changes:
   - READ: normal written exercise (no "stimulus").
@@ -55,6 +64,8 @@ Rules:
       * rewrite: the instruction says what to do with the sentence heard (e.g. "Write the
         sentence you hear in the negative form"); never write the stimulus in the question;
       * short_writing: "stimulus" is a spoken question or situation; the student answers in writing.
+      * conversation: "stimulus" is exactly the partner's conversational turn; "question" only tells
+        the learner to reply naturally and must not reveal the stimulus text.
     For numbers and times list digit and word forms in acceptedAnswers (e.g. "26",
     "twenty-six"; "8:30", "half past eight").
 - The slot "response" controls HOW the same exercise is answered:
@@ -86,11 +97,19 @@ Return ONLY a JSON object:
               "fragment": "wrong part", "correction": "fix", "explanation": "en español"}],
   "correctAnswer": "a correct version of the answer, or null for open writing",
   "feedback": "1-2 frases en español, dirigidas al alumno",
-  "suggestions": [{"type": "STYLE_SUGGESTION|NATURALNESS_SUGGESTION|SHORTER_ALTERNATIVE|MECHANICS_NOTE", "text": "en español"}]
+  "suggestions": [{"type": "STYLE_SUGGESTION|NATURALNESS_SUGGESTION|SHORTER_ALTERNATIVE|MECHANICS_NOTE", "text": "en español"}],
+  "secondarySkillResults": [
+    {"skillKey": "<only from secondarySkillCandidates>", "status": "correct|partially_correct|incorrect",
+     "score": 0-100, "reason": "brief evidence in Spanish"}
+  ]
 }
 
 Rules:
-- Evaluate ONLY what the objectives and expected concepts target, at the given level.
+- Evaluate the PRIMARY result ONLY on what the objectives and expected concepts target, at the given level.
+- "secondarySkillCandidates" lists other curricular skills that may receive incidental evidence from
+  what the learner actually produced. Return secondarySkillResults ONLY for skills directly evidenced
+  by this answer, normally at most 3. Do not invent evidence. A secondary error must never reduce the
+  primary Conversation/task score unless it also makes the conversational objective fail.
 - The reference answers are examples, not an exhaustive list: a different answer that is
   grammatically correct and fulfils the task IS correct.
 - Never mark an answer incorrect only because a more natural alternative exists:
@@ -110,6 +129,11 @@ Rules:
 - Report each mistake pattern ONCE (if "like play", "like drink" and "like read" share the
   same mistake, one error listing the fragments).
 - For open writing, evaluate grammar, vocabulary and task completion at the given level.
+- For type "conversation", first judge communicative success: did the learner understand the partner's
+  turn, answer something relevant, preserve the interaction and remain understandable at the requested
+  level? There is usually more than one valid reply. Grammar/vocabulary mistakes may be reported and
+  may feed secondarySkillResults while the Conversation objective can still be correct or partial.
+  Use conversationContext when supplied to check continuity with earlier turns.
 - If "response" is SPEAK, "studentAnswer" is a literal transcript of speech: ignore punctuation
   and capitalization. If it differs from a correct answer only by a word that SOUNDS almost the
   same (e.g. "sink" for "think", "berry" for "very", "ship" for "sheep"), treat it as a
