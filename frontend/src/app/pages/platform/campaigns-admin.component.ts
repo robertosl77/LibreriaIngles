@@ -153,6 +153,7 @@ function isoDate(value: string): string | null {
                   <option value="SERVICE_SOURCE">Fuente de IA actual</option>
                   <option value="EMAIL_DOMAIN">Dominio de email</option>
                   <option value="DAYS_SINCE_CREATED">Días desde registro</option>
+                  <option value="CREATED_AT">Fecha de registro</option>
                 </select>
 
                 @if (rule.field === 'DAYS_SINCE_CREATED') {
@@ -183,6 +184,9 @@ function isoDate(value: string): string | null {
                         <option value="PLATFORM">Plataforma</option>
                         <option value="HYBRID">Híbrido</option>
                       </select>
+                    }
+                    @case ('CREATED_AT') {
+                      <input class="input value" type="datetime-local" [name]="'rValue' + i" [(ngModel)]="rule.value" />
                     }
                     @default {
                       <input class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value" placeholder="empresa.com" />
@@ -376,6 +380,7 @@ export class CampaignsAdminComponent implements OnInit {
     else if (rule.field === 'HAS_GRANTED_SERVICE') rule.value = false;
     else if (rule.field === 'SERVICE_SOURCE') rule.value = 'BYOK';
     else if (rule.field === 'DAYS_SINCE_CREATED') rule.value = 0;
+    else if (rule.field === 'CREATED_AT') rule.value = '';
     else rule.value = '';
   }
 
@@ -392,7 +397,12 @@ export class CampaignsAdminComponent implements OnInit {
       trigger: this.form.trigger,
       rules: this.form.rules.map((rule) => ({
         ...rule,
-        value: rule.field === 'DAYS_SINCE_CREATED' ? Number(rule.value) : rule.value
+        value:
+          rule.field === 'DAYS_SINCE_CREATED'
+            ? Number(rule.value)
+            : rule.field === 'CREATED_AT' && rule.value
+              ? new Date(String(rule.value)).toISOString()
+              : rule.value
       })),
       grantDays: numberOrNull(this.form.grantDays),
       priority: Math.max(1, Math.round(Number(this.form.priority) || 100)),

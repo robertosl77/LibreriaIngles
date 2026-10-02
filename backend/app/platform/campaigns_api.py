@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
@@ -140,10 +141,15 @@ def _windows_overlap(a: Campaign, b: Campaign) -> bool:
 
 
 def _overlap_warnings(db: DbSession, campaign: Campaign) -> list[dict]:
+    scope_filter = (
+        Campaign.organization_id.is_(None)
+        if campaign.organization_id is None
+        else Campaign.organization_id == campaign.organization_id
+    )
     peers = db.scalars(
         select(Campaign).where(
             Campaign.id != campaign.id,
-            Campaign.organization_id.is_(campaign.organization_id),
+            scope_filter,
             Campaign.trigger == campaign.trigger,
             Campaign.status != CampaignStatus.ENDED,
         )
@@ -216,11 +222,14 @@ def list_campaigns(_: PlatformOwner, db: DbSession) -> list[dict]:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_campaign(payload: CampaignIn, owner: PlatformOwner, db: DbSession) -> dict:
-    campaign = Campaign(code="", name="", plan_id=payload.serviceId, created_by_account_id=owner.id)
+    campaign = Campaign(
+        code=f"CAMPAIGN_{uuid4().hex.upper()}",
+        name="",
+        plan_id=payload.serviceId,
+        created_by_account_id=owner.id,
+    )
     _apply(campaign, payload, db)
     db.add(campaign)
-    db.flush()
-    campaign.code = f"CAMPAIGN_{campaign.id}"
     db.commit()
     return _out(db, campaign)
 

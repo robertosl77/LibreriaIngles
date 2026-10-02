@@ -17,7 +17,7 @@ import { ServicesAdminComponent } from './services-admin.component';
         <div>
           <h1>Plataforma</h1>
           <p class="muted">
-            IA provista por Librería Inglés: servicios, conexiones, límites de consumo y uso. Cada
+            IA provista por Librería Inglés: servicios, campañas, conexiones, límites de consumo y uso. Cada
             cuenta usa la IA que indica su servicio: propias keys, plataforma o híbrido.
           </p>
         </div>
