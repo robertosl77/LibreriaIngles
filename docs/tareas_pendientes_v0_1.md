@@ -170,7 +170,7 @@ No eliminar el modelo PLATFORM/HYBRID; solamente evitar que se active antes de i
 ## T-004 — Membresías, servicios, campañas e invitaciones
 
 **Prioridad:** P1 — Alta (antes de publicar la app o cobrar)  
-**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · Etapa 1 (Servicios) en prueba en `feat/t-004-servicios`  
+**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · Etapa 1 (Servicios) resuelta (PR #26 a `develop`) · etapas 2–6 pendientes  
 **Responsable:** Claude  
 **Relación:** T-003 (cada usuario usa solo su IA propia: hoy decide `platform_ai_allowed()`),
 T-005 (conexiones de IA de una organización), T-006 (portal del dueño con las keys de
@@ -329,7 +329,7 @@ Ej.: pagó su individual hasta el 15/10 y el 01/10 su empresa lo invita.
 6. Pagos (otro otorgamiento; débito automático a definir)
 ```
 
-**Etapa 1 — hecho (en prueba):**
+**Etapa 1 — Resuelta (PR #26 a `develop`):**
 
 ```text
 migración 0012     plans: vínculo, duración, tope diario, descripción
