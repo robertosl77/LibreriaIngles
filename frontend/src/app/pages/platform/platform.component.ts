@@ -5,6 +5,7 @@ import { ApiService, errorMessage } from '../../core/api.service';
 import { PlatformOverview } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
+import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 import { BenefitsAdminComponent } from './benefits-admin.component';
 import { CampaignsAdminComponent } from './campaigns-admin.component';
 import { InvitationsAdminComponent } from './invitations-admin.component';
@@ -17,7 +18,8 @@ import { ServicesAdminComponent } from './services-admin.component';
     ServicesAdminComponent,
     BenefitsAdminComponent,
     CampaignsAdminComponent,
-    InvitationsAdminComponent
+    InvitationsAdminComponent,
+    CollapseCardComponent
   ],
   template: `
     <main class="page stack">
@@ -133,7 +135,17 @@ import { ServicesAdminComponent } from './services-admin.component';
 
       <app-invitations-admin />
 
-      <app-connections-manager scope="platform" title="Conexiones de la plataforma" (changed)="load()" />
+      <app-collapse-card
+        title="Conexiones de la plataforma"
+        description="API keys, modelos, prioridades, límites y estado de las conexiones usadas por la plataforma."
+      >
+        <app-connections-manager
+          scope="platform"
+          title="Conexiones de la plataforma"
+          [embedded]="true"
+          (changed)="load()"
+        />
+      </app-collapse-card>
     </main>
   `,
   styles: `

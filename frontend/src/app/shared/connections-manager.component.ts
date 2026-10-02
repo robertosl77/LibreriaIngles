@@ -37,9 +37,11 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
   selector: 'app-connections-manager',
   imports: [FormsModule, DatePipe, ModelPickerComponent],
   template: `
-    <section class="card">
-      <h2>{{ title() }}</h2>
-      @if (note()) { <p class="muted small note">{{ note() }}</p> }
+    <section [class.card]="!embedded()" class="manager-shell">
+      @if (!embedded()) {
+        <h2>{{ title() }}</h2>
+        @if (note()) { <p class="muted small note">{{ note() }}</p> }
+      }
       @if (loading()) {
         <p class="muted"><span class="spinner"></span></p>
       } @else if (connections().length === 0) {
@@ -253,6 +255,8 @@ export class ConnectionsManagerComponent implements OnInit {
   /** false: solo se administran las existentes (ej. servicio Plataforma, T-055). */
   readonly allowCreate = input(true);
   readonly note = input<string | null>(null);
+  /** true: el contenedor visual/título lo provee una tarjeta compartida externa. */
+  readonly embedded = input(false);
   readonly changed = output<void>();
 
   private readonly api = inject(ApiService);

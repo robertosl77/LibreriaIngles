@@ -13,6 +13,7 @@ import {
   PlatformServiceDraft
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 import { ActiveToggleComponent } from './active-toggle.component';
 
 const SOURCE_SHORT: Record<AiSource, string> = {
@@ -40,7 +41,7 @@ function numberOrNull(value: unknown): number | null {
 /** Portal (T-004): catálogo de capacidades + cuentas. La vigencia vive en Beneficios. */
 @Component({
   selector: 'app-services-admin',
-  imports: [FormsModule, DatePipe, ActiveToggleComponent],
+  imports: [FormsModule, DatePipe, ActiveToggleComponent, CollapseCardComponent],
   template: `
     <section class="card stack">
       <div class="section-head">
@@ -138,15 +139,10 @@ function numberOrNull(value: unknown): number | null {
       }
     </section>
 
-    <section class="card stack">
-      <div>
-        <h2>Cuentas y servicios</h2>
-        <p class="muted small">
-          El servicio vigente proviene de un beneficio. Para asignar manualmente, elegí un
-          <strong>beneficio</strong>; no se vuelven a configurar servicio ni días acá.
-        </p>
-      </div>
-
+    <app-collapse-card
+      title="Cuentas y servicios"
+      description="El servicio vigente proviene de un beneficio. Para asignar manualmente se elige un beneficio; servicio y días no se vuelven a configurar acá."
+    >
       <form class="row search-row" (ngSubmit)="loadAccounts()">
         <input class="input search" name="q" [(ngModel)]="query" placeholder="Buscar por email o nombre" />
         <button class="btn btn-sm" type="submit" [disabled]="loadingAccounts()">Buscar</button>
@@ -241,7 +237,7 @@ function numberOrNull(value: unknown): number | null {
           }
         </div>
       }
-    </section>
+    </app-collapse-card>
   `,
   styles: `
     :host { display: contents; }
