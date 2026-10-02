@@ -122,7 +122,7 @@ porque puede introducir cambios incompatibles.
 ## T-003 — Ajustar el router de IA al alcance actual BYOK
 
 **Prioridad:** P1 — Alta  
-**Estado:** Resuelta (PR a `develop`) · Claude  
+**Estado:** Resuelta (PR #23 a `develop`) · Claude  
 **Bloquea prueba local:** No
 
 Resolución (2026-10-01): hasta ahora **cualquier** cuenta sin conexiones propias usaba las de
