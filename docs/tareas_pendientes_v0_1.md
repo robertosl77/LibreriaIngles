@@ -286,19 +286,30 @@ propio detalle; en híbrido, es la base de lo que se le factura. Necesario antes
 5. Pagos (otro origen de membresía; débito automático a definir)
 ```
 
-### 9. A definir
+### 9. Decisiones y pendientes (Roberto, 2026-10-01)
 
-1. **Nombres comerciales** de las membresías y servicios.
-2. **Usuarios que ya existen** al activar la etapa 1 (ej. robertosl77): ¿qué membresía reciben
-   para no quedar bloqueados? (propuesta: una cortesía con la fuente que usan hoy).
-3. **Bienvenida:** días exactos y tope de pedidos.
-4. **Al año del vencimiento:** ¿se borran los datos, se anonimizan? ¿se avisa antes por email?
-5. **Cómo llega una invitación:** hoy la app no envía emails → ¿link para copiar y pasar a mano
-   al principio, o un servicio de email (dependencia nueva)?
-6. **Varias membresías a la vez** (ej. individual propia + corporativa de su empresa): ¿cuál manda?
-   (propuesta: la corporativa mientras esté vigente).
-7. **Tabla de precios por modelo** para estimar costo con los tokens: la mantiene sr.macros en su
-   portal (los proveedores cambian precios).
+1. **Nombres y catálogo de servicios → panel de sr.macros.** El catálogo (filas × columnas) se
+   configura en un panel del dueño, que permite agregar combinaciones nuevas a futuro y ponerles
+   nombre. Nombres iniciales: **Individual** y **Corporativa**.
+2. **Usuarios que ya existen** al activar la etapa 1: *a definir* (ver explicación en el chat:
+   hoy no tienen membresía; al encender las membresías quedarían bloqueados si no reciben una).
+3. **Bienvenida → panel de sr.macros** (configurable). Valor inicial: **3 días corridos**. Tope de
+   pedidos: *a definir*.
+4. **Retención al año de vencida y avisos** → tarea aparte de fidelización (**T-049**).
+5. **Invitación = link.** Etapa 2 genera un link que sr.macros copia y manda como quiera
+   (WhatsApp, etc.). El envío masivo por email es otra tarea (**T-050**); el email también
+   llevará el mismo link.
+6. **Dos membresías a la vez** (ej. pagó su individual hasta el 15/10 y el 01/10 su empresa lo
+   invita a una corporativa):
+   - Si el alumno **mantiene separados** su estudio personal y el corporativo → siguen las dos,
+     cada una con sus clases y su progreso.
+   - Si **unifica** su estudio → manda la corporativa y los días ya pagados de la individual se
+     convierten en un **código de crédito** (como un cupón de compensación): queda guardado en su
+     cuenta, visible en la página, y puede usarlo más adelante o regalarlo a un amigo
+     (es una invitación por los días que le quedaban).
+   - Requiere definir el flujo "¿unificás tu estudio personal con el de tu empresa?" (etapa 4).
+7. **Tabla de precios por modelo** (para estimar costo con los tokens): la mantiene sr.macros en
+   su portal. Más adelante (T-048).
 
 ---
 
@@ -1002,6 +1013,8 @@ T-044 Apelación con justificación escrita o grabada (Claude)
 T-046 v2 Grabación de Speaking: corte más rápido y sin "Confirmar respuesta" (Claude)
 T-047 Avisos claros cuando no hay IA y reintento al entrar a la clase (Claude)
 T-048 Registro de tokens y costo por cada uso de IA (Claude)
+T-049 Fidelización: retención de datos, avisos y promociones (futuro)
+T-050 Sistema de envío de emails
 ```
 
 Referencias: documento funcional v0.3 §4.1, §5, §8, §15, §16, §17, §17.1, §39, §41 (Audio), §42 (Audio).
@@ -1853,6 +1866,34 @@ modelo), pero **sin tokens** y solo lo ve sr.macros.
 4. **Detalle para el cliente**, como una factura:
    `01/10 22:12 · Gemini (gemini-2.5-flash) · corregir ejercicio · 1.240 tokens · USD 0,0004`
 5. Nunca guardar prompts ni respuestas: solo metadatos y conteos.
+
+---
+
+## T-049 — Fidelización: retención de datos, avisos y promociones
+
+**Prioridad:** P4 — Muy baja (mucho más adelante)  
+**Estado:** Para analizar  
+**Relación:** T-004 (vencimiento de membresías), T-050 (emails)
+
+Ideas anotadas para no perderlas (Roberto, 2026-10-01):
+
+1. **Retención:** los datos de una membresía vencida se guardan 1 año. Al cumplirse, definir si se
+   borran o se **anonimizan** (se quita lo que identifica a la persona —email, nombre— y se
+   conservan solo estadísticas sin dueño, para métricas de la app).
+2. **Aviso antes de perder los datos:** email un mes antes ("tus datos pueden perderse").
+3. **Campañas de fidelización:** ej. "dejaste de pagar hace 3 meses → 20 % de descuento".
+
+---
+
+## T-050 — Sistema de envío de emails
+
+**Prioridad:** P3 — Baja  
+**Estado:** Pendiente  
+**Relación:** T-004 (invitaciones por link), T-049 (avisos y promociones)
+
+La app no envía emails. Hace falta un servicio para: invitaciones (llevan el mismo link que hoy se
+copia a mano), avisos de vencimiento, recuperación de cuenta y campañas de fidelización. Remitente:
+la cuenta real de sr.macros. Elegir proveedor (SMTP propio o servicio transaccional) y plantillas.
 
 ---
 
