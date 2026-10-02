@@ -26,10 +26,11 @@ from app.classes.normalize import fill_blank_variants, normalize_answer
 from app.classes.prompts import EVALUATION_SYSTEM, evaluation_user_prompt
 from app.classes.spelling import SPELLING_SCORE, spelling_slips
 from app.classes.spoken import normalize_spoken, pronunciation_slips
-from app.curriculum.service import find_skill
+from app.curriculum.service import find_skill, get_level
 from app.learning.models import (
     AIEvaluationCache,
     Attempt,
+    ClassSession,
     EvaluationMode,
     EvaluationSource,
     Exercise,
@@ -233,6 +234,182 @@ def _dedupe_errors(errors: list[dict]) -> list[dict]:
     return list(merged.values())
 
 
+ORTHOGRAPHY_SKILLS = {
+    "capitalization": "writing.orthography.capitalization",
+    "spelling": "writing.orthography.basic_spelling",
+    "punctuation": "writing.orthography.punctuation",
+    "apostrophes": "writing.orthography.apostrophes",
+}
+SECONDARY_MAX = 3
+
+
+def _secondary_skill_candidates(exercise: Exercise) -> list[dict]:
+    """Skills que la IA puede observar incidentalmente en una respuesta productiva."""
+    if not exercise.level or not exercise.response_mode or exercise.response_mode.value == "SELECT":
+        return []
+    curriculum = get_level(exercise.level)
+    if curriculum is None:
+        return []
+    areas = {"grammar", "vocabulary"}
+    if exercise.response_mode.value == "WRITE":
+        areas.add("writing")
+    candidates = []
+    for skill in curriculum.skills:
+        if skill.key == exercise.skill_key or skill.area_key not in areas:
+            continue
+        candidates.append(
+            {
+                "skillKey": skill.key,
+                "name": f"{skill.topic_name} · {skill.name}",
+                "objectives": list(skill.objectives),
+            }
+        )
+    return candidates
+
+
+def _sanitize_secondary(exercise: Exercise, data: dict) -> list[dict]:
+    allowed = {item["skillKey"] for item in _secondary_skill_candidates(exercise)}
+    result = []
+    seen = set()
+    for item in data.get("secondarySkillResults") or []:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("skillKey") or "")
+        status = item.get("status")
+        if key not in allowed or key in seen or status not in STATUS_SCORE:
+            continue
+        score = item.get("score")
+        if not isinstance(score, (int, float)) or isinstance(score, bool):
+            score = STATUS_SCORE[status]
+        low, high = STATUS_BANDS[status]
+        result.append(
+            {
+                "skillKey": key,
+                "status": status,
+                "score": round(min(high, max(low, float(score))), 1),
+                "reason": str(item.get("reason") or "")[:300],
+            }
+        )
+        seen.add(key)
+        if len(result) >= SECONDARY_MAX:
+            break
+    return result
+
+
+def _orthography_key(exercise: Exercise, suffix: str) -> str | None:
+    level = (exercise.level or "").lower()
+    if not level:
+        return None
+    key = f"{level}.{ORTHOGRAPHY_SKILLS[suffix]}"
+    return key if find_skill(key) else None
+
+
+def _merge_secondary(result: dict, item: dict) -> None:
+    current = {
+        row.get("skillKey"): row
+        for row in result.setdefault("secondarySkillResults", [])
+        if isinstance(row, dict) and row.get("skillKey")
+    }
+    current[item["skillKey"]] = item
+    result["secondarySkillResults"] = list(current.values())
+
+
+def _add_mechanics_evidence(exercise: Exercise, answer: str, result: dict, *, spoken: bool) -> dict:
+    """Capitalización/puntuación observables: evidencia curricular, sin tocar la nota principal."""
+    if spoken or not answer.strip() or not exercise.response_mode or exercise.response_mode.value != "WRITE":
+        return result
+    # Solo producción de oraciones; un fill_blank de una palabra no demuestra puntuación.
+    if exercise.exercise_type not in {"short_writing", "conversation"} and exercise.area != "writing":
+        return result
+
+    text = answer.strip()
+    words = text.split()
+    cap_key = _orthography_key(exercise, "capitalization")
+    if cap_key and cap_key != exercise.skill_key:
+        first_alpha = next((ch for ch in text if ch.isalpha()), "")
+        lowercase_i = any(token.strip(".,!?;:'\"()") == "i" for token in words)
+        ok = bool(first_alpha) and first_alpha.isupper() and not lowercase_i
+        _merge_secondary(
+            result,
+            {
+                "skillKey": cap_key,
+                "status": "correct" if ok else "partially_correct",
+                "score": 100.0 if ok else 60.0,
+                "reason": "Mayúsculas correctas." if ok else "Revisá mayúscula inicial, nombres propios y el pronombre I.",
+            },
+        )
+
+    punctuation_key = _orthography_key(exercise, "punctuation")
+    if punctuation_key and punctuation_key != exercise.skill_key and len(words) >= 2:
+        ok = text.endswith((".", "?", "!"))
+        _merge_secondary(
+            result,
+            {
+                "skillKey": punctuation_key,
+                "status": "correct" if ok else "partially_correct",
+                "score": 100.0 if ok else 60.0,
+                "reason": "Puntuación de cierre correcta." if ok else "Falta o no corresponde la puntuación de cierre.",
+            },
+        )
+
+    spelling_key = _orthography_key(exercise, "spelling")
+    if spelling_key and spelling_key != exercise.skill_key:
+        spelling_errors = [e for e in result.get("errors") or [] if e.get("type") == "SPELLING_ERROR"]
+        if spelling_errors:
+            _merge_secondary(
+                result,
+                {
+                    "skillKey": spelling_key,
+                    "status": "partially_correct",
+                    "score": 65.0,
+                    "reason": "La respuesta contiene un error ortográfico reconocible.",
+                },
+            )
+    return result
+
+
+def _conversation_context(db: Session, exercise: Exercise) -> list[dict]:
+    meta = (exercise.content or {}).get("conversation") or {}
+    group = meta.get("group")
+    if not group:
+        return []
+    siblings = list(
+        db.scalars(
+            select(Exercise)
+            .where(Exercise.class_session_id == exercise.class_session_id)
+            .order_by(Exercise.position)
+        ).all()
+    )
+    siblings = [
+        item for item in siblings
+        if ((item.content or {}).get("conversation") or {}).get("group") == group
+        and item.position <= exercise.position
+    ]
+    session = db.get(ClassSession, exercise.class_session_id)
+    attempt_number = session.current_attempt if session else 1
+    attempts = {
+        a.exercise_id: a
+        for a in db.scalars(
+            select(Attempt).where(
+                Attempt.exercise_id.in_([item.id for item in siblings]),
+                Attempt.attempt_number == attempt_number,
+            )
+        ).all()
+    } if siblings else {}
+    history = []
+    for item in siblings:
+        partner = (
+            (item.content or {}).get("stimulus")
+            if item.presentation_mode and item.presentation_mode.value == "LISTEN"
+            else item.prompt
+        )
+        row = {"partner": partner}
+        if item.id != exercise.id and item.id in attempts:
+            row["student"] = attempts[item.id].raw_answer
+        history.append(row)
+    return history
+
+
 def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
     concepts = []
     for item in data.get("conceptResults") or []:
@@ -277,6 +454,7 @@ def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
         "correctAnswer": data.get("correctAnswer"),
         "feedback": str(data.get("feedback") or ""),
         "suggestions": suggestions,
+        "secondarySkillResults": _sanitize_secondary(exercise, data),
         "scoreSuggestedByAI": data.get("scoreSuggested"),
     }
     score = score_from_result(result)
@@ -284,7 +462,7 @@ def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
     return result
 
 
-def _ai_payload(exercise: Exercise, answer: str) -> dict:
+def _ai_payload(db: Session, exercise: Exercise, answer: str) -> dict:
     skill = find_skill(exercise.skill_key or "")
     return {
         "level": exercise.level,
@@ -301,12 +479,14 @@ def _ai_payload(exercise: Exercise, answer: str) -> dict:
         "options": (exercise.content or {}).get("options"),
         "referenceAnswers": exercise.answer_key.get("acceptedAnswers") or [],
         "expectedConcepts": exercise.expected_concepts or [],
+        "secondarySkillCandidates": _secondary_skill_candidates(exercise),
+        "conversationContext": _conversation_context(db, exercise),
         "studentAnswer": answer,
     }
 
 
 def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: str) -> dict:
-    payload = _ai_payload(exercise, answer)
+    payload = _ai_payload(db, exercise, answer)
     result = run_json_task(
         db,
         account,
@@ -318,6 +498,7 @@ def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: 
                 "type": exercise.exercise_type,
                 "acceptedAnswers": payload["referenceAnswers"],
                 "expectedConcepts": payload["expectedConcepts"],
+                "secondarySkillCandidates": payload["secondarySkillCandidates"],
             },
             "answer": answer,
         },
@@ -352,6 +533,13 @@ def _cache_put(db: Session, exercise: Exercise, normalized: str, result: dict) -
         pass
 
 
+def _finish(exercise: Exercise, answer: str, evaluation: Evaluation, *, spoken: bool) -> Evaluation:
+    evaluation.result = _add_mechanics_evidence(
+        exercise, answer, evaluation.result, spoken=spoken
+    )
+    return evaluation
+
+
 def evaluate(
     db: Session, account: Account, exercise: Exercise, answer: str, *, spoken: bool = False
 ) -> Evaluation | None:
@@ -365,44 +553,50 @@ def evaluate(
 
     if not normalized:
         result = _rule_incorrect(exercise, "")
-        return Evaluation(EvaluationSource.RULE_MATCH, result, 0.0)
+        return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, result, 0.0), spoken=spoken)
 
     if exercise.evaluation_mode != EvaluationMode.AI:
         if normalized in _accepted_normalized(exercise, normalize):
-            return Evaluation(EvaluationSource.RULE_MATCH, _rule_correct(exercise), 100.0)
+            return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, _rule_correct(exercise), 100.0), spoken=spoken)
         if spoken:
             slips = pronunciation_slips(_accepted(exercise), answer)
             if slips:
                 result = _pronunciation_slip_result(exercise, slips)
-                return Evaluation(EvaluationSource.RULE_MATCH, result, score_from_result(result))
+                return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, result, score_from_result(result)), spoken=spoken)
         for error in exercise.answer_key.get("commonErrors") or []:
             if normalize(error.get("answer")) == normalized:
                 result = _common_error_result(exercise, error)
-                return Evaluation(
-                    EvaluationSource.COMMON_ERROR_MATCH, result, score_from_result(result)
+                return _finish(
+                    exercise,
+                    answer,
+                    Evaluation(EvaluationSource.COMMON_ERROR_MATCH, result, score_from_result(result)),
+                    spoken=spoken,
                 )
         if not spoken and exercise.exercise_type not in CHOICE_TYPES:
             slips = spelling_slips(_accepted(exercise), answer)
             if slips:
-                return Evaluation(
-                    EvaluationSource.RULE_MATCH, _spelling_result(exercise, slips), SPELLING_SCORE
+                return _finish(
+                    exercise,
+                    answer,
+                    Evaluation(EvaluationSource.RULE_MATCH, _spelling_result(exercise, slips), SPELLING_SCORE),
+                    spoken=spoken,
                 )
         # Una transcripción puede diferir por cosas del habla: decide la IA si la hay.
         if exercise.evaluation_mode == EvaluationMode.DETERMINISTIC and not spoken:
-            return Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0)
+            return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0), spoken=spoken)
 
     cached = _cache_get(db, exercise, normalized)
     if cached is not None:
-        return Evaluation(EvaluationSource.AI, cached, ai_score(exercise, cached))
+        return _finish(exercise, answer, Evaluation(EvaluationSource.AI, dict(cached), ai_score(exercise, cached)), spoken=spoken)
 
     try:
         result = evaluate_with_ai(db, account, exercise, answer)
     except NoAIAvailable:
         if spoken and exercise.evaluation_mode == EvaluationMode.DETERMINISTIC:
-            return Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0)
+            return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0), spoken=spoken)
         return None
     _cache_put(db, exercise, normalized, result)
-    return Evaluation(EvaluationSource.AI, result, ai_score(exercise, result))
+    return _finish(exercise, answer, Evaluation(EvaluationSource.AI, result, ai_score(exercise, result)), spoken=spoken)
 
 
 def apply_evaluation(attempt: Attempt, evaluation: Evaluation) -> None:
