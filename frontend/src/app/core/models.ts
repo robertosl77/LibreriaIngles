@@ -18,7 +18,56 @@ export interface Me {
     generationFailed: number;
     completed: number;
   };
-  ai: { connections: number; available: number };
+  ai: { connections: number; available: number; own: number };
+  service: MyService;
+}
+
+/** Servicio vigente de la cuenta (T-004): vínculo × fuente de IA. */
+export type AiSource = 'BYOK' | 'PLATFORM' | 'HYBRID';
+export type LinkType = 'PERSONAL' | 'CORPORATE';
+
+export interface ServiceStatus {
+  name: string;
+  code: string | null;
+  source: AiSource;
+  linkType: LinkType;
+  granted: boolean;
+  origin: 'MANUAL' | 'CAMPAIGN' | 'INVITATION' | 'PAYMENT' | null;
+  expiresAt: string | null;
+  dailyRequestLimit: number | null;
+  expired: { name: string; at: string } | null;
+}
+
+export interface MyService extends ServiceStatus {
+  usesOwnKeys: boolean;
+  usesPlatform: boolean;
+  platformRequests24h?: number;
+}
+
+export interface PlatformService {
+  id: number;
+  code: string;
+  name: string;
+  source: AiSource;
+  linkType: LinkType;
+  durationDays: number | null;
+  dailyRequestLimit: number | null;
+  description: string | null;
+  active: boolean;
+  activeAccounts: number;
+}
+
+export type PlatformServiceDraft = Omit<PlatformService, 'id' | 'code' | 'activeAccounts'>;
+
+export interface PlatformAccount {
+  id: number;
+  email: string;
+  displayName: string | null;
+  isPlatformOwner: boolean;
+  createdAt: string;
+  ownConnections: number;
+  platformRequests24h: number;
+  service: ServiceStatus;
 }
 
 export interface AuthConfig {

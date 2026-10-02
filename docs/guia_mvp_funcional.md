@@ -141,11 +141,18 @@ Menú **Plataforma** → `/app/plataforma`.
   se puede escribir el modelo a mano. Si el modelo actual ya no figura en la lista, se avisa
   (probablemente discontinuado).
 - Cada registro de consumo guarda el modelo usado (migración `0004_usage_model`).
-- **Qué conexiones usa cada usuario (T-003):** un usuario común usa solo sus conexiones
-  propias; las de plataforma las usa únicamente el `PLATFORM_OWNER`. Cuando existan planes,
-  la membresía decidirá quién más las usa (T-004, `platform_ai_allowed()`).
+- **Qué conexiones usa cada usuario (T-003 + T-004):** lo decide el **servicio vigente**
+  de la cuenta. Sin servicio otorgado es *Individual · propias keys* (solo sus conexiones).
+  *Plataforma* usa solo las de plataforma; *Híbrido*, las propias primero y si fallan las de
+  plataforma. El `PLATFORM_OWNER` usa ambas.
+- **Servicios (T-004 etapa 1):** sección *Servicios* (catálogo: nombre, fuente de IA,
+  duración en días, tope diario de pedidos a la plataforma) y *Cuentas y servicios* (buscar
+  una cuenta, otorgarle un servicio por N días o sin vencimiento, quitarlo). Otorgar reemplaza
+  el servicio anterior. Al vencer, la cuenta vuelve a *Individual · propias keys* y ve un aviso
+  durante 14 días. El tope diario cuenta pedidos exitosos a cualquier conexión de plataforma en
+  las últimas 24 h; el alumno ve el % usado en *Tu servicio* (IA e Inicio).
 
-Migraciones: `0003_platform_ai_usage` y `0004_usage_model`.
+Migraciones: `0003_platform_ai_usage`, `0004_usage_model` y `0012_services`.
 
 ## 6.1 "Necesito lección" (T-020)
 
@@ -393,6 +400,10 @@ GET  /api/v1/certificates/{code}          (público: verificación)
 GET  /api/v1/progress
 
 GET  /api/v1/platform/overview      (solo PLATFORM_OWNER)
+GET  /api/v1/platform/services      POST /platform/services   PUT /platform/services/{id}
+GET  /api/v1/platform/accounts?q=   (cuentas con su servicio vigente)
+POST /api/v1/platform/accounts/{id}/service   {serviceId, days?, note?}
+DELETE /api/v1/platform/accounts/{id}/service
 ```
 
 ---

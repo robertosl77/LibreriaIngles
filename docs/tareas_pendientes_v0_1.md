@@ -170,7 +170,7 @@ No eliminar el modelo PLATFORM/HYBRID; solamente evitar que se active antes de i
 ## T-004 — Membresías, servicios, campañas e invitaciones
 
 **Prioridad:** P1 — Alta (antes de publicar la app o cobrar)  
-**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · implementación por etapas, no iniciada  
+**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · Etapa 1 (Servicios) en prueba en `feat/t-004-servicios`  
 **Responsable:** Claude  
 **Relación:** T-003 (cada usuario usa solo su IA propia: hoy decide `platform_ai_allowed()`),
 T-005 (conexiones de IA de una organización), T-006 (portal del dueño con las keys de
@@ -328,6 +328,24 @@ Ej.: pagó su individual hasta el 15/10 y el 01/10 su empresa lo invita.
 5. Corporativo: empresas, keys de la empresa (T-005), invitaciones de empresa, unificar/separar
 6. Pagos (otro otorgamiento; débito automático a definir)
 ```
+
+**Etapa 1 — hecho (en prueba):**
+
+```text
+migración 0012     plans: vínculo, duración, tope diario, descripción
+                   subscriptions: vence, origen (manual/campaña/invitación/pago), otorgado por, nota
+                   siembra: Individual · propias keys / · Plataforma / · Híbrido
+servicio vigente   effective_service(cuenta): suscripción activa; si no hay o venció →
+                   "Individual · propias keys" (+ aviso "venció" durante 14 días)
+router de IA       BYOK → propias · PLATAFORMA → plataforma · HÍBRIDO → propias y luego
+                   plataforma · dueño → ambas (reemplaza platform_ai_allowed de T-003)
+tope provisorio    pedidos exitosos a la plataforma por cuenta en 24 h (hasta T-049 tokens)
+portal sr.macros   Servicios (alta/edición) + Cuentas y servicios (buscar, otorgar N días, quitar)
+usuario            "Tu servicio" en IA e Inicio: nombre, vence, % de uso de hoy, aviso de vencido
+```
+
+Al vencer, por ahora vuelve a "Individual · propias keys": si tiene keys propias sigue; si
+no, no puede generar clases nuevas pero ve todo lo hecho (solo lectura de hecho).
 
 ### 12. Pendiente de definir más adelante
 

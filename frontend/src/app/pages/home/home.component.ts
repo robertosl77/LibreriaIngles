@@ -8,11 +8,12 @@ import { AuthService } from '../../core/auth.service';
 import { ClassSummary } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { ExamCardComponent } from '../../shared/exam-card.component';
+import { MyServiceComponent } from '../../shared/my-service.component';
 import { STATUS_LABELS, statusChip } from '../../shared/status';
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink, DatePipe, ExamCardComponent],
+  imports: [RouterLink, DatePipe, ExamCardComponent, MyServiceComponent],
   styles: `
     .new-class { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; }
     .setup h2 { margin-bottom: 0.8rem; }
@@ -98,6 +99,8 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
           corrección se reintenta sola. <a routerLink="/app/ia">Ver conexiones</a>
         </div>
       }
+
+      <app-my-service [compact]="true" />
 
       @if (creating()) {
         <p class="banner banner-info small">

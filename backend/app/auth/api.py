@@ -3,13 +3,15 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
 from app.accounts.models import AuthMethod, PlatformRole
-from app.ai.service import candidate_connections
+from app.ai.models import AIConnectionOwnerType, utcnow
+from app.ai.service import LIMIT_WINDOW, ai_sources, candidate_connections, platform_requests
 from app.auth import service
 from app.core.config import settings
 from app.core.deps import CurrentStudy, DbSession
 from app.core.security import create_access_token
 from app.curriculum.service import CEFR_LEVELS, available_levels
 from app.learning.models import ClassSession, ClassSessionStatus
+from app.subscriptions.service import effective_service
 
 router = APIRouter(tags=["auth"])
 
@@ -90,6 +92,15 @@ def _me_payload(study, db) -> dict:
         ).all()
     )
     ai_connections = candidate_connections(db, account, include_backoff=True)
+    service = effective_service(db, account)
+    uses_own, uses_platform = ai_sources(db, account)
+    service_payload = service.payload()
+    service_payload["usesOwnKeys"] = uses_own
+    service_payload["usesPlatform"] = uses_platform
+    if service.daily_request_limit is not None:
+        service_payload["platformRequests24h"] = platform_requests(
+            db, account.id, since=utcnow() - LIMIT_WINDOW
+        )
     return {
         "account": {
             "id": account.id,
@@ -114,13 +125,17 @@ def _me_payload(study, db) -> dict:
         "ai": {
             "connections": len(ai_connections),
             "available": sum(1 for c in ai_connections if c.is_usable),
+            "own": sum(1 for c in ai_connections if c.owner_type == AIConnectionOwnerType.ACCOUNT),
         },
+        "service": service_payload,
     }
 
 
 @router.get("/me")
 def me(study: CurrentStudy, db: DbSession) -> dict:
-    return _me_payload(study, db)
+    payload = _me_payload(study, db)
+    db.commit()  # persiste vencimientos perezosos del servicio
+    return payload
 
 
 @router.put("/me/level")
