@@ -1587,6 +1587,11 @@ fonética en un servicio aparte. Windows/local: OpenPronounce requiere espeak-ng
    (local) para no depender de red.
 4. PostgreSQL en lugar de SQLite, HTTPS (necesario para el micrófono) y T-008 (configuración
    de producción).
+5. **Al pasar a PostgreSQL, revisar concurrencia de campañas** (T-004 etapa 2, revisión de
+   Claude 2026-10-02): si dos pedidos simultáneos (login + `/me`) aplican la misma campaña a la
+   misma cuenta, la restricción única `uq_campaign_grant_account` hace fallar el segundo con
+   `IntegrityError` (error 500) en vez de ignorarlo. En SQLite no pasa porque serializa las
+   escrituras. Resolver con savepoint + capturar la violación de unicidad como "ya otorgada".
 
 ---
 
@@ -2512,6 +2517,78 @@ Queda abierto cuál (o cuáles) y cómo se calcula el monto en cada caso.
 
 ---
 
+
+---
+
+## T-061 — Estado visual claro para conexiones de IA activas y pausadas
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+
+Objetivo: mejorar la lectura visual del estado de las conexiones de IA para que una conexión
+**activa/disponible** y una conexión **pausada/inactiva** se distingan inmediatamente por color y
+tratamiento visual, sin depender únicamente del texto del estado.
+
+Alcance:
+
+1. Aplicar el criterio visual en todos los lugares donde se administren o activen conexiones de IA,
+   tanto para conexiones individuales del usuario como para conexiones de la plataforma.
+2. Mantener visibles los estados actuales y sus acciones (`Pausar`, `Activar`, etc.), pero sumar
+   un código visual consistente que permita identificar rápidamente si la conexión está activa o
+   pausada.
+3. Reutilizar los estilos/chips existentes cuando sea posible y mantener coherencia con el resto de
+   estados visuales de la aplicación.
+4. Definir colores con contraste suficiente y sin depender exclusivamente del color para transmitir
+   el estado.
+5. Verificar el resultado en las pantallas de conexiones individuales y en el portal del
+   PLATFORM_OWNER.
+
+**Criterio:** al recorrer cualquier listado de conexiones de IA debe poder distinguirse de forma
+inmediata cuáles están activas y cuáles están pausadas, conservando además el texto explícito del
+estado.
+
+
+---
+
+## T-062 — Enriquecer el selector de modelos IA con atributos útiles
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Relación:** T-022 (selector de modelos IA), T-061 (claridad visual de conexiones)
+
+Objetivo: hacer que la lista de modelos de cada proveedor ayude realmente a elegir un motor y no
+muestre solamente nombre + identificador técnico cuando ambos aportan prácticamente la misma
+información.
+
+Alcance:
+
+1. Revisar qué metadatos entrega actualmente la API de cada proveedor al listar modelos
+   (OpenAI, Gemini, Anthropic y los que se incorporen después).
+2. Si la API oficial expone atributos útiles, mostrarlos de forma breve junto al modelo. Ejemplos:
+   - velocidad / latencia relativa;
+   - costo o categoría de costo;
+   - capacidad de audio;
+   - capacidades relevantes como multimodalidad, razonamiento u otras categorías oficiales.
+3. No inventar clasificaciones ni mantener manualmente etiquetas que puedan quedar obsoletas si el
+   proveedor no las entrega o no existe una fuente confiable.
+4. Si un proveedor devuelve únicamente `id` / nombre sin metadata útil, presentar una opción limpia:
+   evitar mostrar de forma redundante un nombre amigable y un identificador prácticamente iguales.
+   El ID técnico puede quedar como dato secundario cuando realmente ayude a distinguir versiones.
+5. Mantener una estructura extensible para que cada proveedor pueda exponer distintos atributos sin
+   obligar a que todos tengan exactamente la misma metadata.
+6. Aplicar el resultado tanto al alta como a la edición de conexiones individuales y de plataforma,
+   reutilizando el mismo selector/componente cuando corresponda.
+7. Revisar especialmente la identificación de modelos compatibles con audio: si esa capacidad puede
+   conocerse por modelo mediante información oficial, reflejarla en el selector; si solo se conoce a
+   nivel proveedor, no atribuirla falsamente a cada modelo.
+
+**Estado actual a revisar:** el backend normaliza hoy la respuesta de modelos a `id` + `label`,
+por lo que cualquier metadata adicional del proveedor se descarta antes de llegar al frontend.
+
+**Criterio:** el selector debe aportar información útil para elegir modelo cuando esa información
+exista de forma confiable; cuando no exista, debe mantenerse simple y sin duplicar texto ni fabricar
+atributos.
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
@@ -2527,6 +2604,34 @@ Para continuar probando la aplicación sin frenar el MVP:
 8. T-004 / T-005 al comenzar planes y B2B
 9. T-007 antes de producción pública
 ```
+
+---
+
+## T-063 — Quitar el borrado físico de cuentas (DEV) antes de publicar
+
+**Prioridad:** P2 — Media (hacerlo cuando el proyecto esté avanzado, antes de publicar)  
+**Estado:** Pendiente (pedido de Roberto, 2026-10-02)  
+**Relación:** T-004 etapa 2 (campañas: el botón se agregó para repetir pruebas de primer login),
+T-038 (publicación), T-008 (configuración de producción), T-050 (retención y borrado de datos)
+
+Situación: el portal de sr.macros tiene **"Eliminar cuenta (DEV)"** (`DELETE
+/platform/accounts/{id}/dev-purge`), que borra físicamente una cuenta y todos sus datos. Se
+habilita cuando `APP_ENV` es local/dev/test, y **el valor por defecto de `APP_ENV` es `local`**:
+si en producción falta esa variable, el botón queda activo y permite borrar cuentas reales
+(solo sr.macros lo ve, pero un descuido de configuración o una sesión robada alcanzan).
+
+Decisión de Roberto: no parchearlo ahora, sino **resolverlo de forma definitiva** más adelante:
+
+```text
+Opción A  eliminar la acción (endpoint + botón) y usar una base de prueba descartable o un
+          script de desarrollo fuera de la app
+Opción B  mantenerla solo detrás de un permiso explícito (ej. DEV_ACCOUNT_PURGE_ENABLED=true),
+          apagado por defecto, y nunca disponible en producción aunque falte APP_ENV
+```
+
+Criterio de aceptación: en una instalación de producción, con o sin `APP_ENV` configurado, no
+existe forma de borrar físicamente una cuenta desde la app. El borrado real de datos queda a
+cargo de la política de retención de T-050.
 
 ---
 
