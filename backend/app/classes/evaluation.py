@@ -314,6 +314,42 @@ def _merge_secondary(result: dict, item: dict) -> None:
     result["secondarySkillResults"] = list(current.values())
 
 
+def _surface_normalize(value: str) -> str:
+    return " ".join(value.replace("’", "'").split())
+
+
+def _orthography_primary(exercise: Exercise, answer: str) -> Evaluation | None:
+    """Capitalización, puntuación y apóstrofes necesitan comparar la forma escrita, no solo significado."""
+    key = exercise.skill_key or ""
+    if ".writing.orthography." not in key or key.endswith(".basic_spelling"):
+        return None
+    accepted = _accepted(exercise)
+    if not accepted:
+        return None
+    surface = _surface_normalize(answer)
+    if surface in {_surface_normalize(item) for item in accepted}:
+        return Evaluation(EvaluationSource.RULE_MATCH, _rule_correct(exercise), 100.0)
+
+    # Si las palabras son correctas pero falla justo la convención ortográfica objetivo,
+    # conserva evidencia parcial en lugar de convertirlo en un error gramatical.
+    if any(normalize_spoken(answer) == normalize_spoken(item) for item in accepted):
+        result = {
+            "result": "partially_correct",
+            "conceptResults": [
+                {"concept": concept, "status": "partially_correct", "score": 60}
+                for concept in exercise.expected_concepts or ["orthography"]
+            ],
+            "errors": [],
+            "correctAnswer": accepted[0],
+            "feedback": "El contenido está bien, pero revisá la convención ortográfica que practica este ejercicio.",
+            "suggestions": [
+                {"type": "MECHANICS_NOTE", "text": "Revisá mayúsculas, puntuación o apóstrofes según la consigna."}
+            ],
+        }
+        return Evaluation(EvaluationSource.RULE_MATCH, result, 60.0)
+    return Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0)
+
+
 def _add_mechanics_evidence(exercise: Exercise, answer: str, result: dict, *, spoken: bool) -> dict:
     """Capitalización/puntuación observables: evidencia curricular, sin tocar la nota principal."""
     if spoken or not answer.strip() or not exercise.response_mode or exercise.response_mode.value != "WRITE":
@@ -554,6 +590,11 @@ def evaluate(
     if not normalized:
         result = _rule_incorrect(exercise, "")
         return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, result, 0.0), spoken=spoken)
+
+    if not spoken:
+        orthography = _orthography_primary(exercise, answer)
+        if orthography is not None:
+            return _finish(exercise, answer, orthography, spoken=False)
 
     if exercise.evaluation_mode != EvaluationMode.AI:
         if normalized in _accepted_normalized(exercise, normalize):
