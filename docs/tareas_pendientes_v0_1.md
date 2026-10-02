@@ -122,8 +122,22 @@ porque puede introducir cambios incompatibles.
 ## T-003 — Ajustar el router de IA al alcance actual BYOK
 
 **Prioridad:** P1 — Alta  
-**Estado:** Pendiente  
+**Estado:** Resuelta (PR #23 a `develop`) · Claude  
 **Bloquea prueba local:** No
+
+Resolución (2026-10-01): hasta ahora **cualquier** cuenta sin conexiones propias usaba las de
+la plataforma (las del dueño). Ahora:
+
+```text
+usuario común   → solo sus conexiones propias (BYOK)
+PLATFORM_OWNER  → las suyas + las de la plataforma
+membresía paga  → (T-004) la habilitará; único punto a cambiar: platform_ai_allowed()
+```
+
+- `app/ai/service.py`: `platform_ai_allowed(account)` decide si la cuenta ve conexiones de
+  plataforma; lo usan generación, corrección, audio y el contador de IA del inicio.
+- Un usuario nuevo sin IA propia ve "Conectá una IA" y no puede crear clases hasta cargar la suya.
+- Los tests de topes de consumo (T-006) se mantienen simulando una membresía.
 
 El router actual considera conexiones:
 
@@ -884,6 +898,7 @@ T-039 Motor de pronunciación preciso OpenPronounce (futuro, rama archivo/t-027-
 T-043 Calibrar la corrección de escritura libre según el nivel (Claude)
 T-044 Apelación con justificación escrita o grabada (Claude)
 T-046 v2 Grabación de Speaking: corte más rápido y sin "Confirmar respuesta" (Claude)
+T-047 Avisos claros cuando no hay IA y reintento al entrar a la clase (Claude)
 ```
 
 Referencias: documento funcional v0.3 §4.1, §5, §8, §15, §16, §17, §17.1, §39, §41 (Audio), §42 (Audio).
@@ -1689,6 +1704,29 @@ Resolución:
 3. "Volver a grabar" sobre una respuesta ya guardada registra la señal `speakRetakes`
    (`POST …/signals` con `kind: "retake"`); el resumen de esfuerzo muestra "grabaste tu respuesta
    N veces". Más de 1 regrabación marca Speaking como asistido, sin bajar la nota.
+
+---
+
+## T-047 — Avisos claros cuando no hay IA y reintento al entrar a la clase
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Responsable:** Claude  
+**Relación:** T-003 (cada usuario usa solo su IA propia)
+
+Detectado al probar T-003 (2026-10-01) con un usuario con 2 APIs propias, una caída y otra sin saldo.
+Lo que ya funciona bien: las respuestas se guardan, lo que no necesita IA se corrige igual, el resto
+queda "Esperando corrección" y cada API queda en espera (caída 5 min, sin saldo 60 min).
+
+Problemas:
+
+1. **Mensaje sin motivo:** al pedir una clase nueva dice solo "No hay conexiones de IA disponibles."
+   (las APIs en espera ni siquiera se listan). Debe decir por qué y cuándo:
+   `Gemini mía: proveedor caído (se reintenta en 5 min) · OpenAI mía: sin saldo (cargá crédito o agregá otra API)`.
+2. **Promesa incumplida:** el cartel de una clase "Esperando corrección" dice "se reintenta
+   automáticamente cuando vuelvas a entrar", pero eso solo ocurre entrando por el Inicio; entrando
+   directo a la clase queda pendiente aunque la IA ya funcione. Al abrir la clase, si hay IA
+   disponible, debe corregir sola.
 
 ---
 

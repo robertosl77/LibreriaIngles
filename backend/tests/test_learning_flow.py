@@ -200,7 +200,64 @@ def test_platform_connections_only_for_platform_owner(client) -> None:
         headers=owner,
     )
     assert response.status_code == 201
-    # Un usuario común sin conexiones propias puede usar la de plataforma.
+    # T-003: un usuario común sin conexiones propias NO usa la IA de la plataforma.
     client.put(f"{API}/me/level", json={"level": "A1"}, headers=headers)
     klass = client.post(f"{API}/classes", headers=headers).json()
-    assert klass["status"] == "READY"
+    assert klass["status"] == "GENERATION_FAILED"
+    assert client.get(f"{API}/me", headers=headers).json()["ai"]["connections"] == 0
+    # El dueño sí la usa.
+    client.put(f"{API}/me/level", json={"level": "A1"}, headers=owner)
+    assert client.post(f"{API}/classes", headers=owner).json()["status"] == "READY"
+
+
+def test_own_key_without_quota_never_falls_back_to_platform(client) -> None:
+    """T-003: si la API propia se queda sin saldo, NO se usa la de la plataforma."""
+    owner = login(client, "owner@example.com")
+    assert client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Plataforma", "model": "mock", "scope": "platform"},
+        headers=owner,
+    ).status_code == 201
+
+    user = login(client, "user@example.com")
+    client.put(f"{API}/me/level", json={"level": "A1"}, headers=user)
+    client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Mía", "model": "mock-fail-quota", "priority": 1},
+        headers=user,
+    )
+    # Generar: falla la propia y la clase queda pendiente (reintentable), sin usar la plataforma.
+    klass = client.post(f"{API}/classes", headers=user).json()
+    assert klass["status"] == "GENERATION_FAILED"
+    assert "Plataforma" not in (klass.get("generatedBy") or "")
+    # Reintento con la key todavía sin saldo: tampoco cae en la plataforma.
+    retry = client.post(f"{API}/classes/{klass['id']}/retry-generation", headers=user)
+    assert retry.json()["status"] == "GENERATION_FAILED"
+    # La plataforma no registró ningún uso de este usuario.
+    usage = client.get(f"{API}/platform/overview", headers=owner).json()
+    assert all(row["email"] != "user@example.com" for row in usage["topAccounts24h"])
+    assert usage["last24h"]["platform"]["requests"] == 0
+
+
+def test_every_ai_path_uses_the_same_byok_rule(client) -> None:
+    """Generar, corregir, audio y el contador del inicio eligen conexiones con la misma función."""
+    from sqlalchemy import select as sa_select
+
+    from app.accounts.models import Account
+    from app.ai.service import audio_connections, candidate_connections
+    from app.db import SessionLocal
+
+    owner = login(client, "owner@example.com")
+    client.post(f"{API}/ai/connections",
+                json={"provider": "MOCK", "name": "Plataforma", "model": "mock", "scope": "platform"},
+                headers=owner)
+    user = login(client, "user@example.com")
+    client.post(f"{API}/ai/connections",
+                json={"provider": "MOCK", "name": "Mía", "model": "mock"}, headers=user)
+    with SessionLocal() as db:
+        u = db.scalar(sa_select(Account).where(Account.email == "user@example.com"))
+        o = db.scalar(sa_select(Account).where(Account.email == "owner@example.com"))
+        for include_backoff in (False, True):
+            assert [c.name for c in candidate_connections(db, u, include_backoff=include_backoff)] == ["Mía"]
+            assert "Plataforma" in [c.name for c in candidate_connections(db, o, include_backoff=include_backoff)]
+        assert "Plataforma" not in [c.name for c in audio_connections(db, u, include_backoff=True)]

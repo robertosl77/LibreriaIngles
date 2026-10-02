@@ -109,7 +109,8 @@ class MockProvider:
         if exercise.get("type") == "short_writing":
             words = len(answer.split())
             ok = words >= 6
-            score = 85 if ok else 40
+            # Puntaje fino por concepto (T-043): una respuesta bien hecha vale 100.
+            score = 100 if ok else 40
             return {
                 "result": "correct" if ok else "partially_correct",
                 "scoreSuggested": score,
