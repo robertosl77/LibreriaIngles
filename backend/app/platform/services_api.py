@@ -10,8 +10,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 
 from app.accounts.models import Account, PlatformRole
+from app.accounts.purge import purge_account_completely
 from app.ai.models import AIConnection, AIConnectionOwnerType, utcnow
 from app.ai.service import LIMIT_WINDOW, platform_requests
+from app.core.config import settings
 from app.core.deps import DbSession
 from app.platform.api import PlatformOwner
 from app.subscriptions.models import (
@@ -129,6 +131,10 @@ def _account_out(db, account: Account) -> dict:
         "isPlatformOwner": account.platform_role == PlatformRole.PLATFORM_OWNER,
         "createdAt": account.created_at,
         "firstLoginAt": account.first_login_at,
+        "devPurgeAllowed": (
+            settings.dev_account_purge_allowed
+            and account.platform_role != PlatformRole.PLATFORM_OWNER
+        ),
         "ownConnections": int(own_keys or 0),
         "platformRequests24h": platform_requests(db, account.id, since=utcnow() - LIMIT_WINDOW),
         "service": service.payload(),
@@ -180,3 +186,23 @@ def revoke(account_id: int, _: PlatformOwner, db: DbSession) -> dict:
     db.commit()
     return _account_out(db, account)
 
+
+
+@router.delete("/accounts/{account_id}/dev-purge", status_code=status.HTTP_204_NO_CONTENT)
+def dev_purge_account(account_id: int, _: PlatformOwner, db: DbSession) -> None:
+    """Borra físicamente una cuenta de prueba. Disponible solo en local/dev/test."""
+    if not settings.dev_account_purge_allowed:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No disponible.")
+
+    account = _account(db, account_id)
+    if (
+        account.platform_role == PlatformRole.PLATFORM_OWNER
+        or account.email.lower() in settings.platform_owner_email_set
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "La cuenta propietaria de la plataforma no se puede eliminar.",
+        )
+
+    purge_account_completely(db, account)
+    db.commit()
