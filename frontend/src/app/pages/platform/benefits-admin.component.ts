@@ -10,7 +10,7 @@ import {
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
-import { ActiveToggleComponent } from './active-toggle.component';
+import { ActiveToggleComponent } from '../../shared/ui/active-toggle.component';
 
 function emptyDraft(serviceId: number | null): PlatformBenefitDraft {
   return {
