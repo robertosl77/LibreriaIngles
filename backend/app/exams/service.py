@@ -381,7 +381,7 @@ def finalize_exam(db: Session, session: ClassSession) -> dict:
                 holder_name=holder_name(account),
                 level=session.target_level,
                 score=score,
-                area_scores={a["name"]: a["score"] for a in areas},
+                area_scores={a["name"]: a["score"] for a in areas} | {d["name"]: d["score"] for d in dimensions},
             )
         )
     db.commit()
