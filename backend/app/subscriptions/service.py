@@ -3,8 +3,9 @@
 Modelo (docs/tareas_pendientes_v0_1.md, T-004):
 - VÍNCULO: personal (sin empresa) o corporativo (vía una empresa). Se deduce, no se elige.
 - FUENTE DE IA: BYOK (propias keys) | PLATAFORMA (keys de sr.macros) | HÍBRIDO (propias primero).
-- SERVICIO = vínculo + fuente (+ duración, tope, costo futuro). Lo otorga sr.macros (etapa 1),
-  una campaña (etapa 2), una invitación (etapa 3) o un pago (futuro).
+- SERVICIO = vínculo + fuente + capacidades/límites. No define vigencia.
+- BENEFICIO = servicio + duración. Es la única capa que define por cuánto tiempo se otorga.
+  Lo aplica sr.macros manualmente, una campaña, una invitación o un pago futuro.
 
 Sin servicio otorgado vigente, la cuenta es "Individual · propias keys" (personal + BYOK): sigue
 usando sus propias API keys, como hasta ahora. Cuando vence un servicio otorgado, vuelve a eso.
@@ -204,13 +205,12 @@ def grant_service(
     """Otorga un servicio a la cuenta. Reemplaza al que tuviera vigente."""
     revoke_service(db, account)
     now = utcnow()
-    duration = days if days is not None else plan.duration_days
     subscription = Subscription(
         plan_id=plan.id,
         account_id=account.id,
         status=SubscriptionStatus.ACTIVE,
         started_at=now,
-        expires_at=now + timedelta(days=duration) if duration else None,
+        expires_at=now + timedelta(days=days) if days else None,
         origin=origin,
         granted_by_account_id=granted_by.id if granted_by else None,
         note=note,

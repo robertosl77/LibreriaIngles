@@ -49,8 +49,13 @@ def seed_benefits(db: Session) -> None:
     db.flush()
 
 
-def benefit_duration(benefit: Benefit, plan: Plan) -> int | None:
-    return benefit.duration_days if benefit.duration_days is not None else plan.duration_days
+def benefit_duration(benefit: Benefit, plan: Plan | None = None) -> int | None:
+    """Duración definida únicamente por el beneficio.
+
+    `plan` se mantiene temporalmente en la firma para no duplicar cambios en los consumidores;
+    ya no participa de la decisión.
+    """
+    return benefit.duration_days
 
 
 def benefit_summary(benefit: Benefit, plan: Plan) -> str:

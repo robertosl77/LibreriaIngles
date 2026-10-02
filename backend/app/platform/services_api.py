@@ -1,8 +1,8 @@
-"""Portal del PLATFORM_OWNER: catálogo de servicios y asignación a cuentas (T-004, etapa 1).
+"""PLATFORM_OWNER: catálogo de servicios y asignación manual de beneficios (T-004).
 
-sr.macros define servicios (vínculo × fuente de IA, duración y tope) y se los otorga a mano a
-una cuenta, por N días o sin vencimiento. Campañas (etapa 2) e invitaciones (etapa 3) usarán
-el mismo `grant_service`.
+Un Servicio define capacidades (vínculo × fuente de IA + límites). La duración vive únicamente en
+Benefit. Los otorgamientos manuales, campañas e invitaciones aplican un Benefit y terminan en
+`grant_service`.
 """
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -13,6 +13,8 @@ from app.accounts.models import Account, PlatformRole
 from app.accounts.purge import purge_account_completely
 from app.ai.models import AIConnection, AIConnectionOwnerType, utcnow
 from app.ai.service import LIMIT_WINDOW, platform_requests
+from app.benefits.models import Benefit
+from app.benefits.service import apply_service_benefit
 from app.core.config import settings
 from app.core.deps import DbSession
 from app.platform.api import PlatformOwner
@@ -21,14 +23,10 @@ from app.subscriptions.models import (
     Plan,
     ServiceLinkType,
     Subscription,
+    SubscriptionOrigin,
     SubscriptionStatus,
 )
-from app.subscriptions.service import (
-    effective_service,
-    grant_service,
-    revoke_service,
-    seed_services,
-)
+from app.subscriptions.service import effective_service, revoke_service, seed_services
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 
@@ -39,16 +37,13 @@ class ServiceIn(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     source: AISource
     linkType: ServiceLinkType = ServiceLinkType.PERSONAL
-    durationDays: int | None = Field(default=None, ge=1, le=3650)
     dailyRequestLimit: int | None = Field(default=None, ge=1, le=100000)
     description: str | None = Field(default=None, max_length=300)
     active: bool = True
 
 
-class GrantIn(BaseModel):
-    serviceId: int
-    days: int | None = Field(default=None, ge=1, le=3650)
-    note: str | None = Field(default=None, max_length=200)
+class GrantBenefitIn(BaseModel):
+    benefitId: int
 
 
 def _service_out(db, plan: Plan) -> dict:
@@ -63,7 +58,6 @@ def _service_out(db, plan: Plan) -> dict:
         "name": plan.name,
         "source": plan.ai_source.value,
         "linkType": plan.link_type.value,
-        "durationDays": plan.duration_days,
         "dailyRequestLimit": plan.daily_request_limit,
         "description": plan.description,
         "active": plan.active,
@@ -74,13 +68,10 @@ def _service_out(db, plan: Plan) -> dict:
 def _apply(plan: Plan, payload: ServiceIn) -> None:
     if payload.linkType == ServiceLinkType.CORPORATE:
         # El vínculo corporativo llega con las empresas (T-004 etapa 5 / T-005).
-        raise HTTPException(
-            422, "Los servicios corporativos llegan con empresas."
-        )
+        raise HTTPException(422, "Los servicios corporativos llegan con empresas.")
     plan.name = payload.name.strip()
     plan.ai_source = payload.source
     plan.link_type = payload.linkType
-    plan.duration_days = payload.durationDays
     plan.daily_request_limit = payload.dailyRequestLimit
     plan.description = (payload.description or "").strip() or None
     plan.active = payload.active
@@ -166,15 +157,41 @@ def _account(db, account_id: int) -> Account:
     return account
 
 
-@router.post("/accounts/{account_id}/service")
-def grant(account_id: int, payload: GrantIn, owner: PlatformOwner, db: DbSession) -> dict:
+@router.post("/accounts/{account_id}/benefit")
+def grant_benefit(
+    account_id: int,
+    payload: GrantBenefitIn,
+    owner: PlatformOwner,
+    db: DbSession,
+) -> dict:
+    """Otorgamiento manual: el OWNER elige un Benefit, nunca servicio + días por separado."""
     account = _account(db, account_id)
-    plan = db.get(Plan, payload.serviceId)
-    if plan is None or not plan.active:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servicio inexistente o inactivo.")
-    grant_service(
-        db, account, plan, granted_by=owner, days=payload.days, note=(payload.note or None)
+    benefit = db.get(Benefit, payload.benefitId)
+    if (
+        benefit is None
+        or benefit.organization_id is not None
+        or not benefit.active
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Beneficio inexistente o inactivo.")
+
+    plan = db.get(Plan, benefit.plan_id)
+    if plan is None or not plan.active or plan.link_type != ServiceLinkType.PERSONAL:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El servicio del beneficio no está disponible.")
+
+    result = apply_service_benefit(
+        db,
+        benefit,
+        account,
+        granted_by=owner,
+        origin=SubscriptionOrigin.MANUAL,
+        note=f"Otorgamiento manual · beneficio #{benefit.id}: {benefit.name}",
     )
+    if not result.applied:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            result.error or "El beneficio no pudo aplicarse.",
+        )
+
     db.commit()
     return _account_out(db, account)
 
@@ -185,7 +202,6 @@ def revoke(account_id: int, _: PlatformOwner, db: DbSession) -> dict:
     revoke_service(db, account)
     db.commit()
     return _account_out(db, account)
-
 
 
 @router.delete("/accounts/{account_id}/dev-purge", status_code=status.HTTP_204_NO_CONTENT)

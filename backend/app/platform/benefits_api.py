@@ -51,7 +51,6 @@ def _out(db: DbSession, benefit: Benefit) -> dict:
         "serviceId": benefit.plan_id,
         "serviceName": plan.name if plan else "Servicio eliminado",
         "durationDays": benefit.duration_days,
-        "effectiveDurationDays": benefit_duration(benefit, plan) if plan else benefit.duration_days,
         "conflictPolicy": benefit.conflict_policy.value,
         "active": benefit.active,
         "usedByCampaigns": int(campaigns),

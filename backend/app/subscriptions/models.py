@@ -42,7 +42,7 @@ class SubscriptionStatus(str, Enum):
 
 
 class Plan(Base):
-    """Servicio del catálogo (T-004): vínculo × fuente de IA (+ duración, tope, costo futuro)."""
+    """Servicio del catálogo (T-004): vínculo × fuente de IA + capacidades/límites."""
 
     __tablename__ = "plans"
 
@@ -59,7 +59,6 @@ class Plan(Base):
     link_type: Mapped[ServiceLinkType] = mapped_column(
         SqlEnum(ServiceLinkType, native_enum=False), default=ServiceLinkType.PERSONAL
     )
-    duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Tope provisorio de pedidos a la IA de la plataforma por día (hasta tener tokens, T-049).
     daily_request_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     description: Mapped[str | None] = mapped_column(String(300), nullable=True)
