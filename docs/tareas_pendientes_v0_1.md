@@ -209,7 +209,8 @@ FUENTE DE IA (lo único que elige la persona)
    PLATAFORMA  → las keys de sr.macros
    HÍBRIDO     → las propias primero; si fallan de fondo, las de sr.macros
 
-SERVICIO     = vínculo + fuente + vigencia + tope de tokens + costo (futuro)
+SERVICIO     = vínculo + fuente + capacidades/límites + costo futuro
+BENEFICIO    = servicio + duración/vigencia + política de otorgamiento
 
 OTORGAMIENTO (cómo alguien recibe un servicio)
    PAGO        → lo contrata el cliente (futuro)
@@ -236,8 +237,10 @@ PERSONAL        │ servicio A        │ servicio B          │ servicio C
 CORPORATIVO     │ servicio D        │ servicio E          │ servicio F
 ```
 
-- **Panel de servicios de sr.macros:** crear/editar servicios (nombre, vínculo, fuente, duración,
-  tope de tokens por día, costo futuro). Permite agregar combinaciones nuevas más adelante.
+- **Panel de servicios de sr.macros:** crear/editar servicios (nombre, vínculo, fuente,
+  tope de tokens por día, descripción y costo futuro). **No lleva duración.**
+  La duración pertenece exclusivamente a Beneficio para evitar dos fuentes de verdad.
+  Permite agregar combinaciones nuevas más adelante.
   Nombres iniciales: **Individual** y **Corporativa**.
 - **Costos (futuro):** PLATAFORMA = cuota fija estimada para cubrir los tokens; HÍBRIDO = base +
   uso a demanda de sr.macros, detallado como factura (T-049).
@@ -248,15 +251,17 @@ CORPORATIVO     │ servicio D        │ servicio E          │ servicio F
 
 ```text
 CAMPAÑA
-  servicio     → uno del catálogo (ej. PERSONAL + PLATAFORMA, sin costo, 3 días, tope chico)
+  beneficio    → referencia un Benefit (ej. Plataforma 3 días)
   para quién   → ej. personas registradas a partir de que se activa la campaña
   estado       → activa / pausada / terminada
 ```
 
-- **Panel de campañas de sr.macros.** Una campaña se alimenta de un servicio del catálogo.
-- **La bienvenida es la primera campaña** (no algo fijo en el código): PERSONAL + PLATAFORMA,
-  sin costo, **3 días corridos**, con tope de tokens. Deja probar la app sin saber qué es una API
-  key. Como PedidosYa: cupones a todos al principio; después solo para fidelizar (T-050).
+- **Panel de campañas de sr.macros.** Una campaña referencia un Beneficio; no vuelve a configurar
+  servicio ni días.
+- **La bienvenida es la primera campaña** (no algo fijo en el código): usa el beneficio
+  "Plataforma · 3 días", que a su vez referencia PERSONAL + PLATAFORMA. Deja probar la app sin
+  saber qué es una API key. Como PedidosYa: cupones a todos al principio; después solo para
+  fidelizar (T-050).
 
 ### 4. Invitaciones (un solo motor para plataforma y empresas)
 
@@ -326,6 +331,24 @@ Política conservadora inicial al aplicar un beneficio:
 - mismo servicio vigente → se suman los días;
 - servicio vigente **distinto** → no se reemplaza silenciosamente y el canje no consume cupo;
 - reemplazo/crédito/unificación requieren una política explícita futura (ver sección 10).
+
+**Corrección de frontera de responsabilidades (2026-10-02):** `Plan/Service.duration_days` se elimina.
+Servicio ya no tiene vigencia propia. Si una configuración anterior tenía duración en Servicio, la
+migración 0017 la materializa en Beneficio antes de quitar la columna. Desde ese punto, vacío en
+`Benefit.duration_days` significa explícitamente **sin vencimiento**, no "heredar del servicio".
+
+El otorgamiento manual desde "Cuentas y servicios" también debe elegir un **Beneficio**, no volver a
+pedir Servicio + días. Así los cuatro mecanismos convergen en la misma capa:
+
+```text
+MANUAL ───────┐
+CAMPAÑA ──────┤
+INVITACIÓN ───┼──> BENEFICIO ──> grant_service() ──> Subscription
+PAGO futuro ──┘
+```
+
+Para estados booleanos reutilizar el mismo control visual Activo/Inactivo en Servicios y Beneficios.
+Campañas e Invitaciones conservan controles distintos porque tienen ciclos de vida multietapa.
 
 #### 4.2. Dos modalidades del mismo objeto Invitation
 
@@ -524,7 +547,8 @@ Ej.: pagó su individual hasta el 15/10 y el 01/10 su empresa lo invita.
 **Etapa 1 — Resuelta (PR #26 a `develop`):**
 
 ```text
-migración 0012     plans: vínculo, duración, tope diario, descripción
+migración 0012     plans: vínculo, tope diario, descripción
+corrección 0017     duración retirada de plans; vigencia centralizada en benefits
                    subscriptions: vence, origen (manual/campaña/invitación/pago), otorgado por, nota
                    siembra: Individual · propias keys / · Plataforma / · Híbrido
 servicio vigente   effective_service(cuenta): suscripción activa; si no hay o venció →
@@ -532,7 +556,8 @@ servicio vigente   effective_service(cuenta): suscripción activa; si no hay o v
 router de IA       BYOK → propias · PLATAFORMA → plataforma · HÍBRIDO → propias y luego
                    plataforma · dueño → ambas (reemplaza platform_ai_allowed de T-003)
 tope provisorio    pedidos exitosos a la plataforma por cuenta en 24 h (hasta T-049 tokens)
-portal sr.macros   Servicios (alta/edición) + Cuentas y servicios (buscar, otorgar N días, quitar)
+portal sr.macros   Servicios (capacidades) + Beneficios (servicio + duración)
+                   + Cuentas y servicios (buscar, otorgar beneficio, quitar)
 usuario            "Tu servicio" en IA e Inicio: nombre, vence, % de uso de hoy, aviso de vencido
 ```
 
@@ -552,7 +577,9 @@ seguridad       una falla del motor nunca impide login, /me o /me/level
 **Etapa 3 — En desarrollo/pruebas (`feat/t-004-invitations`):**
 
 ```text
-benefits        definición reusable de servicio + duración + política de conflicto
+benefits        única fuente de verdad para servicio + duración + política de conflicto
+servicios       sin duración; solo capacidades/límites
+manual          Cuentas y servicios otorga benefit_id, no service_id + días
 campañas        pasan a referenciar benefit_id (sin duplicar plan_id + grant_days)
 invitaciones    NAMED u OPEN, token, cupo, vigencia opcional, cancelación/regeneración
 canjes          InvitationRedemption por cuenta; Subscription origin=INVITATION
