@@ -2185,6 +2185,64 @@ Criterios:
 
 ---
 
+
+## T-056 — Tiempo límite configurable para exámenes según duración estimada
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Relación:** T-024 (examen de aprobación de nivel), T-030 (currícula A2 → B2)
+
+Objetivo: cuando se prepare/g genere un examen de nivel, además de sus ejercicios y criterios de
+evaluación debe obtenerse una **duración estimada de resolución** y, a partir de ella, definir un
+**tiempo límite real del examen** con una holgura razonable.
+
+La solución debe servir para A1 y quedar preparada para reutilizarse en los niveles futuros, ya que
+la duración dependerá de la cantidad, tipo y dificultad de ejercicios de cada examen.
+
+Criterios:
+
+1. **Estimación al preparar el examen.**
+   - El proceso que construye/genera el examen debe devolver también una estimación de tiempo de
+     resolución para un alumno del nivel correspondiente.
+   - La estimación debe considerar la estructura real del examen y no ser un valor fijo global.
+2. **Holgura antes del límite.**
+   - El límite no debe ser exactamente la estimación: debe agregarse un margen razonable para evitar
+     penalizar a un alumno por pequeñas variaciones normales de ritmo.
+   - La fórmula concreta de holgura debe quedar centralizada/configurable para poder ajustarla sin
+     rehacer el flujo.
+3. **Redondeo siempre hacia arriba.**
+   - Después de aplicar la holgura, convertir el resultado a bloques redondos de tiempo.
+   - Analizar si conviene trabajar con bloques de **10 o 20 minutos**; en ambos casos el redondeo debe
+     ser siempre hacia arriba.
+   - Ejemplo conceptual: si la estimación más holgura supera un bloque de 40 minutos usando bloques
+     de 20, el límite resultante pasa al siguiente bloque (60 minutos).
+4. **Temporizador visible.**
+   - Al comenzar el examen, mostrar claramente el tiempo disponible y un contador regresivo.
+   - El tiempo debe empezar a correr cuando el intento de examen quede efectivamente iniciado.
+5. **Vencimiento.**
+   - Al llegar a cero, el examen debe cerrarse/enviarse automáticamente con las respuestas que haya
+     hasta ese momento, sin permitir seguir respondiendo fuera de tiempo.
+   - El backend debe ser la autoridad del tiempo para evitar que recargar la página, cambiar el reloj
+     local o manipular el frontend extienda el examen.
+6. **Persistencia y reingreso.**
+   - Guardar inicio y vencimiento del intento para que una recarga o reconexión continúe mostrando el
+     tiempo restante real.
+   - Definir el comportamiento ante una interrupción técnica genuina sin abrir una forma trivial de
+     extender el tiempo.
+7. **Configuración por nivel/examen.**
+   - No asumir que A1, A2, B1, etc. tendrán la misma duración.
+   - Conservar junto al intento el tiempo estimado y el límite finalmente asignado, para auditoría y
+     futuros ajustes.
+8. **Tests.**
+   - Cubrir cálculo de holgura, redondeo al siguiente bloque, vencimiento automático, recarga,
+     reconexión y validación autoritativa en backend.
+
+**Criterio de aceptación:** todo examen de nivel tiene una duración estimada calculada al prepararse y
+un tiempo límite redondeado hacia arriba con margen suficiente; el alumno ve el tiempo restante y el
+intento finaliza automáticamente al vencer, sin poder extenderlo desde el cliente.
+
+---
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
