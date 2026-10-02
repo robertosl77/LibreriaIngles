@@ -307,6 +307,9 @@ export class ApiService {
   finishPlatformCampaign(id: number): Observable<PlatformCampaign> {
     return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns/${id}/finish`, {});
   }
+  deletePlatformCampaign(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/platform/campaigns/${id}`);
+  }
 
   campaignNotices(): Observable<CampaignNotice[]> {
     return this.http.get<CampaignNotice[]>(`${this.base}/campaign-notices`);

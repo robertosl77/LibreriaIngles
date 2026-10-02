@@ -221,7 +221,7 @@ function isoDate(value: string): string | null {
 
           <label class="check-row small">
             <input type="checkbox" name="cStack" [(ngModel)]="form.stackable" />
-            Acumulable con otras campañas. Para combinar dos beneficios, ambas deben permitir acumulación.
+            Acumulable con otras campañas. Para sumar días, ambas deben permitir acumulación y otorgar el MISMO servicio; si son servicios distintos, la segunda no se aplica.
           </label>
 
           <div class="row">
@@ -279,6 +279,8 @@ function isoDate(value: string): string | null {
                 }
                 @if (campaign.status !== 'ENDED') {
                   <button class="btn btn-sm btn-danger" type="button" (click)="finish(campaign)">Terminar</button>
+                } @else {
+                  <button class="btn btn-sm btn-danger" type="button" (click)="deleteCampaign(campaign)">Eliminar</button>
                 }
               </div>
             </article>
@@ -461,6 +463,19 @@ export class CampaignsAdminComponent implements OnInit {
     }
   }
 
+  async deleteCampaign(campaign: PlatformCampaign): Promise<void> {
+    const history = campaign.recipients > 0
+      ? ' Tiene beneficiarios: se ocultará la campaña pero se conservará su historial.'
+      : ' No tiene beneficiarios: se eliminará definitivamente.';
+    if (!confirm('¿Eliminar la campaña "' + campaign.name + '"?' + history)) return;
+    try {
+      await firstValueFrom(this.api.deletePlatformCampaign(campaign.id));
+      this.toast.success('Campaña eliminada.');
+      await this.load();
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    }
+  }
   triggerLabel(trigger: CampaignTrigger): string {
     return trigger === 'FIRST_LOGIN' ? 'Primer login' : trigger === 'LOGIN' ? 'Cada login' : 'Programada';
   }

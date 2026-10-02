@@ -251,14 +251,19 @@ export class HomeComponent implements OnInit {
           await this.auth.refreshMe();
         }
       }
-      const [classes, progress, notices] = await Promise.all([
+      const [classes, progress] = await Promise.all([
         firstValueFrom(this.api.classes()),
-        firstValueFrom(this.api.progress()),
-        firstValueFrom(this.api.campaignNotices())
+        firstValueFrom(this.api.progress())
       ]);
       this.classes.set(classes);
       this.overall.set(progress.overallScore);
-      this.notices.set(notices);
+
+      // Los avisos de campaña son accesorios: si fallan, Inicio debe seguir funcionando.
+      try {
+        this.notices.set(await firstValueFrom(this.api.campaignNotices()));
+      } catch {
+        this.notices.set([]);
+      }
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
