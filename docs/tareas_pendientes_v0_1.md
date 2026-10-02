@@ -2542,6 +2542,48 @@ Alcance:
 inmediata cuáles están activas y cuáles están pausadas, conservando además el texto explícito del
 estado.
 
+
+---
+
+## T-062 — Enriquecer el selector de modelos IA con atributos útiles
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Relación:** T-022 (selector de modelos IA), T-061 (claridad visual de conexiones)
+
+Objetivo: hacer que la lista de modelos de cada proveedor ayude realmente a elegir un motor y no
+muestre solamente nombre + identificador técnico cuando ambos aportan prácticamente la misma
+información.
+
+Alcance:
+
+1. Revisar qué metadatos entrega actualmente la API de cada proveedor al listar modelos
+   (OpenAI, Gemini, Anthropic y los que se incorporen después).
+2. Si la API oficial expone atributos útiles, mostrarlos de forma breve junto al modelo. Ejemplos:
+   - velocidad / latencia relativa;
+   - costo o categoría de costo;
+   - capacidad de audio;
+   - capacidades relevantes como multimodalidad, razonamiento u otras categorías oficiales.
+3. No inventar clasificaciones ni mantener manualmente etiquetas que puedan quedar obsoletas si el
+   proveedor no las entrega o no existe una fuente confiable.
+4. Si un proveedor devuelve únicamente `id` / nombre sin metadata útil, presentar una opción limpia:
+   evitar mostrar de forma redundante un nombre amigable y un identificador prácticamente iguales.
+   El ID técnico puede quedar como dato secundario cuando realmente ayude a distinguir versiones.
+5. Mantener una estructura extensible para que cada proveedor pueda exponer distintos atributos sin
+   obligar a que todos tengan exactamente la misma metadata.
+6. Aplicar el resultado tanto al alta como a la edición de conexiones individuales y de plataforma,
+   reutilizando el mismo selector/componente cuando corresponda.
+7. Revisar especialmente la identificación de modelos compatibles con audio: si esa capacidad puede
+   conocerse por modelo mediante información oficial, reflejarla en el selector; si solo se conoce a
+   nivel proveedor, no atribuirla falsamente a cada modelo.
+
+**Estado actual a revisar:** el backend normaliza hoy la respuesta de modelos a `id` + `label`,
+por lo que cualquier metadata adicional del proveedor se descarta antes de llegar al frontend.
+
+**Criterio:** el selector debe aportar información útil para elegir modelo cuando esa información
+exista de forma confiable; cuando no exista, debe mantenerse simple y sin duplicar texto ni fabricar
+atributos.
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
