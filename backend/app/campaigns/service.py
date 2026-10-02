@@ -87,12 +87,29 @@ def _within_window(campaign: Campaign, now: datetime) -> bool:
     return (starts is None or starts <= now) and (ends is None or now < ends)
 
 
-def _first_login_matches(campaign: Campaign, account: Account) -> bool:
-    """FIRST_LOGIN se decide con hechos persistidos y no con un boolean efímero del request."""
+def _first_login_matches(db: Session, campaign: Campaign, account: Account) -> bool:
+    """FIRST_LOGIN se decide con hechos persistidos y no con un boolean efímero del request.
+
+    Para campañas que ya estaban activas antes de que existiera activated_at, el backfill pudo
+    quedar más tarde que el inicio real. Un beneficio ya otorgado es evidencia inequívoca de que la
+    campaña estaba activa en ese momento, por lo que usamos el grant más antiguo como piso histórico
+    conservador."""
     first_login = _as_utc(account.first_login_at)
     activated = _as_utc(campaign.activated_at)
-    if first_login is None or activated is None or first_login < activated:
+    first_grant = _as_utc(
+        db.scalar(
+            select(func.min(CampaignGrant.applied_at)).where(
+                CampaignGrant.campaign_id == campaign.id
+            )
+        )
+    )
+    activation_floor = activated
+    if first_grant is not None and (activation_floor is None or first_grant < activation_floor):
+        activation_floor = first_grant
+
+    if first_login is None or activation_floor is None or first_login < activation_floor:
         return False
+
     starts = _as_utc(campaign.starts_at)
     ends = _as_utc(campaign.ends_at)
     if starts is not None and first_login < starts:
@@ -178,7 +195,7 @@ def eligible(db: Session, campaign: Campaign, account: Account, *, now: datetime
     now = now or utcnow()
     if not _available_for_account(db, campaign, account, now=now):
         return False
-    if campaign.trigger == CampaignTrigger.FIRST_LOGIN and not _first_login_matches(campaign, account):
+    if campaign.trigger == CampaignTrigger.FIRST_LOGIN and not _first_login_matches(db, campaign, account):
         return False
     eligibility = campaign.eligibility or {"mode": "ALL", "rules": []}
     # Hoy solo ALL/AND. El JSON ya deja espacio para grupos OR cuando se defina su UX.

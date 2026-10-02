@@ -127,6 +127,46 @@ def test_first_login_campaign_reconciles_from_persisted_timestamps(client) -> No
     assert me.json()["service"]["origin"] == "CAMPAIGN"
 
 
+def test_first_login_reconcile_uses_earliest_grant_as_legacy_activation_floor(client) -> None:
+    from datetime import timedelta
+
+    from app.accounts.models import Account
+    from app.campaigns.models import Campaign, CampaignGrant
+    from app.db import SessionLocal
+    from app.subscriptions.models import Subscription
+
+    owner, _ = _owner_and_services(client)
+    welcome = next(row for row in _campaigns(client, owner) if row["code"] == "WELCOME_PLATFORM")
+    activated = client.post(f"{API}/platform/campaigns/{welcome['id']}/activate", headers=owner)
+    assert activated.status_code == 200
+
+    login(client, "proof@example.com")
+
+    missed_headers = login(client, "missed@example.com")
+    with SessionLocal() as db:
+        missed = db.scalar(select(Account).where(Account.email == "missed@example.com"))
+        assert missed is not None
+        missed_grant = db.scalar(
+            select(CampaignGrant).where(
+                CampaignGrant.campaign_id == welcome["id"],
+                CampaignGrant.account_id == missed.id,
+            )
+        )
+        assert missed_grant is not None
+        subscription = db.get(Subscription, missed_grant.subscription_id)
+        db.delete(missed_grant)
+        if subscription is not None:
+            db.delete(subscription)
+
+        campaign = db.get(Campaign, welcome["id"])
+        campaign.activated_at = missed.first_login_at + timedelta(days=1)
+        db.commit()
+
+    me = client.get(f"{API}/me", headers=missed_headers)
+    assert me.status_code == 200
+    assert me.json()["service"]["source"] == "PLATFORM"
+    assert me.json()["service"]["origin"] == "CAMPAIGN"
+
 def test_existing_account_does_not_receive_first_login_campaign_later(client) -> None:
     alice = login(client, "old@example.com")
     owner, _ = _owner_and_services(client)
