@@ -60,6 +60,23 @@ def _ema(scores: list[float], weights: list[float] | None = None) -> float:
     return value
 
 
+SECONDARY_CURRICULAR_WEIGHT = 0.5
+
+
+def secondary_skill_results(result: dict | None) -> list[dict]:
+    return [
+        item for item in (result or {}).get("secondarySkillResults") or []
+        if isinstance(item, dict)
+        and item.get("skillKey")
+        and isinstance(item.get("score"), (int, float))
+        and not isinstance(item.get("score"), bool)
+    ]
+
+
+def secondary_skill_keys(result: dict | None) -> set[str]:
+    return {item["skillKey"] for item in secondary_skill_results(result)}
+
+
 def recompute_skill(
     db: Session,
     *,
@@ -67,13 +84,13 @@ def recompute_skill(
     skill_key: str,
     organization_id: int | None = None,
 ) -> StudySkillProgress:
+    """Recalcula una skill con evidencia principal y evidencia curricular secundaria (T-048)."""
     query = (
-        select(Attempt.score, Attempt.evaluated_at, Attempt.membership_id, Attempt.assistance)
+        select(Attempt, Exercise)
         .join(Exercise, Exercise.id == Attempt.exercise_id)
         .join(ClassSession, ClassSession.id == Exercise.class_session_id)
         .where(
             Attempt.study_profile_id == study_profile_id,
-            Exercise.skill_key == skill_key,
             Attempt.score.is_not(None),
             # El examen de nivel es independiente del progreso de las clases (T-024).
             ClassSession.kind == SessionKind.CLASS,
@@ -83,11 +100,35 @@ def recompute_skill(
     if organization_id is not None:
         query = query.where(Attempt.organization_id == organization_id)
     rows = db.execute(query).all()
-    scores = [float(row.score) for row in rows]
-    weights = [
-        1.0 if (row.assistance or Assistance.NONE) == Assistance.NONE else ASSISTED_WEIGHT
-        for row in rows
-    ]
+
+    evidence_rows: list[dict] = []
+    for attempt, exercise in rows:
+        assisted = (attempt.assistance or Assistance.NONE) != Assistance.NONE
+        if exercise.skill_key == skill_key:
+            evidence_rows.append(
+                {
+                    "score": float(attempt.score),
+                    "weight": ASSISTED_WEIGHT if assisted else 1.0,
+                    "assisted": assisted,
+                    "evaluated_at": attempt.evaluated_at,
+                    "membership_id": attempt.membership_id,
+                }
+            )
+        for item in secondary_skill_results(attempt.evaluation_result):
+            if item["skillKey"] != skill_key or exercise.skill_key == skill_key:
+                continue
+            evidence_rows.append(
+                {
+                    "score": float(item["score"]),
+                    "weight": SECONDARY_CURRICULAR_WEIGHT * (ASSISTED_WEIGHT if assisted else 1.0),
+                    "assisted": assisted,
+                    "evaluated_at": attempt.evaluated_at,
+                    "membership_id": attempt.membership_id,
+                }
+            )
+
+    scores = [row["score"] for row in evidence_rows]
+    weights = [row["weight"] for row in evidence_rows]
 
     progress = db.scalar(
         select(StudySkillProgress).where(
@@ -115,16 +156,17 @@ def recompute_skill(
         delta = score - previous
         trend = "up" if delta >= 5 else "down" if delta <= -5 else "stable"
 
+    assisted_recent = sum(1 for row in evidence_rows[-RECENT_WINDOW:] if row["assisted"])
     progress.score = score
     progress.attempt_count = count
     progress.confidence = _confidence(evidence)
-    progress.assisted_recent = sum(1 for w in weights[-RECENT_WINDOW:] if w < 1.0)
-    progress.status = _status(score, evidence, progress.assisted_recent)
+    progress.assisted_recent = assisted_recent
+    progress.status = _status(score, evidence, assisted_recent)
     progress.trend = trend
-    progress.last_practiced_at = rows[-1].evaluated_at if rows else None
+    progress.last_practiced_at = evidence_rows[-1]["evaluated_at"] if evidence_rows else None
     progress.updated_at = utcnow()
-    if organization_id is not None and rows:
-        progress.membership_id = rows[-1].membership_id
+    if organization_id is not None and evidence_rows:
+        progress.membership_id = evidence_rows[-1]["membership_id"]
     return progress
 
 
@@ -211,6 +253,22 @@ def dashboard(db: Session, study_profile_id: int, level: str) -> dict:
         ),
         key=lambda s: s["score"],
     )[:3]
+    writing = next((area for area in result_areas if area["key"] == "writing"), None)
+    orthography_topic = (
+        next((topic for topic in writing["topics"] if topic["key"] == "orthography"), None)
+        if writing else None
+    )
+    orthography_skills = orthography_topic["skills"] if orthography_topic else []
+    orthography_practiced = [s for s in orthography_skills if s["score"] is not None]
+    orthography_score = _average([s["score"] for s in orthography_practiced])
+    orthography_attempts = sum(s["attemptCount"] for s in orthography_skills)
+    orthography_help = sum(s["assistedRecent"] for s in orthography_skills)
+    orthography_status = (
+        "NOT_STARTED"
+        if orthography_score is None
+        else _status(orthography_score, orthography_attempts, orthography_help)
+    )
+
     return {
         "level": level,
         "overallScore": _average(all_scores),
@@ -218,6 +276,15 @@ def dashboard(db: Session, study_profile_id: int, level: str) -> dict:
         "skillsTotal": len(curriculum.skills),
         "weakest": weakest,
         "areas": result_areas,
+        "orthography": {
+            "name": "Ortografía",
+            "score": orthography_score,
+            "skillsPracticed": len(orthography_practiced),
+            "skillsTotal": len(orthography_skills),
+            "attemptCount": orthography_attempts,
+            "assistedRecent": orthography_help,
+            "status": orthography_status,
+        },
         "abilities": ability_progress(db, study_profile_id, level),
     }
 
