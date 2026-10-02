@@ -90,7 +90,7 @@ Luego proteger `main` para que los cambios entren mediante Pull Request y requie
 
 ## T-002 — Revisar vulnerabilidades npm
 
-**Prioridad:** P1 — Alta  
+**Estado:** Resuelta (PR #28 a `develop`) · Claude  
 **Estado:** Resuelta (PR a `develop`) · Claude
 
 Resolución (2026-10-01): `npm audit` pasó de **29 (2 críticas, 14 altas) a 0**.
