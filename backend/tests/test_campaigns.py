@@ -325,16 +325,20 @@ def test_delete_ended_campaign_without_recipients_is_physical(client) -> None:
     )
     assert response.status_code == 201, response.text
     campaign_id = response.json()["id"]
+    campaign_code = response.json()["code"]
 
     assert client.post(
         f"{API}/platform/campaigns/{campaign_id}/finish", headers=owner
     ).status_code == 200
     deleted = client.delete(f"{API}/platform/campaigns/{campaign_id}", headers=owner)
     assert deleted.status_code == 204, deleted.text
-    assert all(row["id"] != campaign_id for row in _campaigns(client, owner))
 
+    # Primero verificamos el borrado físico. Luego el listado puede sembrar WELCOME_PLATFORM y
+    # SQLite puede reutilizar el mismo id recién liberado, por eso no comparamos solo el id.
     with SessionLocal() as db:
         assert db.get(Campaign, campaign_id) is None
+
+    assert all(row["code"] != campaign_code for row in _campaigns(client, owner))
 
 
 def test_delete_ended_campaign_with_recipients_keeps_grant_history(client) -> None:
