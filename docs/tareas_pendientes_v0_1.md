@@ -594,6 +594,18 @@ email           NAMED queda PENDING hasta implementar T-051
 - Tope inicial de la bienvenida (tokens/día) y máximo de clases abiertas.
 - Unión de cuentas personal/corporativa de una misma persona (¿por DNI?).
 - Débito automático y medios de pago.
+- **Fuentes de IA visibles en Configuración:** aunque hoy `BYOK`, `PLATFORM` e `HYBRID`
+  sean un enum fijo, sr.macros debe tener una sección propia donde pueda ver claramente qué fuentes
+  existen y qué significa cada una. No dejarlas implícitas solamente dentro del formulario de
+  Servicios.
+- **Estrategia de una fuente futura:** no asumir que `HYBRID` siempre será únicamente
+  "propias primero y plataforma si fallan". La futura sección de Fuentes de IA debe permitir
+  evolucionar hacia políticas configurables de reparto/ruteo (por ejemplo 50/50, prioridad,
+  fallback u otras estrategias) sin tener que redefinir el catálogo de Servicios. **No implementar
+  ahora; queda documentado para una etapa posterior.**
+- **Unidades de los límites:** toda pantalla que muestre/configure límites de conexiones debe
+  indicar explícitamente la unidad usada (hoy: cantidad de pedidos en ventana de 24 h; futuro:
+  tokens/costo cuando corresponda) para evitar ambigüedad entre límite total y límite por usuario.
 
 ---
 
