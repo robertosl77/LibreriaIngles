@@ -2287,6 +2287,39 @@ Preguntas abiertas:
 
 ---
 
+
+## T-058 — Integrar Ortografía al mismo nivel visual que las demás áreas de Progreso
+
+**Prioridad:** P3 — Baja  
+**Estado:** Para analizar  
+**Relación:** T-034 (dashboard por habilidad), T-048 (Conversation A1 + ortografía transversal)
+
+En la pantalla de **Progreso**, Ortografía aparece actualmente como un bloque destacado y separado
+de Grammar, Vocabulary, Listening, etc. Esa presentación le da un tratamiento visual especial que no
+corresponde con el criterio funcional acordado.
+
+Objetivo: analizar y ajustar la presentación para que **Ortografía quede al mismo nivel visual que las
+demás áreas/habilidades**, usando el mismo patrón de fila/tarjeta colapsable.
+
+Criterios:
+
+1. Ortografía debe verse como un elemento más del listado principal de progreso, no como un bloque
+   destacado independiente.
+2. Debe reutilizar el mismo patrón visual y de interacción que las demás áreas: título, porcentaje,
+   estado, barra de progreso y posibilidad de expandir/colapsar el detalle cuando corresponda.
+3. Mantener el concepto funcional definido en T-048: Ortografía sigue perteneciendo internamente a
+   Writing, pero puede mostrarse como dimensión visible propia.
+4. Revisar si conviene ubicarla junto a Writing o respetar el orden general actual de habilidades,
+   evitando jerarquías visuales artificiales.
+5. No modificar el cálculo de evidencias ni porcentajes por esta tarea salvo que el análisis detecte
+   una inconsistencia funcional relacionada.
+6. Validar que el cambio mantenga coherencia visual en desktop y resoluciones más angostas.
+
+**Criterio de aceptación:** en Progreso, Ortografía se percibe visualmente como un elemento del mismo
+nivel que Grammar, Vocabulary, Listening y el resto, sin un tratamiento especial separado.
+
+---
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
