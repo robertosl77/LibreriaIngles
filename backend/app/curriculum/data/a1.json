@@ -2428,17 +2428,15 @@
                 "distinguir formas como I'm, don't, isn't y can't"
               ],
               "exerciseTypes": [
-                "fill_blank",
                 "rewrite"
               ],
               "examples": [
                 {
-                  "type": "fill_blank",
-                  "instruction": "Complete with the correct contraction.",
-                  "question": "I ___ from Argentina. (am)",
+                  "type": "rewrite",
+                  "instruction": "Rewrite using a contraction.",
+                  "question": "I am from Argentina.",
                   "acceptedAnswers": [
-                    "'m",
-                    "am"
+                    "I'm from Argentina."
                   ],
                   "commonErrors": [],
                   "expectedConcepts": [
