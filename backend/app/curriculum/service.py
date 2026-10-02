@@ -14,6 +14,7 @@ EXERCISE_TYPES = {
     "reading_multiple_choice",
     "rewrite",
     "short_writing",
+    "conversation",
 }
 
 # Modalidades de presentación (T-025): cualquier tipo puede leerse o escucharse.
