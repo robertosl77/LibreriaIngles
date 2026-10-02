@@ -233,7 +233,12 @@ def select_slots(
     # Si se refuerza Writing, la escritura no se pasa a hablada (lo hablado no es Writing).
     keep_written = {s.key for s in chosen if "WRITING" in focus_keys and s.area_key == "writing"}
     slots = [
-        slot_for(skill, rng, allow_speaking=allow_speaking and skill.key not in keep_written)
+        slot_for(
+            skill,
+            rng,
+            allow_speaking=allow_speaking and skill.key not in keep_written,
+            types=SPEAK_TYPES if skill.key in keep_written else None,
+        )
         for skill in chosen
     ]
     ensure_listening(slots, skills, 2 if "LISTENING" in focus_keys else 1, rng)
