@@ -1993,6 +1993,37 @@ la cuenta real de sr.macros. Elegir proveedor (SMTP propio o servicio transaccio
 ---
 
 
+
+## T-052 — Continuar a la siguiente clase desde el resultado
+
+**Prioridad:** P2 — Media  
+**Estado:** Pendiente  
+**Relación:** T-020 (lección por tema), T-034 (balanceo adaptativo)
+
+Al terminar y corregir una clase, la pantalla de resultado ofrece hoy **“Rehacer esta clase”** y
+**“Volver al inicio”**, pero no permite continuar directamente con el aprendizaje.
+
+Objetivo: agregar una acción **“Continuar a la siguiente clase”** en la pantalla de clase completada,
+sin obligar al alumno a volver al Inicio.
+
+Criterios:
+
+1. Mostrar el botón únicamente cuando la clase esté efectivamente corregida/completada.
+2. Al pulsarlo, reutilizar el flujo normal que determina o genera la próxima clase para el alumno,
+   respetando nivel, refuerzos y adaptación existentes; no asumir que la siguiente clase es
+   simplemente `id + 1`.
+3. Si la próxima clase ya existe, abrirla; si el flujo actual debe generarla, generarla y luego abrirla,
+   evitando duplicados o dobles solicitudes.
+4. Mantener disponibles **“Rehacer esta clase”** y **“Volver al inicio”**.
+5. Cubrir el flujo con tests de frontend y, si la resolución de la próxima clase requiere cambios de
+   API, agregar también los tests de backend correspondientes.
+
+**Criterio de aceptación:** desde el resultado de una clase completada, el alumno puede pasar a su
+próxima clase con una sola acción, usando exactamente las mismas reglas de selección/adaptación que
+el flujo normal de Inicio.
+
+---
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
