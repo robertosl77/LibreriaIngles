@@ -543,6 +543,11 @@ def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: 
         },
     )
     sanitized = _sanitize_ai_result(exercise, result.data)
+    spoken = bool(
+        getattr(exercise, "response_mode", None)
+        and exercise.response_mode.value == "SPEAK"
+    )
+    sanitized = _add_mechanics_evidence(exercise, answer, sanitized, spoken=spoken)
     # Se guarda con la corrección (y en caché) el motor que realmente produjo
     # el resultado; no depende de la configuración actual de la cuenta.
     return {**sanitized, "ai": connection_snapshot(result.connection)}
