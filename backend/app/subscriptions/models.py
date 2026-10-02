@@ -42,7 +42,7 @@ class SubscriptionStatus(str, Enum):
 
 
 class Plan(Base):
-    """Servicio del catálogo (T-004): vínculo × fuente de IA + capacidades/límites."""
+    """Servicio del catálogo (T-004): vínculo × fuente de IA + metadatos comerciales."""
 
     __tablename__ = "plans"
 
