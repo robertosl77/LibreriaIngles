@@ -1587,6 +1587,11 @@ fonética en un servicio aparte. Windows/local: OpenPronounce requiere espeak-ng
    (local) para no depender de red.
 4. PostgreSQL en lugar de SQLite, HTTPS (necesario para el micrófono) y T-008 (configuración
    de producción).
+5. **Al pasar a PostgreSQL, revisar concurrencia de campañas** (T-004 etapa 2, revisión de
+   Claude 2026-10-02): si dos pedidos simultáneos (login + `/me`) aplican la misma campaña a la
+   misma cuenta, la restricción única `uq_campaign_grant_account` hace fallar el segundo con
+   `IntegrityError` (error 500) en vez de ignorarlo. En SQLite no pasa porque serializa las
+   escrituras. Resolver con savepoint + capturar la violación de unicidad como "ya otorgada".
 
 ---
 
@@ -2599,6 +2604,34 @@ Para continuar probando la aplicación sin frenar el MVP:
 8. T-004 / T-005 al comenzar planes y B2B
 9. T-007 antes de producción pública
 ```
+
+---
+
+## T-063 — Quitar el borrado físico de cuentas (DEV) antes de publicar
+
+**Prioridad:** P2 — Media (hacerlo cuando el proyecto esté avanzado, antes de publicar)  
+**Estado:** Pendiente (pedido de Roberto, 2026-10-02)  
+**Relación:** T-004 etapa 2 (campañas: el botón se agregó para repetir pruebas de primer login),
+T-038 (publicación), T-008 (configuración de producción), T-050 (retención y borrado de datos)
+
+Situación: el portal de sr.macros tiene **"Eliminar cuenta (DEV)"** (`DELETE
+/platform/accounts/{id}/dev-purge`), que borra físicamente una cuenta y todos sus datos. Se
+habilita cuando `APP_ENV` es local/dev/test, y **el valor por defecto de `APP_ENV` es `local`**:
+si en producción falta esa variable, el botón queda activo y permite borrar cuentas reales
+(solo sr.macros lo ve, pero un descuido de configuración o una sesión robada alcanzan).
+
+Decisión de Roberto: no parchearlo ahora, sino **resolverlo de forma definitiva** más adelante:
+
+```text
+Opción A  eliminar la acción (endpoint + botón) y usar una base de prueba descartable o un
+          script de desarrollo fuera de la app
+Opción B  mantenerla solo detrás de un permiso explícito (ej. DEV_ACCOUNT_PURGE_ENABLED=true),
+          apagado por defecto, y nunca disponible en producción aunque falte APP_ENV
+```
+
+Criterio de aceptación: en una instalación de producción, con o sin `APP_ENV` configurado, no
+existe forma de borrar físicamente una cuenta desde la app. El borrado real de datos queda a
+cargo de la política de retención de T-050.
 
 ---
 
