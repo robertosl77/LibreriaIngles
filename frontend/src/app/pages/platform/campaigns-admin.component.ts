@@ -163,6 +163,13 @@ function isoDate(value: string): string | null {
                     <option value="EQ">exactamente</option>
                   </select>
                   <input class="input value" type="number" min="0" [name]="'rValue' + i" [(ngModel)]="rule.value" />
+                } @else if (rule.field === 'CREATED_AT') {
+                  <select class="input op" [name]="'rOp' + i" [(ngModel)]="rule.operator">
+                    <option value="GTE">desde</option>
+                    <option value="LTE">hasta</option>
+                    <option value="EQ">exactamente</option>
+                  </select>
+                  <input class="input value" type="datetime-local" [name]="'rValue' + i" [(ngModel)]="rule.value" />
                 } @else {
                   <span class="operator">es</span>
                   @switch (rule.field) {
@@ -184,9 +191,6 @@ function isoDate(value: string): string | null {
                         <option value="PLATFORM">Plataforma</option>
                         <option value="HYBRID">Híbrido</option>
                       </select>
-                    }
-                    @case ('CREATED_AT') {
-                      <input class="input value" type="datetime-local" [name]="'rValue' + i" [(ngModel)]="rule.value" />
                     }
                     @default {
                       <input class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value" placeholder="empresa.com" />
@@ -353,7 +357,13 @@ export class CampaignsAdminComponent implements OnInit {
       name: campaign.name,
       serviceId: campaign.serviceId,
       trigger: campaign.trigger,
-      rules: campaign.rules.map((rule) => ({ ...rule })),
+      rules: campaign.rules.map((rule) => ({
+        ...rule,
+        value:
+          rule.field === 'CREATED_AT' && typeof rule.value === 'string'
+            ? localDate(rule.value)
+            : rule.value
+      })),
       grantDays: campaign.grantDays,
       priority: campaign.priority,
       stackable: campaign.stackable,
