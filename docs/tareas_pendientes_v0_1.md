@@ -167,36 +167,138 @@ No eliminar el modelo PLATFORM/HYBRID; solamente evitar que se active antes de i
 
 ---
 
-## T-004 — Hacer que PLAN/SUBSCRIPTION gobiernen la fuente de IA
+## T-004 — Membresías: qué tiene cada usuario, con qué IA y hasta cuándo
 
-**Prioridad:** P2 — Media  
-**Estado:** Futuro, antes de monetización
+**Prioridad:** P1 — Alta (antes de publicar la app o cobrar)  
+**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · implementación por etapas  
+**Responsable:** Claude  
+**Relación:** T-003 (cada usuario usa solo su IA propia: hoy decide `platform_ai_allowed()`),
+T-005 (conexiones de IA de una organización), T-006 (portal del dueño con las keys de
+plataforma), T-048 (registro de tokens y costo por uso)
 
-Implementar:
+Base existente sin usar (migración inicial): tablas `plans` (con `ai_source` BYOK / PLATFORM /
+HYBRID), `subscriptions` (cuenta u organización, estado, fechas), `organizations`,
+`memberships` (ADMIN/STUDENT) e `invitations`. No hay que inventar el modelo: hay que encenderlo.
 
-```pseudo
-plan = plan_que_cubre(actividad)
+### 1. El modelo: cinco cosas separadas
 
-switch plan.ai_source:
-    BYOK:
-        candidates = ACCOUNT / ORGANIZATION
-    PLATFORM:
-        candidates = PLATFORM
-    HYBRID:
-        candidates = orden_configurado(
-            ACCOUNT,
-            ORGANIZATION,
-            PLATFORM
-        )
-
-router(candidates)
-    -> priority
-    -> active
-    -> failover
-    -> backoff
+```text
+QUÉ tenés        → MEMBRESÍA   individual | corporativa
+CON QUÉ IA       → FUENTE      BYOK | PLATAFORMA | HÍBRIDO
+CÓMO te llegó    → ORIGEN      bienvenida | invitación | pago (futuro)
+HASTA CUÁNDO     → VIGENCIA    desde → hasta (nada es para siempre)
+CUÁNTO           → COSTO       (futuro) por servicio + uso variable
 ```
 
-Esto debe quedar cerrado antes de cobrar planes o asumir costos de IA desde la plataforma.
+**Servicio = cruce de fila (membresía) y columna (fuente).** Cada celda tendrá su costo:
+
+```text
+                │ BYOK              │ PLATAFORMA          │ HÍBRIDO
+                │ (keys propias)    │ (keys de sr.macros) │ (propias → si fallan, sr.macros)
+────────────────┼───────────────────┼─────────────────────┼──────────────────────────────
+INDIVIDUAL      │ servicio A        │ servicio B          │ servicio C
+CORPORATIVA     │ servicio D        │ servicio E          │ servicio F
+```
+
+- **BYOK individual:** las keys que carga la persona.
+- **BYOK corporativa:** las keys que carga **la empresa** para todos sus empleados (la empresa
+  paga la capacitación, no el empleado) → requiere T-005.
+- **PLATAFORMA:** las keys de sr.macros (portal T-006). Costo futuro: cuota mensual fija estimada
+  para no perder con los tokens.
+- **HÍBRIDO:** primero las propias (o las de la empresa); si fallan, las de sr.macros. Costo
+  futuro: base + **uso a demanda** de sr.macros, detallado como en una factura (modelo AWS /
+  "línea libre" del celular).
+
+### 2. Membresía (lo que tiene cada persona)
+
+```text
+membresía = servicio (fila + columna) + vigencia (desde → hasta) + estado + origen + quién paga
+```
+
+- **Vigencia = duración del servicio** (no historial de pagos). Ej.: arranca el 07/10 con una
+  invitación de 7 días → último día 14/10. Una membresía paga es mensual: 07/10 → 07/11.
+- **Quién paga:** individual → la persona; corporativa → la empresa.
+- **Sin pago, se corta:** individual o corporativa, al vencer sin pagar se termina el servicio
+  (como un plan mensual). Débito automático: se verá con los pagos.
+- El historial de pagos/cancelaciones es otra cosa, para cuando existan los pagos.
+- `sr.macros` (PLATFORM_OWNER) no vence nunca.
+
+### 3. Invitación (servicio aparte que otorga una membresía)
+
+```text
+INVITACIÓN
+  quién invita  → sr.macros | una empresa (futuro: un usuario con invitaciones de regalo)
+  qué otorga    → fila (individual / corporativa) + columna (BYOK / plataforma / híbrido)
+  duración      → los días que elija quien invita (7, 30, 90…)
+  costo         → sin costo (cortesía) | tarifa del servicio (cuando haya pagos)
+
+Ej.: sr.macros → amigo:    INDIVIDUAL + PLATAFORMA, 30 días, sin costo
+     Empresa X → empleado:  CORPORATIVA + HÍBRIDO, mensual, la paga la empresa
+```
+
+La invitación **no es** una membresía: es el medio para otorgarla.
+
+### 4. Bienvenida (primera vez que alguien entra)
+
+La bienvenida es un servicio que se otorga automáticamente al primer ingreso:
+
+```text
+nuevo usuario → BIENVENIDA: INDIVIDUAL + PLATAFORMA, pocos días (ej. 3), tope chico de uso
+                (ej. 20 pedidos) → prueba la app sin saber qué es una API key
+             → al vencer: contrata el servicio que corresponda (fila + columna)
+```
+
+Solo la bienvenida usa plataforma con tope; después rige el servicio elegido. Motivo: cargar una
+API key es una barrera enorme para un alumno común; BYOK queda como servicio para técnicos.
+
+### 5. Al vencer
+
+- Puede **ver** su progreso, historial y certificados; **no puede crear clases nuevas** hasta
+  renovar (no se secuestran sus datos).
+- Los datos se conservan **1 año** después del vencimiento, no para siempre.
+
+### 6. Híbrido: cuándo salta a las keys de sr.macros
+
+```text
+falla temporal (caída, red, rate limit)  → NO salta: reintenta con las propias al rato
+falla de fondo (sin saldo, key inválida) → salta a sr.macros
+siempre:
+  · aviso visible: "Tus keys se quedaron sin saldo: estás usando la IA de la plataforma"
+  · tope de gasto mensual elegido por el cliente ("cuenta controlada" del celular)
+  · cada 10-15 min se prueban (ping) las propias para volver a ellas cuando respondan
+```
+
+### 7. Consumo de tokens (T-048)
+
+Se registra en **todas** las configuraciones (BYOK, plataforma e híbrido): cuándo, proveedor,
+modelo, operación (generar clase, corregir ejercicio, transcribir…) y tokens. El cliente ve su
+propio detalle; en híbrido, es la base de lo que se le factura. Necesario antes de vender híbrido.
+
+### 8. Etapas (de a una)
+
+```text
+1. Membresía con vigencia + bienvenida + qué pasa al vencer       (sin pagos)
+   · platform_ai_allowed() pasa a mirar la membresía efectiva
+   · portal de sr.macros: ver y extender membresías a mano
+2. Invitaciones de sr.macros (individual, fuente, días, sin costo)
+3. Registro de tokens y costo por uso (T-048)                       ← antes de vender híbrido
+4. Corporativa (con T-005: keys de la empresa) e invitaciones de empresa
+5. Pagos (otro origen de membresía; débito automático a definir)
+```
+
+### 9. A definir
+
+1. **Nombres comerciales** de las membresías y servicios.
+2. **Usuarios que ya existen** al activar la etapa 1 (ej. robertosl77): ¿qué membresía reciben
+   para no quedar bloqueados? (propuesta: una cortesía con la fuente que usan hoy).
+3. **Bienvenida:** días exactos y tope de pedidos.
+4. **Al año del vencimiento:** ¿se borran los datos, se anonimizan? ¿se avisa antes por email?
+5. **Cómo llega una invitación:** hoy la app no envía emails → ¿link para copiar y pasar a mano
+   al principio, o un servicio de email (dependencia nueva)?
+6. **Varias membresías a la vez** (ej. individual propia + corporativa de su empresa): ¿cuál manda?
+   (propuesta: la corporativa mientras esté vigente).
+7. **Tabla de precios por modelo** para estimar costo con los tokens: la mantiene sr.macros en su
+   portal (los proveedores cambian precios).
 
 ---
 
@@ -899,6 +1001,7 @@ T-043 Calibrar la corrección de escritura libre según el nivel (Claude)
 T-044 Apelación con justificación escrita o grabada (Claude)
 T-046 v2 Grabación de Speaking: corte más rápido y sin "Confirmar respuesta" (Claude)
 T-047 Avisos claros cuando no hay IA y reintento al entrar a la clase (Claude)
+T-048 Registro de tokens y costo por cada uso de IA (Claude)
 ```
 
 Referencias: documento funcional v0.3 §4.1, §5, §8, §15, §16, §17, §17.1, §39, §41 (Audio), §42 (Audio).
@@ -1727,6 +1830,29 @@ Problemas:
    automáticamente cuando vuelvas a entrar", pero eso solo ocurre entrando por el Inicio; entrando
    directo a la clase queda pendiente aunque la IA ya funcione. Al abrir la clase, si hay IA
    disponible, debe corregir sola.
+
+---
+
+## T-048 — Registro de tokens y costo por cada uso de IA
+
+**Prioridad:** P2 — Media (imprescindible antes de vender el servicio híbrido de T-004)  
+**Estado:** Pendiente  
+**Responsable:** Claude  
+**Relación:** T-004 (membresías y facturación), T-006 (consumo en el portal del dueño), T-041
+(proveedor y modelo usados en cada clase)
+
+Hoy cada uso de IA se registra (`ai_usage_events`: cuándo, conexión, cuenta, operación, éxito,
+modelo), pero **sin tokens** y solo lo ve sr.macros.
+
+1. **Averiguar y guardar tokens** por respuesta: OpenAI (`usage.prompt_tokens` /
+   `completion_tokens`), Gemini (`usageMetadata`), Anthropic (`usage.input_tokens` /
+   `output_tokens`). Verificar también en transcripción de audio.
+2. Registrar en **todas** las fuentes: BYOK, plataforma e híbrido.
+3. **Costo estimado:** tokens × precio del modelo (tabla de precios mantenida por sr.macros en
+   su portal).
+4. **Detalle para el cliente**, como una factura:
+   `01/10 22:12 · Gemini (gemini-2.5-flash) · corregir ejercicio · 1.240 tokens · USD 0,0004`
+5. Nunca guardar prompts ni respuestas: solo metadatos y conteos.
 
 ---
 
