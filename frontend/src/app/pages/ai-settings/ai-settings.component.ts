@@ -17,7 +17,12 @@ import { ConnectionsManagerComponent } from '../../shared/connections-manager.co
           <h1>Conexiones de IA</h1>
           <p class="muted">
             Se usan en orden de prioridad (1 = primero). Si una falla o se queda sin cuota, la app
-            pasa sola a la siguiente. Las API keys se guardan cifradas y nunca vuelven al navegador.
+            pasa sola a la siguiente. Las API keys se guardan cifradas.
+            @if (isOwner()) {
+              Como dueño de la plataforma, podés copiarlas explícitamente desde el icono junto a cada credencial.
+            } @else {
+              Una vez guardadas, no vuelven al navegador.
+            }
           </p>
         </div>
       </div>
