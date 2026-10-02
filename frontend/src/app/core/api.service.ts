@@ -19,9 +19,15 @@ import {
   LessonResponse,
   Me,
   ModelOption,
+  InvitationPreview,
+  InvitationRedemption,
   PlatformAccount,
+  PlatformBenefit,
+  PlatformBenefitDraft,
   PlatformCampaign,
   PlatformCampaignDraft,
+  PlatformInvitation,
+  PlatformInvitationDraft,
   PlatformOverview,
   PlatformService,
   PlatformServiceDraft,
@@ -55,12 +61,20 @@ export class ApiService {
     return this.http.get<AuthConfig>(`${this.base}/auth/config`);
   }
 
-  loginGoogle(credential: string): Observable<TokenResponse> {
-    return this.http.post<TokenResponse>(`${this.base}/auth/google`, { credential });
+  loginGoogle(credential: string, invitationToken: string | null = null): Observable<TokenResponse> {
+    return this.http.post<TokenResponse>(`${this.base}/auth/google`, { credential, invitationToken });
   }
 
-  loginDev(email: string, name: string | null): Observable<TokenResponse> {
-    return this.http.post<TokenResponse>(`${this.base}/auth/dev-login`, { email, name });
+  loginDev(
+    email: string,
+    name: string | null,
+    invitationToken: string | null = null
+  ): Observable<TokenResponse> {
+    return this.http.post<TokenResponse>(`${this.base}/auth/dev-login`, {
+      email,
+      name,
+      invitationToken
+    });
   }
 
   me(): Observable<Me> {
@@ -283,6 +297,19 @@ export class ApiService {
     return this.http.delete<void>(`${this.base}/platform/accounts/${accountId}/dev-purge`);
   }
 
+  // Beneficios reutilizables (T-004)
+  platformBenefits(): Observable<PlatformBenefit[]> {
+    return this.http.get<PlatformBenefit[]>(`${this.base}/platform/benefits`);
+  }
+
+  createPlatformBenefit(draft: PlatformBenefitDraft): Observable<PlatformBenefit> {
+    return this.http.post<PlatformBenefit>(`${this.base}/platform/benefits`, draft);
+  }
+
+  updatePlatformBenefit(id: number, draft: PlatformBenefitDraft): Observable<PlatformBenefit> {
+    return this.http.put<PlatformBenefit>(`${this.base}/platform/benefits/${id}`, draft);
+  }
+
   // Campañas (T-004 etapa 2)
   platformCampaigns(): Observable<PlatformCampaign[]> {
     return this.http.get<PlatformCampaign[]>(`${this.base}/platform/campaigns`);
@@ -317,5 +344,41 @@ export class ApiService {
 
   readCampaignNotice(grantId: number): Observable<void> {
     return this.http.post<void>(`${this.base}/campaign-notices/${grantId}/read`, {});
+  }
+
+  // Invitaciones (T-004 etapa 3)
+  platformInvitations(): Observable<PlatformInvitation[]> {
+    return this.http.get<PlatformInvitation[]>(`${this.base}/platform/invitations`);
+  }
+
+  createPlatformInvitation(draft: PlatformInvitationDraft): Observable<PlatformInvitation> {
+    return this.http.post<PlatformInvitation>(`${this.base}/platform/invitations`, draft);
+  }
+
+  regeneratePlatformInvitation(id: number): Observable<PlatformInvitation> {
+    return this.http.post<PlatformInvitation>(
+      `${this.base}/platform/invitations/${id}/regenerate-token`,
+      {}
+    );
+  }
+
+  cancelPlatformInvitation(id: number): Observable<PlatformInvitation> {
+    return this.http.post<PlatformInvitation>(
+      `${this.base}/platform/invitations/${id}/cancel`,
+      {}
+    );
+  }
+
+  invitationPreview(token: string): Observable<InvitationPreview> {
+    return this.http.get<InvitationPreview>(
+      `${this.base}/invitations/${encodeURIComponent(token)}`
+    );
+  }
+
+  redeemInvitation(token: string): Observable<InvitationRedemption> {
+    return this.http.post<InvitationRedemption>(
+      `${this.base}/invitations/${encodeURIComponent(token)}/redeem`,
+      {}
+    );
   }
 }

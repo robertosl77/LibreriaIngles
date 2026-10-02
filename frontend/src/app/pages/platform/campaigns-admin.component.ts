@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
@@ -8,17 +8,16 @@ import {
   CampaignRule,
   CampaignTrigger,
   PlatformCampaign,
-  PlatformCampaignDraft,
-  PlatformService
+  PlatformBenefit,
+  PlatformCampaignDraft
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 
 interface CampaignForm {
   name: string;
-  serviceId: number | null;
+  benefitId: number | null;
   trigger: CampaignTrigger;
   rules: CampaignRule[];
-  grantDays: number | null;
   priority: number;
   stackable: boolean;
   maxRecipients: number | null;
@@ -35,13 +34,12 @@ function defaultRules(): CampaignRule[] {
   ];
 }
 
-function emptyForm(serviceId: number | null): CampaignForm {
+function emptyForm(benefitId: number | null): CampaignForm {
   return {
     name: '',
-    serviceId,
+    benefitId,
     trigger: 'FIRST_LOGIN',
     rules: defaultRules(),
-    grantDays: 3,
     priority: 100,
     stackable: false,
     maxRecipients: null,
@@ -94,12 +92,16 @@ function isoDate(value: string): string | null {
               <input class="input" name="cName" [(ngModel)]="form.name" maxlength="120" required />
             </label>
             <label class="field">
-              Servicio que otorga
-              <select class="input" name="cService" [(ngModel)]="form.serviceId" required>
-                @for (service of grantableServices(); track service.id) {
-                  <option [ngValue]="service.id">{{ service.name }}</option>
+              Beneficio que aplica
+              <select class="input" name="cBenefit" [(ngModel)]="form.benefitId" required>
+                @for (benefit of activeBenefits(); track benefit.id) {
+                  <option [ngValue]="benefit.id">
+                    {{ benefit.name }} · {{ benefit.serviceName }}
+                    @if (benefit.effectiveDurationDays) { · {{ benefit.effectiveDurationDays }} días }
+                  </option>
                 }
               </select>
+              <span class="muted tiny">Servicio + duración se configuran una sola vez en Beneficios.</span>
             </label>
             <label class="field">
               Cuándo se evalúa
@@ -108,11 +110,6 @@ function isoDate(value: string): string | null {
                 <option value="LOGIN">Cada login</option>
                 <option value="SCHEDULED" disabled>Programada / batch (T-059)</option>
               </select>
-            </label>
-            <label class="field">
-              Días que otorga
-              <input class="input" type="number" min="1" name="cDays" [(ngModel)]="form.grantDays"
-                placeholder="duración del servicio" />
             </label>
             <label class="field">
               Prioridad
@@ -249,8 +246,9 @@ function isoDate(value: string): string | null {
                   @if (campaign.stackable) { <span class="chip chip-ok">Acumulable</span> }
                 </div>
                 <div class="small">
-                  {{ triggerLabel(campaign.trigger) }} → <strong>{{ campaign.serviceName }}</strong>
-                  · {{ campaign.grantDays ? campaign.grantDays + ' días' : 'duración del servicio' }}
+                  {{ triggerLabel(campaign.trigger) }} → <strong>{{ campaign.benefitName }}</strong>
+                  · {{ campaign.serviceName }}
+                  · {{ campaign.grantDays ? campaign.grantDays + ' días' : 'sin vencimiento' }}
                   · {{ campaign.recipients }} beneficiario(s)
                   @if (campaign.maxRecipients) { / {{ campaign.maxRecipients }} máx. }
                 </div>
@@ -319,13 +317,13 @@ export class CampaignsAdminComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly campaigns = signal<PlatformCampaign[]>([]);
-  readonly services = signal<PlatformService[]>([]);
+  readonly benefits = signal<PlatformBenefit[]>([]);
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly editingId = signal<number | null>(null);
-  readonly grantableServices = computed(() =>
-    this.services().filter((service) => service.active && service.linkType === 'PERSONAL')
-  );
+  activeBenefits(): PlatformBenefit[] {
+    return this.benefits().filter((benefit) => benefit.active);
+  }
 
   form: CampaignForm = emptyForm(null);
 
@@ -336,12 +334,12 @@ export class CampaignsAdminComponent implements OnInit {
   async load(): Promise<void> {
     this.loading.set(true);
     try {
-      const [campaigns, services] = await Promise.all([
+      const [campaigns, benefits] = await Promise.all([
         firstValueFrom(this.api.platformCampaigns()),
-        firstValueFrom(this.api.platformServices())
+        firstValueFrom(this.api.platformBenefits())
       ]);
       this.campaigns.set(campaigns);
-      this.services.set(services);
+      this.benefits.set(benefits);
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
@@ -350,14 +348,14 @@ export class CampaignsAdminComponent implements OnInit {
   }
 
   startNew(): void {
-    this.form = emptyForm(this.grantableServices()[0]?.id ?? null);
+    this.form = emptyForm(this.activeBenefits()[0]?.id ?? null);
     this.editingId.set(0);
   }
 
   startEdit(campaign: PlatformCampaign): void {
     this.form = {
       name: campaign.name,
-      serviceId: campaign.serviceId,
+      benefitId: campaign.benefitId,
       trigger: campaign.trigger,
       rules: campaign.rules.map((rule) => ({
         ...rule,
@@ -366,7 +364,6 @@ export class CampaignsAdminComponent implements OnInit {
             ? localDate(rule.value)
             : rule.value
       })),
-      grantDays: campaign.grantDays,
       priority: campaign.priority,
       stackable: campaign.stackable,
       maxRecipients: campaign.maxRecipients,
@@ -397,15 +394,15 @@ export class CampaignsAdminComponent implements OnInit {
   }
 
   canSave(): boolean {
-    return !!this.form.name.trim() && !!this.form.serviceId && this.form.priority > 0;
+    return !!this.form.name.trim() && !!this.form.benefitId && this.form.priority > 0;
   }
 
   async save(): Promise<void> {
     const id = this.editingId();
-    if (id === null || !this.form.serviceId) return;
+    if (id === null || !this.form.benefitId) return;
     const draft: PlatformCampaignDraft = {
       name: this.form.name.trim(),
-      serviceId: this.form.serviceId,
+      benefitId: this.form.benefitId,
       trigger: this.form.trigger,
       rules: this.form.rules.map((rule) => ({
         ...rule,
@@ -416,7 +413,6 @@ export class CampaignsAdminComponent implements OnInit {
               ? new Date(String(rule.value)).toISOString()
               : rule.value
       })),
-      grantDays: numberOrNull(this.form.grantDays),
       priority: Math.max(1, Math.round(Number(this.form.priority) || 100)),
       stackable: this.form.stackable,
       maxRecipients: numberOrNull(this.form.maxRecipients),

@@ -7,6 +7,7 @@ import { CertificateComponent } from './pages/certificate/certificate.component'
 import { ClassComponent } from './pages/class/class.component';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { HistoryComponent } from './pages/history/history.component';
+import { InvitationComponent } from './pages/invitation/invitation.component';
 import { HomeComponent } from './pages/home/home.component';
 import { LandingComponent } from './pages/landing/landing.component';
 import { LevelComponent } from './pages/level/level.component';
@@ -17,6 +18,7 @@ export const routes: Routes = [
   { path: '', component: LandingComponent, title: 'Librería Inglés' },
   // Público: verificación del certificado de nivel (T-024).
   { path: 'certificado/:code', component: CertificateComponent, title: 'Certificado · Librería Inglés' },
+  { path: 'invitacion/:token', component: InvitationComponent, title: 'Invitación · Librería Inglés' },
   { path: 'login', component: LoginComponent, canActivate: [guestGuard], title: 'Ingresar · Librería Inglés' },
   {
     path: 'app',

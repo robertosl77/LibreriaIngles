@@ -5,12 +5,20 @@ import { ApiService, errorMessage } from '../../core/api.service';
 import { PlatformOverview } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
+import { BenefitsAdminComponent } from './benefits-admin.component';
 import { CampaignsAdminComponent } from './campaigns-admin.component';
+import { InvitationsAdminComponent } from './invitations-admin.component';
 import { ServicesAdminComponent } from './services-admin.component';
 
 @Component({
   selector: 'app-platform',
-  imports: [ConnectionsManagerComponent, ServicesAdminComponent, CampaignsAdminComponent],
+  imports: [
+    ConnectionsManagerComponent,
+    ServicesAdminComponent,
+    BenefitsAdminComponent,
+    CampaignsAdminComponent,
+    InvitationsAdminComponent
+  ],
   template: `
     <main class="page stack">
       <div class="page-header">
@@ -119,7 +127,11 @@ import { ServicesAdminComponent } from './services-admin.component';
 
       <app-services-admin />
 
+      <app-benefits-admin />
+
       <app-campaigns-admin />
+
+      <app-invitations-admin />
 
       <app-connections-manager scope="platform" title="Conexiones de la plataforma" (changed)="load()" />
     </main>

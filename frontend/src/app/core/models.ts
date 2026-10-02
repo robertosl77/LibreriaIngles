@@ -74,6 +74,27 @@ export interface PlatformAccount {
   service: ServiceStatus;
 }
 
+export interface PlatformBenefit {
+  id: number;
+  code: string;
+  name: string;
+  serviceId: number;
+  serviceName: string;
+  durationDays: number | null;
+  effectiveDurationDays: number | null;
+  conflictPolicy: 'EXTEND_SAME_SERVICE';
+  active: boolean;
+  usedByCampaigns: number;
+  usedByInvitations: number;
+}
+
+export interface PlatformBenefitDraft {
+  name: string;
+  serviceId: number;
+  durationDays: number | null;
+  active: boolean;
+}
+
 export type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
 export type CampaignTrigger = 'FIRST_LOGIN' | 'LOGIN' | 'SCHEDULED';
 export type CampaignNotification = 'NONE' | 'IN_APP' | 'EMAIL' | 'IN_APP_EMAIL';
@@ -88,28 +109,94 @@ export interface PlatformCampaign {
   id: number;
   code: string;
   name: string;
-  serviceId: number;
+  benefitId: number;
+  benefitName: string;
+  serviceId: number | null;
   serviceName: string;
+  grantDays: number | null;
   status: CampaignStatus;
   trigger: CampaignTrigger;
   rules: CampaignRule[];
-  grantDays: number | null;
   priority: number;
   stackable: boolean;
   maxRecipients: number | null;
   recipients: number;
   startsAt: string | null;
   endsAt: string | null;
+  activatedAt?: string | null;
   notification: CampaignNotification;
   message: string | null;
   pendingEmails: number;
   overlapWarnings: { id: number; name: string; priority: number; stackable: boolean }[];
 }
 
-export type PlatformCampaignDraft = Omit<
-  PlatformCampaign,
-  'id' | 'code' | 'serviceName' | 'status' | 'recipients' | 'pendingEmails' | 'overlapWarnings'
->;
+export interface PlatformCampaignDraft {
+  name: string;
+  benefitId: number;
+  trigger: CampaignTrigger;
+  rules: CampaignRule[];
+  priority: number;
+  stackable: boolean;
+  maxRecipients: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  notification: CampaignNotification;
+  message: string | null;
+}
+
+export type InvitationRecipientMode = 'NAMED' | 'OPEN';
+export type InvitationStatus = 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'EXHAUSTED';
+
+export interface PlatformInvitation {
+  id: number;
+  name: string;
+  benefitId: number | null;
+  benefitName: string;
+  serviceName: string;
+  durationDays: number | null;
+  recipientMode: InvitationRecipientMode;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  status: InvitationStatus;
+  maxRedemptions: number;
+  redemptions: number;
+  remaining: number;
+  expiresAt: string | null;
+  emailStatus: string | null;
+  token: string | null;
+  createdAt: string;
+}
+
+export interface PlatformInvitationDraft {
+  name: string;
+  benefitId: number;
+  recipientMode: InvitationRecipientMode;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  maxRedemptions: number;
+  expiresAt: string | null;
+}
+
+export interface InvitationPreview {
+  name: string;
+  recipientMode: InvitationRecipientMode;
+  recipientEmailHint: string | null;
+  benefitName: string;
+  serviceName: string;
+  durationDays: number | null;
+  status: InvitationStatus;
+  remaining: number;
+  expiresAt: string | null;
+}
+
+export interface InvitationRedemption {
+  invitation: string;
+  benefit: string;
+  alreadyRedeemed: boolean;
+  redeemedAt: string;
+}
 
 export interface CampaignNotice {
   grantId: number;
