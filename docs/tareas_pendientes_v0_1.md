@@ -2126,6 +2126,40 @@ Además: el paso 2 de "Primeros pasos" en Inicio debe reflejar la decisión (hoy
 se muestra como opcional).
 
 ---
+## T-055 — Pantalla "IA" según el servicio: no ofrecer configurar keys que no se usan
+
+**Prioridad:** P2 — Media (antes de otorgar servicios Plataforma a usuarios reales)  
+**Estado:** Pendiente (detectado por Roberto probando T-004 etapa 1, 2026-10-02)  
+**Relación:** T-004 (membresías: servicio = vínculo + fuente de IA, bandera `ownKeys`
+required / optional / unused), T-054 (Híbrido sin keys propias), T-005 (keys de la empresa)
+
+Problema: un alumno con servicio **Plataforma** (ej. 1 día otorgado por sr.macros) entra al
+menú **IA** y ve "Tus conexiones" + "Agregar conexión". Si carga una key, **no se usa** (el
+servicio Plataforma ignora las propias): confunde. Además el cartel "En uso ahora" muestra el
+nombre y el motor de la conexión de la plataforma (ej. `Google Gemini · gemini-3.5-flash-lite`),
+información interna de sr.macros / la empresa que el alumno no necesita ver.
+
+Qué debe mostrar el menú IA según el servicio (decidirlo por la bandera `ownKeys`, no por el
+nombre del servicio, para que un tipo nuevo no obligue a tocar pantallas):
+
+```text
+Propias keys (required)  → como hoy: "Tu servicio" + Tus conexiones + Agregar conexión
+Plataforma   (unused)    → solo "Tu servicio": "Usás la IA de Librería Inglés"
+                           (o "de tu empresa" cuando sea corporativo). Sin alta de keys.
+                           Sin nombre/motor de la conexión de plataforma.
+Híbrido      (optional)  → "Tu servicio" + Tus conexiones + Agregar conexión
+                           (se usan primero las propias; ver T-054 si no carga ninguna)
+```
+
+Criterios:
+- Con Plataforma no se ve el alta de conexiones; si el alumno ya tenía keys propias cargadas,
+  se avisa que quedan guardadas pero sin uso mientras dure el servicio (no se borran: al
+  vencer vuelve a usarlas).
+- "En uso ahora" solo nombra conexiones **propias**; si la que se usa es de plataforma o de
+  empresa, dice genéricamente "IA de Librería Inglés" / "IA de tu empresa".
+- La API tampoco expone nombre/modelo de conexiones de plataforma a cuentas que no son el dueño.
+
+---
 
 # 3. Orden sugerido de trabajo
 
