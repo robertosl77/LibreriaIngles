@@ -3149,6 +3149,30 @@ cargo de la política de retención de T-050.
 
 ---
 
+## T-064 — Ingreso sin cuenta de Google (Microsoft, email, etc.)
+
+**Prioridad:** P2 — Media (antes de publicar o de sumar empresas)  
+**Estado:** Pendiente · para más adelante (pedido de Roberto, 2026-10-03)  
+**Relación:** T-004 etapa 3 (invitaciones por link: una invitación nominada exige entrar con
+ese email), T-004 etapa 5 / T-005 (empresas: muchas usan Microsoft 365), T-051 (emails)
+
+Situación: la app solo permite ingresar con Google. Una invitación nominada a un email solo se
+puede aceptar entrando con una cuenta de Google de ese mismo email.
+
+```text
+✅ pueden entrar   gmail · correo de empresa en Google Workspace · hotmail/outlook/yahoo que
+                   creó una cuenta de Google con ese email
+❌ no pueden       hotmail/outlook/yahoo SIN cuenta de Google · empresas con Microsoft 365
+```
+
+Impacto: limita a quién se puede invitar (ej. un amigo con hotmail) y, sobre todo, la etapa
+corporativa.
+
+A analizar más adelante: qué métodos de ingreso agregar (cuenta Microsoft, código o link por
+email, otros) y cómo se unifican con la cuenta existente si la misma persona entra por dos vías.
+
+---
+
 # 4. Regla de ramas a partir de ahora
 
 Flujo vigente (desde 2026-09-30): **`develop` es la rama de integración** y **solo Roberto pasa
