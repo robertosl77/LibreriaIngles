@@ -11,6 +11,8 @@ pantallas consumen el mismo componente.
   espaciado, borde, comportamiento responsive y reducción de movimiento viven en un solo lugar.
 - `ActiveToggleComponent`: control booleano Activo/Inactivo reutilizable. Servicios y Beneficios
   consumen exactamente el mismo componente.
+- `TabNavComponent`: navegación horizontal por tabs/rutas con el mismo subrayado activo,
+  espaciado, scroll responsive y reducción de movimiento. Plataforma ya consume esta pieza.
 
 ## Criterio para componentes futuros
 
