@@ -497,7 +497,7 @@ def test_campaign_assist_builds_reviewable_draft_without_persisting(client, monk
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["draft"]["name"] == "Aniversario"
-    assert body["draft"]["benefitId"] == benefit["id"]
+    assert body["draft"]["benefitId"] is None
     assert body["draft"]["trigger"] == "LOGIN"
     assert body["draft"]["rules"][1] == {
         "field": "DAYS_SINCE_CREATED",
