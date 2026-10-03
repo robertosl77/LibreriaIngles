@@ -89,6 +89,8 @@ class EffectiveService:
     subscription_id: int | None = None
     expires_at: datetime | None = None
     origin: SubscriptionOrigin | None = None
+    benefit_id: int | None = None
+    benefit_name: str | None = None
     # Último servicio otorgado que venció hace poco (para avisar).
     expired_name: str | None = None
     expired_at: datetime | None = None
