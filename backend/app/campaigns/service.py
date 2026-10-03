@@ -4,7 +4,8 @@ La campaña define CUÁNDO/A QUIÉN; el beneficio reusable define QUÉ servicio/
 T-059 agregará el scheduler para CampaignTrigger.SCHEDULED sin cambiar este contrato.
 """
 
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -155,6 +156,79 @@ def _last_activity_at(db: Session, account: Account) -> datetime | None:
     )
 
 
+def _completed_activity_times(
+    db: Session,
+    account: Account,
+    *,
+    since: datetime | None = None,
+) -> list[datetime]:
+    query = select(ClassSession.evaluated_at).where(
+        ClassSession.account_id == account.id,
+        ClassSession.kind == SessionKind.CLASS,
+        ClassSession.status == ClassSessionStatus.COMPLETED,
+        ClassSession.evaluated_at.is_not(None),
+    )
+    if since is not None:
+        query = query.where(ClassSession.evaluated_at >= since)
+    values = db.scalars(query.order_by(ClassSession.evaluated_at.asc())).all()
+    return [value for value in (_as_utc(item) for item in values) if value is not None]
+
+
+def _activity_day_counts(
+    db: Session,
+    account: Account,
+    *,
+    now: datetime,
+    window_days: int,
+) -> Counter:
+    since = now - timedelta(days=window_days)
+    return Counter(value.date() for value in _completed_activity_times(db, account, since=since))
+
+
+def _study_streak_days(db: Session, account: Account, *, now: datetime) -> int:
+    days = sorted({value.date() for value in _completed_activity_times(db, account)}, reverse=True)
+    if not days:
+        return 0
+    today = now.date()
+    if days[0] < today - timedelta(days=1):
+        return 0
+
+    streak = 1
+    current = days[0]
+    for candidate in days[1:]:
+        if candidate == current - timedelta(days=1):
+            streak += 1
+            current = candidate
+        elif candidate < current - timedelta(days=1):
+            break
+    return streak
+
+
+def _activity_metric(
+    db: Session,
+    account: Account,
+    *,
+    field: str,
+    window_days: int | None,
+    now: datetime,
+) -> int | float | None:
+    if field == "STUDY_STREAK_DAYS":
+        return _study_streak_days(db, account, now=now)
+    if window_days is None:
+        return None
+
+    counts = _activity_day_counts(db, account, now=now, window_days=window_days)
+    if field == "CLASSES_COMPLETED":
+        return sum(counts.values())
+    if field == "ACTIVE_STUDY_DAYS":
+        return len(counts)
+    if field == "MIN_CLASSES_PER_ACTIVE_DAY":
+        return min(counts.values()) if counts else 0
+    if field == "AVERAGE_CLASSES_PER_ACTIVE_DAY":
+        return round(sum(counts.values()) / len(counts), 2) if counts else 0.0
+    return None
+
+
 def _last_expired_service_at(db: Session, account: Account) -> datetime | None:
     # Fuerza el vencimiento perezoso antes de consultar el histórico.
     effective_service(db, account)
@@ -255,16 +329,42 @@ def rule_evaluation(
     elif field == "CURRENT_LEVEL":
         actual = _current_level(db, account)
         matched = operator == "EQ" and actual == str(expected).upper()
+    elif field in {
+        "CLASSES_COMPLETED",
+        "ACTIVE_STUDY_DAYS",
+        "MIN_CLASSES_PER_ACTIVE_DAY",
+        "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+        "STUDY_STREAK_DAYS",
+    }:
+        window_days = rule.get("windowDays")
+        try:
+            window_days = int(window_days) if window_days is not None else None
+        except (TypeError, ValueError):
+            window_days = None
+        actual = _activity_metric(
+            db,
+            account,
+            field=field,
+            window_days=window_days,
+            now=now,
+        )
+        try:
+            matched = actual is not None and _compare_number(actual, operator, float(expected))
+        except (TypeError, ValueError):
+            matched = False
     else:
         matched = False
 
-    return {
+    result = {
         "field": field,
         "operator": operator,
         "expected": expected,
         "actual": actual,
         "matched": bool(matched),
     }
+    if rule.get("windowDays") is not None:
+        result["windowDays"] = rule.get("windowDays")
+    return result
 
 
 def _rule_matches(db: Session, account: Account, rule: dict, now: datetime) -> bool:
