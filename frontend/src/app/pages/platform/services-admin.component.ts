@@ -7,6 +7,7 @@ import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import {
   AiSource,
+  LinkType,
   PlatformAccount,
   PlatformBenefit,
   PlatformService,
@@ -22,15 +23,10 @@ const SOURCE_SHORT: Record<AiSource, string> = {
   HYBRID: 'Híbrido'
 };
 
-function emptyDraft(): PlatformServiceDraft {
-  return {
-    name: '',
-    source: 'PLATFORM',
-    linkType: 'PERSONAL',
-    description: null,
-    active: true
-  };
-}
+const LINK_SHORT: Record<LinkType, string> = {
+  PERSONAL: 'Individual',
+  CORPORATE: 'Empresa'
+};
 
 /** Portal (T-004): catálogo de capacidades + cuentas. La vigencia vive en Beneficios. */
 @Component({
@@ -42,13 +38,10 @@ function emptyDraft(): PlatformServiceDraft {
         <div>
           <h2>Servicios</h2>
           <p class="muted small">
-            Define <strong>qué servicio existe</strong>: vínculo, fuente de IA y descripción.
-            La duración se configura en Beneficios y los límites de consumo en cada conexión de IA.
+            Cada servicio es una combinación fija de vínculo × fuente de IA. Acá se administran
+            nombre, descripción y estado; las filas y columnas del modelo no se crean desde el portal.
           </p>
         </div>
-        @if (editingId() === null) {
-          <button class="btn btn-sm" type="button" (click)="startNew()">Nuevo servicio</button>
-        }
       </div>
 
       @if (editingId() !== null) {
@@ -58,14 +51,12 @@ function emptyDraft(): PlatformServiceDraft {
               Nombre
               <input class="input" name="sName" [(ngModel)]="draft.name" required maxlength="120" />
             </label>
-            <label class="field">
-              Fuente de IA
-              <select class="input" name="sSource" [(ngModel)]="draft.source">
-                <option value="BYOK">Propias keys (BYOK)</option>
-                <option value="PLATFORM">Plataforma</option>
-                <option value="HYBRID">Híbrido (propias, si fallan plataforma)</option>
-              </select>
-            </label>
+            @if (editingService(); as service) {
+              <div class="field fixed-field">
+                <span>Combinación fija</span>
+                <strong>{{ linkShort[service.linkType] }} · {{ sourceShort[service.source] }}</strong>
+              </div>
+            }
           </div>
 
           <label class="field">
@@ -81,7 +72,6 @@ function emptyDraft(): PlatformServiceDraft {
             <app-active-toggle [(value)]="draft.active" />
           </div>
 
-          <p class="muted small">Vínculo: personal. Los servicios corporativos llegan con las empresas.</p>
           <div class="row">
             <button class="btn btn-primary btn-sm" type="submit" [disabled]="saving() || !draft.name.trim()">
               @if (saving()) { <span class="spinner"></span> } Guardar
@@ -257,6 +247,7 @@ function emptyDraft(): PlatformServiceDraft {
       flex-wrap: wrap;
     }
     .tiny { font-size: 0.76rem; }
+    .fixed-field strong { padding: 0.55rem 0; }
     .table-wrap { overflow-x: auto; }
     table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
     th, td {
@@ -332,13 +323,14 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
   readonly changed = output<void>();
 
   readonly sourceShort = SOURCE_SHORT;
+  readonly linkShort = LINK_SHORT;
   readonly services = signal<PlatformService[]>([]);
   readonly benefits = signal<PlatformBenefit[]>([]);
   readonly accounts = signal<PlatformAccount[]>([]);
   readonly loadingAccounts = signal(true);
   readonly saving = signal(false);
   readonly busyId = signal<number | null>(null);
-  /** null: sin formulario · 0: nuevo · id: editando. */
+  /** null: sin formulario · id: editando metadatos de una combinación fija. */
   readonly editingId = signal<number | null>(null);
   readonly grantingId = signal<number | null>(null);
 
@@ -351,7 +343,15 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
     );
   });
 
-  draft: PlatformServiceDraft = emptyDraft();
+  readonly editingService = computed(() =>
+    this.services().find((service) => service.id === this.editingId()) ?? null
+  );
+
+  draft: PlatformServiceDraft = {
+    name: '',
+    description: null,
+    active: true
+  };
   query = '';
   grantBenefitId: number | null = null;
 
@@ -392,19 +392,18 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
     }
   }
 
-  startNew(): void {
-    this.draft = emptyDraft();
-    this.editingId.set(0);
-  }
-
   startEdit(service: PlatformService): void {
-    const { id: _id, code: _code, activeAccounts: _n, ...draft } = service;
-    this.draft = { ...draft };
+    this.draft = {
+      name: service.name,
+      description: service.description,
+      active: service.active
+    };
     this.editingId.set(service.id);
   }
 
   async saveService(): Promise<void> {
     const id = this.editingId();
+    if (id === null) return;
     const draft: PlatformServiceDraft = {
       ...this.draft,
       name: this.draft.name.trim(),
@@ -412,10 +411,8 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
     };
     this.saving.set(true);
     try {
-      await firstValueFrom(
-        id ? this.api.updatePlatformService(id, draft) : this.api.createPlatformService(draft)
-      );
-      this.toast.success(id ? 'Servicio actualizado.' : 'Servicio creado.');
+      await firstValueFrom(this.api.updatePlatformService(id, draft));
+      this.toast.success('Servicio actualizado.');
       this.editingId.set(null);
       await Promise.all([this.loadServices(), this.loadAccounts()]);
       this.changed.emit();
