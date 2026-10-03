@@ -262,3 +262,35 @@ def test_invitation_engine_exception_never_blocks_login(client, monkeypatch) -> 
         },
     )
     assert response.status_code == 200, response.text
+
+
+def test_benefit_cannot_be_deleted_while_invitation_is_redeemable(client) -> None:
+    owner, services = _setup(client)
+    benefit = _benefit(
+        client,
+        owner,
+        services["INDIVIDUAL_PLATFORM"]["id"],
+        name="Beneficio invitación vigente",
+        days=20,
+    )
+    invitation = _invite(client, owner, benefit["id"], maxRedemptions=5)
+
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeInvitations"] == 1
+    assert listed["canDelete"] is False
+    blocked = client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner)
+    assert blocked.status_code == 409
+    assert "invitación" in blocked.json()["detail"]
+
+    assert client.post(
+        f"{API}/platform/invitations/{invitation['id']}/cancel", headers=owner
+    ).status_code == 200
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeInvitations"] == 0
+    assert listed["canDelete"] is True
