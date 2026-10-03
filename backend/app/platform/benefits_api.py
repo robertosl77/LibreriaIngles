@@ -8,11 +8,12 @@ from sqlalchemy import func, select
 
 from app.benefits.models import Benefit, utcnow
 from app.benefits.service import benefit_duration, seed_benefits
-from app.campaigns.models import Campaign
+from app.campaigns.models import Campaign, CampaignStatus
 from app.core.deps import DbSession
-from app.invitations.models import Invitation
+from app.invitations.models import Invitation, InvitationStatus
+from app.invitations.service import refresh_status
 from app.platform.api import PlatformOwner
-from app.subscriptions.models import Plan, ServiceLinkType
+from app.subscriptions.models import Plan, ServiceLinkType, Subscription, SubscriptionStatus
 
 router = APIRouter(prefix="/platform/benefits", tags=["platform"])
 
@@ -33,6 +34,38 @@ def _plan(db: DbSession, plan_id: int) -> Plan:
     return plan
 
 
+def _delete_blockers(db: DbSession, benefit: Benefit) -> dict[str, int]:
+    now = utcnow()
+    active_beneficiaries = db.scalar(
+        select(func.count(Subscription.id)).where(
+            Subscription.benefit_id == benefit.id,
+            Subscription.status == SubscriptionStatus.ACTIVE,
+            (Subscription.expires_at.is_(None) | (Subscription.expires_at > now)),
+        )
+    ) or 0
+    active_campaigns = db.scalar(
+        select(func.count(Campaign.id)).where(
+            Campaign.benefit_id == benefit.id,
+            Campaign.deleted_at.is_(None),
+            Campaign.status.in_([CampaignStatus.ACTIVE, CampaignStatus.PAUSED]),
+        )
+    ) or 0
+
+    invitations = db.scalars(
+        select(Invitation).where(Invitation.benefit_id == benefit.id)
+    ).all()
+    for invitation in invitations:
+        refresh_status(db, invitation, now=now)
+    active_invitations = sum(
+        1 for invitation in invitations if invitation.status == InvitationStatus.ACTIVE
+    )
+    return {
+        "activeBeneficiaries": int(active_beneficiaries),
+        "activeCampaigns": int(active_campaigns),
+        "activeInvitations": int(active_invitations),
+    }
+
+
 def _out(db: DbSession, benefit: Benefit) -> dict:
     plan = db.get(Plan, benefit.plan_id)
     campaigns = db.scalar(
@@ -44,6 +77,7 @@ def _out(db: DbSession, benefit: Benefit) -> dict:
     invitations = db.scalar(
         select(func.count(Invitation.id)).where(Invitation.benefit_id == benefit.id)
     ) or 0
+    blockers = _delete_blockers(db, benefit)
     return {
         "id": benefit.id,
         "code": benefit.code,
@@ -55,6 +89,8 @@ def _out(db: DbSession, benefit: Benefit) -> dict:
         "active": benefit.active,
         "usedByCampaigns": int(campaigns),
         "usedByInvitations": int(invitations),
+        **blockers,
+        "canDelete": not any(blockers.values()),
     }
 
 
@@ -117,6 +153,21 @@ def delete_benefit(
     benefit = db.get(Benefit, benefit_id)
     if benefit is None or benefit.organization_id is not None or benefit.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Beneficio inexistente.")
+
+    blockers = _delete_blockers(db, benefit)
+    if any(blockers.values()):
+        parts = []
+        if blockers["activeBeneficiaries"]:
+            parts.append(f'{blockers["activeBeneficiaries"]} beneficiario(s) vigente(s)')
+        if blockers["activeCampaigns"]:
+            parts.append(f'{blockers["activeCampaigns"]} campaña(s) activa(s)/pausada(s)')
+        if blockers["activeInvitations"]:
+            parts.append(f'{blockers["activeInvitations"]} invitación(es) vigente(s)')
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se puede dar de baja mientras el beneficio tenga " + ", ".join(parts) + ".",
+        )
+
     benefit.active = False
     benefit.deleted_at = utcnow()
     db.commit()
