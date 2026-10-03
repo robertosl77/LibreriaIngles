@@ -44,6 +44,7 @@ const SOURCE_SHORT: Record<AiSource, string> = {
                 <th>Membresía</th>
                 <th>Beneficio vigente</th>
                 <th>Vence</th>
+                <th>Actividad</th>
               </tr>
             </thead>
             <tbody>
@@ -61,6 +62,12 @@ const SOURCE_SHORT: Record<AiSource, string> = {
                     } @else {
                       —
                     }
+                  </td>
+                  <td>
+                    {{ account.platformRequests24h }} {{ account.platformRequests24h === 1 ? 'pedido' : 'pedidos' }}
+                    <div class="muted small">
+                      en 24 h · {{ account.ownConnections }} {{ account.ownConnections === 1 ? 'key' : 'keys' }}
+                    </div>
                   </td>
                 </tr>
               }

@@ -16,10 +16,10 @@ from app.ai.models import AIConnection, AIConnectionOwnerType, utcnow
 from app.ai.service import LIMIT_WINDOW, platform_requests
 from app.benefits.models import Benefit
 from app.benefits.service import apply_service_benefit
-from app.campaigns.models import Campaign, CampaignStatus
+from app.campaigns.models import Campaign, CampaignGrant, CampaignStatus
 from app.core.config import settings
 from app.core.deps import DbSession
-from app.invitations.models import Invitation, InvitationStatus
+from app.invitations.models import Invitation, InvitationRedemption, InvitationStatus
 from app.invitations.service import refresh_status
 from app.platform.api import PlatformOwner
 from app.subscriptions.models import (
@@ -172,6 +172,37 @@ def update_service(service_id: int, payload: ServiceUpdateIn, _: PlatformOwner, 
     return _service_out(db, plan)
 
 
+def _channel(db, subscription_id: int | None) -> dict | None:
+    """Canal por el que la cuenta recibió su beneficio vigente: campaña, invitación o manual."""
+    if subscription_id is None:
+        return None
+    subscription = db.get(Subscription, subscription_id)
+    if subscription is None:
+        return None
+    origin = subscription.origin.value if subscription.origin else None
+    name = None
+    if origin == "CAMPAIGN":
+        name = db.scalar(
+            select(Campaign.name)
+            .join(CampaignGrant, CampaignGrant.campaign_id == Campaign.id)
+            .where(CampaignGrant.subscription_id == subscription_id)
+            .order_by(CampaignGrant.applied_at.asc(), CampaignGrant.id.asc())
+            .limit(1)
+        )
+    elif origin == "INVITATION":
+        name = db.scalar(
+            select(Invitation.name)
+            .join(InvitationRedemption, InvitationRedemption.invitation_id == Invitation.id)
+            .where(InvitationRedemption.subscription_id == subscription_id)
+            .order_by(InvitationRedemption.redeemed_at.asc(), InvitationRedemption.id.asc())
+            .limit(1)
+        )
+    elif origin == "MANUAL" and subscription.granted_by_account_id:
+        granter = db.get(Account, subscription.granted_by_account_id)
+        name = granter.email if granter else None
+    return {"type": origin, "name": name}
+
+
 def _account_out(db, account: Account) -> dict:
     service = effective_service(db, account)
     own_keys = db.scalar(
@@ -195,6 +226,7 @@ def _account_out(db, account: Account) -> dict:
         "ownConnections": int(own_keys or 0),
         "platformRequests24h": platform_requests(db, account.id, since=utcnow() - LIMIT_WINDOW),
         "service": service.payload(),
+        "channel": _channel(db, service.subscription_id),
     }
 
 

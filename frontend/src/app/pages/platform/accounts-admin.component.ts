@@ -36,10 +36,10 @@ const SOURCE_SHORT: Record<AiSource, string> = {
         <div class="accounts" role="table" aria-label="Cuentas">
           <div class="acc-row acc-head" role="row">
             <span role="columnheader">Cuenta</span>
+            <span role="columnheader">Canal</span>
             <span role="columnheader">Beneficio</span>
             <span role="columnheader">IA que usa</span>
             <span role="columnheader">Vence</span>
-            <span role="columnheader">Actividad</span>
             <span role="columnheader" class="sr-only">Acciones</span>
           </div>
 
@@ -58,6 +58,15 @@ const SOURCE_SHORT: Record<AiSource, string> = {
                       Nunca ingresó
                     }
                   </span>
+                </div>
+
+                <div class="cell" role="cell" data-label="Canal">
+                  @if (a.service.granted && a.channel?.type) {
+                    <span>{{ channelLabels[a.channel!.type!] }}</span>
+                    @if (a.channel?.name) { <span class="sub" [attr.title]="a.channel!.name">{{ a.channel!.name }}</span> }
+                  } @else {
+                    <span class="none">—</span>
+                  }
                 </div>
 
                 <div class="cell" role="cell" data-label="Beneficio">
@@ -85,11 +94,6 @@ const SOURCE_SHORT: Record<AiSource, string> = {
                   } @else {
                     <span class="none">—</span>
                   }
-                </div>
-
-                <div class="cell" role="cell" data-label="Actividad">
-                  <span>{{ a.platformRequests24h }} {{ a.platformRequests24h === 1 ? 'pedido' : 'pedidos' }}</span>
-                  <span class="sub">en 24 h · {{ a.ownConnections }} {{ a.ownConnections === 1 ? 'key' : 'keys' }}</span>
                 </div>
 
                 <div class="cell actions" role="cell">
@@ -151,7 +155,7 @@ const SOURCE_SHORT: Record<AiSource, string> = {
 
     .acc-row {
       display: grid;
-      grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 0.8fr) 6.8rem;
+      grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 0.9fr) 6.8rem;
       gap: 1rem;
       align-items: center;
       padding: 0.7rem 0.4rem;
@@ -179,6 +183,7 @@ const SOURCE_SHORT: Record<AiSource, string> = {
     .cell .chip { max-width: 100%; white-space: normal; line-height: 1.25; }
     .sub { color: var(--muted); font-size: 0.78rem; }
     .none { color: var(--muted); }
+    .cell .sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .actions { align-items: flex-end; }
 
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -227,6 +232,12 @@ export class AccountsAdminComponent implements OnInit, OnChanges {
   @Input() refreshVersion = 0;
   readonly changed = output<void>();
   readonly sourceShort = SOURCE_SHORT;
+  readonly channelLabels: Record<string, string> = {
+    CAMPAIGN: 'Campaña',
+    INVITATION: 'Invitación',
+    MANUAL: 'Manual',
+    PAYMENT: 'Pago'
+  };
   readonly benefits = signal<PlatformBenefit[]>([]);
   readonly accounts = signal<PlatformAccount[]>([]);
   readonly loadingAccounts = signal(true);

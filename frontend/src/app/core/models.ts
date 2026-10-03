@@ -74,6 +74,8 @@ export interface PlatformAccount {
   ownConnections: number;
   platformRequests24h: number;
   service: ServiceStatus;
+  /** Cómo recibió el beneficio vigente: campaña, invitación o manual (null = sin beneficio). */
+  channel: { type: 'CAMPAIGN' | 'INVITATION' | 'MANUAL' | 'PAYMENT' | null; name: string | null } | null;
 }
 
 export interface PlatformBenefit {
