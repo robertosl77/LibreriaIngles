@@ -276,8 +276,18 @@ CAMPAÑA
 
 - **Panel de campañas de sr.macros.** Una campaña referencia un Beneficio; no vuelve a configurar
   servicio ni días.
+- **Constructor híbrido de campañas (2026-10-03):** "Nueva campaña" ofrece tres entradas que
+  convergen en el mismo formulario y el mismo `CampaignDraft`:
+  1. **Plantillas** determinísticas para casos frecuentes; cargan condiciones/trigger/límites y el
+     OWNER elige el Beneficio antes de guardar.
+  2. **Describir con IA**: una conexión de IA de **plataforma** convierte lenguaje natural a un
+     borrador revisable. Nunca persiste ni activa la campaña.
+  3. **Manual**: mantiene el constructor completo.
+  La IA recibe únicamente los campos soportados por el motor. Si se pide algo todavía inexistente
+  (por ejemplo descuentos, precios o antigüedad de una suscripción paga), debe advertirlo y no
+  inventar una condición equivalente.
 - **La bienvenida es la primera campaña** (no algo fijo en el código): usa el beneficio
-  "Plataforma · 3 días", que a su vez referencia PERSONAL + PLATAFORMA. Deja probar la app sin
+  "Bienvenida", configurado como PERSONAL + PLATAFORMA por 3 días. Deja probar la app sin
   saber qué es una API key. Como PedidosYa: cupones a todos al principio; después solo para
   fidelizar (T-050).
 
@@ -597,7 +607,7 @@ ciclo           borrador / activa / pausada / terminada + borrado seguro
 seguridad       una falla del motor nunca impide login, /me o /me/level
 ```
 
-**Etapa 3 — En desarrollo/pruebas (`feat/t-004-invitations`):**
+**Etapa 3 — Resuelta (PR #37 a `develop`, 2026-10-03):**
 
 ```text
 benefits        única fuente de verdad para servicio + duración + política de conflicto
@@ -608,7 +618,7 @@ campañas        pasan a referenciar benefit_id (sin duplicar plan_id + grant_da
 invitaciones    NAMED u OPEN, token, cupo, vigencia opcional, cancelación/regeneración
 canjes          InvitationRedemption por cuenta; Subscription origin=INVITATION
 login           canje de invitación antes de campañas; errores de invitación no bloquean login
-portal OWNER    Beneficios + Pre-invitaciones/Invitaciones
+portal OWNER    Beneficios + Invitaciones
 email           NAMED queda PENDING hasta implementar T-051
 ```
 
