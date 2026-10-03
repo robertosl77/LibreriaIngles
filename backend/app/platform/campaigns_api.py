@@ -97,8 +97,10 @@ Reglas soportadas:
 - CREATED_AT: EQ/GTE/LTE fecha ISO
 
 El motor actual SOLO otorga un beneficio existente. No administra precios, porcentajes de
-descuento, pagos ni renovaciones. Si el pedido requiere algo no soportado, avisalo en warnings
-y no inventes campos. SCHEDULED todavía no está disponible: usá FIRST_LOGIN o LOGIN.
+descuento, pagos, renovaciones ni antigüedad de una suscripción paga. DAYS_SINCE_CREATED significa
+exclusivamente días desde la creación de la cuenta: nunca lo uses como sustituto de antigüedad de
+pago/membresía. Si el pedido requiere algo no soportado, avisalo en warnings y no inventes campos.
+SCHEDULED todavía no está disponible: usá FIRST_LOGIN o LOGIN.
 Elegí benefitId únicamente entre los beneficios provistos y solo si la intención lo deja claro;
 si no, devolvé null para que el usuario lo seleccione. El resultado es siempre un BORRADOR:
 nunca actives ni guardes una campaña."""
@@ -197,6 +199,58 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
         "warnings": warnings,
         "summary": str(data.get("summary") or "Borrador generado por IA. Revisalo antes de guardar.")[:500],
     }
+
+
+def _apply_description_capability_guards(description: str, normalized: dict) -> dict:
+    """Evita que una buena intención de la IA se convierta en una regla de negocio falsa."""
+    lower = description.lower()
+    warnings = normalized["warnings"]
+    rules = normalized["draft"]["rules"]
+
+    mentions_discount = "%" in description or any(
+        word in lower for word in ("descuento", "bonific", "rebaja", "precio")
+    )
+    if mentions_discount and not any("descuento" in warning.lower() or "precio" in warning.lower() for warning in warnings):
+        warnings.append(
+            "El motor actual no administra descuentos, precios ni porcentajes; solo puede otorgar un beneficio existente."
+        )
+
+    mentions_payment_tenure = any(
+        phrase in lower
+        for phrase in (
+            "servicio pago",
+            "servicio pagado",
+            "membresía paga",
+            "membresia paga",
+            "membresía pagada",
+            "membresia pagada",
+            "antigüedad de pago",
+            "antiguedad de pago",
+            "desde que paga",
+            "desde que pagó",
+            "desde que pago",
+            "renovación",
+            "renovacion",
+            "facturación",
+            "facturacion",
+        )
+    )
+    explicitly_account_age = any(
+        phrase in lower
+        for phrase in ("desde el registro", "desde que se registr", "antigüedad de la cuenta", "antiguedad de la cuenta")
+    )
+    if mentions_payment_tenure:
+        if not explicitly_account_age:
+            normalized["draft"]["rules"] = [
+                rule for rule in rules if rule.get("field") != "DAYS_SINCE_CREATED"
+            ]
+        if not any("pago" in warning.lower() or "suscripción" in warning.lower() or "suscripcion" in warning.lower() for warning in warnings):
+            warnings.append(
+                "Todavía no existe una condición por antigüedad de pago o suscripción; no se la reemplazó por antigüedad de la cuenta."
+            )
+
+    normalized["warnings"] = warnings[:8]
+    return normalized
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -427,7 +481,8 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
 
     if not isinstance(result.data, dict):
         raise HTTPException(502, "La IA devolvió un borrador inválido.")
-    return _normalize_assist(result.data, {item["id"] for item in benefit_options})
+    normalized = _normalize_assist(result.data, {item["id"] for item in benefit_options})
+    return _apply_description_capability_guards(payload.description.strip(), normalized)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
