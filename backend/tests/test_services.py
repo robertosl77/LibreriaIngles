@@ -404,7 +404,10 @@ def test_manual_benefit_can_be_replaced_and_remains_traceable(client) -> None:
     assert row["origin"] == "MANUAL"
 
 
-def test_benefit_delete_is_logical_and_keeps_active_history(client) -> None:
+def test_benefit_delete_is_logical_and_keeps_historical_reference(client) -> None:
+    from app.db import SessionLocal
+    from app.subscriptions.models import Subscription
+
     owner = login(client, OWNER)
     _student(client, "logical-delete@example.com")
     service_id = _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"]
@@ -421,18 +424,30 @@ def test_benefit_delete_is_logical_and_keeps_active_history(client) -> None:
         headers=owner,
     ).status_code == 200
 
+    # Mientras haya un beneficiario vigente, la baja lógica está protegida.
+    assert client.delete(
+        f"{API}/platform/benefits/{benefit['id']}", headers=owner
+    ).status_code == 409
+
+    # Al quitar el beneficio de la cuenta, la referencia pasa a ser histórica y ya no bloquea.
+    assert client.delete(f"{API}/platform/accounts/{account_id}/service", headers=owner).status_code == 200
     deleted = client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner)
     assert deleted.status_code == 204
     assert benefit["id"] not in {
         item["id"] for item in client.get(f"{API}/platform/benefits", headers=owner).json()
     }
 
-    account = next(
-        item for item in client.get(f"{API}/platform/accounts", headers=owner).json()
-        if item["email"] == "logical-delete@example.com"
-    )
-    assert account["service"]["benefitId"] == benefit["id"]
-    assert account["service"]["benefitName"] == "Temporal trazable"
+    with SessionLocal() as db:
+        historical = db.scalar(
+            select(Subscription)
+            .where(
+                Subscription.account_id == account_id,
+                Subscription.benefit_id == benefit["id"],
+            )
+            .order_by(Subscription.id.desc())
+        )
+        assert historical is not None
+        assert historical.benefit_id == benefit["id"]
 
 
 def test_benefit_cannot_be_deleted_with_current_beneficiary(client) -> None:
