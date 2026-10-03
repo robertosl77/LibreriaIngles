@@ -136,6 +136,32 @@ def overview(_: PlatformOwner, db: DbSession) -> dict:
             "invitations": int(db.scalar(select(func.count(Invitation.id)).where(Invitation.benefit_id == item.id)) or 0),
         })
 
+    benefit_rows = db.execute(
+        select(
+            Account.email,
+            Benefit.name,
+            Plan.name,
+            Subscription.origin,
+            Subscription.expires_at,
+        )
+        .join(Subscription, Subscription.account_id == Account.id)
+        .join(Benefit, Benefit.id == Subscription.benefit_id)
+        .join(Plan, Plan.id == Subscription.plan_id)
+        .where(Subscription.status == SubscriptionStatus.ACTIVE)
+        .order_by(Account.email)
+        .limit(100)
+    ).all()
+    account_benefits = [
+        {
+            "email": row[0],
+            "benefitName": row[1],
+            "serviceName": row[2],
+            "origin": row[3].value,
+            "expiresAt": row[4],
+        }
+        for row in benefit_rows
+    ]
+
     return {
         "last24h": {
             "all": _counts(db, AIUsageEvent.created_at >= last_24h),
