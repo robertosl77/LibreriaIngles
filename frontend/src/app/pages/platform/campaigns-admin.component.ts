@@ -185,6 +185,17 @@ function isoDate(value: string): string | null {
               <input class="input" name="cName" [(ngModel)]="form.name" maxlength="120" required />
             </label>
             <label class="field">
+              Acción
+              <select class="input" name="cAction" [(ngModel)]="form.action">
+                @for (action of capabilities()?.actions ?? []; track action.key) {
+                  <option [value]="action.key" [disabled]="!action.available">
+                    {{ action.label }}{{ action.available ? '' : ' · próxima etapa' }}
+                  </option>
+                }
+              </select>
+              <span class="muted tiny">La acción es explícita. Hoy se ejecuta Otorgar beneficio; las demás quedan reservadas para etapas futuras.</span>
+            </label>
+            <label class="field">
               Beneficio que aplica
               <select class="input" name="cBenefit" [(ngModel)]="form.benefitId" required>
                 <option [ngValue]="null" disabled>Elegí un beneficio</option>
@@ -197,9 +208,11 @@ function isoDate(value: string): string | null {
             <label class="field">
               Cuándo se evalúa
               <select class="input" name="cTrigger" [(ngModel)]="form.trigger">
-                <option value="FIRST_LOGIN">Primer login</option>
-                <option value="LOGIN">Cada login</option>
-                <option value="SCHEDULED" disabled>Programada / batch (T-059)</option>
+                @for (trigger of capabilities()?.triggers ?? []; track trigger.key) {
+                  <option [value]="trigger.key" [disabled]="!trigger.available">
+                    {{ trigger.label }}{{ trigger.available ? '' : ' · T-059' }}
+                  </option>
+                }
               </select>
             </label>
             <label class="field">
@@ -292,13 +305,15 @@ function isoDate(value: string): string | null {
 
           <div class="grid">
             <label class="field">
-              Notificación
+              Notificación / entrega
               <select class="input" name="cNotification" [(ngModel)]="form.notification">
-                <option value="NONE">Sin notificación</option>
-                <option value="IN_APP">En pantalla</option>
-                <option value="EMAIL">Email (queda pendiente hasta T-051)</option>
-                <option value="IN_APP_EMAIL">Pantalla + email (email pendiente hasta T-051)</option>
+                @for (delivery of capabilities()?.deliveries ?? []; track delivery.key) {
+                  <option [value]="delivery.key">{{ delivery.label }}</option>
+                }
               </select>
+              @if (form.notification === 'EMAIL' || form.notification === 'IN_APP_EMAIL') {
+                <span class="muted tiny">Se encola como pendiente; el envío real corresponde a T-051.</span>
+              }
             </label>
             <label class="field">
               Mensaje
