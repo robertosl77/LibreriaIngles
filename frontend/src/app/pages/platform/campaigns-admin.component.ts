@@ -93,12 +93,12 @@ function isoDate(value: string): string | null {
               <select class="input" name="cBenefit" [(ngModel)]="form.benefitId" required>
                 @for (benefit of activeBenefits(); track benefit.id) {
                   <option [ngValue]="benefit.id">
-                    {{ benefit.name }} · {{ benefit.serviceName }}
+                    {{ benefit.name }} · {{ benefit.combinationName }}
                     @if (benefit.durationDays) { · {{ benefit.durationDays }} días }
                   </option>
                 }
               </select>
-              <span class="muted tiny">Servicio + duración se configuran una sola vez en Beneficios.</span>
+              <span class="muted tiny">Servicio + fuente + duración se configuran una sola vez en Beneficios.</span>
             </label>
             <label class="field">
               Cuándo se evalúa
