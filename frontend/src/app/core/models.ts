@@ -57,7 +57,7 @@ export interface PlatformService {
   activeAccounts: number;
 }
 
-export type PlatformServiceDraft = Omit<PlatformService, 'id' | 'code' | 'activeAccounts'>;
+export type PlatformServiceDraft = Pick<PlatformService, 'name' | 'description' | 'active'>;
 
 export interface PlatformAccount {
   id: number;
