@@ -185,9 +185,9 @@ DELIVERY_CAPABILITIES = tuple(
             CampaignNotification.EMAIL: "Email",
             CampaignNotification.IN_APP_EMAIL: "Pantalla + email",
         }[item],
-        "available": item in {CampaignNotification.NONE, CampaignNotification.IN_APP},
+        "available": True,
         "description": (
-            "Email queda en cola PENDING hasta T-051."
+            "La campaña puede encolarlo como PENDING; el envío real depende de T-051."
             if item in {CampaignNotification.EMAIL, CampaignNotification.IN_APP_EMAIL}
             else ""
         ),
