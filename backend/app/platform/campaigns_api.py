@@ -328,6 +328,8 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
         "referid": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
         "invitó a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
         "invito a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+        "invitaron a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+        "invitar a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
     }
     for term, warning in unsupported_audience_terms.items():
         if term in lower and not any(warning.lower() == item.lower() for item in warnings):
