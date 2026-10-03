@@ -178,6 +178,13 @@ function isoDate(value: string): string | null {
             }
           </div>
         }
+        @if (capabilitiesError()) {
+          <div class="banner small draft-banner">
+            <strong>El constructor no puede cargar el catálogo del motor.</strong>
+            <div>{{ capabilitiesError() }}</div>
+          </div>
+        }
+        @if (capabilities()) {
         <form class="editor stack" (ngSubmit)="save()">
           <div class="grid">
             <label class="field">
@@ -261,30 +268,50 @@ function isoDate(value: string): string | null {
                     }
                   </select>
 
-                  @switch (capability.valueType) {
-                    @case ('boolean') {
-                      <select class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value">
-                        <option [ngValue]="false">No</option>
-                        <option [ngValue]="true">Sí</option>
-                      </select>
+                  <div class="rule-value-stack">
+                    @switch (capability.valueType) {
+                      @case ('boolean') {
+                        <select class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value">
+                          <option [ngValue]="false">No</option>
+                          <option [ngValue]="true">Sí</option>
+                        </select>
+                      }
+                      @case ('enum') {
+                        <select class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value">
+                          @for (option of capability.options; track option.value) {
+                            <option [value]="option.value">{{ option.label }}</option>
+                          }
+                        </select>
+                      }
+                      @case ('integer') {
+                        <input class="input value" type="number" min="0" step="1" [name]="'rValue' + i" [(ngModel)]="rule.value" />
+                      }
+                      @case ('number') {
+                        <input class="input value" type="number" min="0" step="0.1" [name]="'rValue' + i" [(ngModel)]="rule.value" />
+                      }
+                      @case ('datetime') {
+                        <input class="input value" type="datetime-local" [name]="'rValue' + i" [(ngModel)]="rule.value" />
+                      }
+                      @default {
+                        <input class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value" />
+                      }
                     }
-                    @case ('enum') {
-                      <select class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value">
-                        @for (option of capability.options; track option.value) {
-                          <option [value]="option.value">{{ option.label }}</option>
-                        }
-                      </select>
+                    @if (capability.requiresWindow) {
+                      <label class="window-field">
+                        en los últimos
+                        <input
+                          class="input window-input"
+                          type="number"
+                          [min]="capability.windowMinDays ?? 1"
+                          [max]="capability.windowMaxDays ?? 3650"
+                          step="1"
+                          [name]="'rWindow' + i"
+                          [(ngModel)]="rule.windowDays"
+                        />
+                        días
+                      </label>
                     }
-                    @case ('integer') {
-                      <input class="input value" type="number" min="0" [name]="'rValue' + i" [(ngModel)]="rule.value" />
-                    }
-                    @case ('datetime') {
-                      <input class="input value" type="datetime-local" [name]="'rValue' + i" [(ngModel)]="rule.value" />
-                    }
-                    @default {
-                      <input class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value" />
-                    }
-                  }
+                  </div>
                   <button class="btn btn-sm btn-danger" type="button" (click)="removeRule(i)">Quitar</button>
                 </div>
                 <div class="muted tiny rule-description">{{ capability.description }}</div>
@@ -351,6 +378,7 @@ function isoDate(value: string): string | null {
             <button class="btn btn-sm" type="button" (click)="cancelForm()">Cancelar</button>
           </div>
         </form>
+        }
       }
 
       @if (loading()) {
@@ -440,6 +468,9 @@ function isoDate(value: string): string | null {
     .check-row { display: flex; gap: 0.5rem; align-items: flex-start; }
     .rule-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, 0.7fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
     .rule-description { margin-top: -0.25rem; }
+    .rule-value-stack { display: flex; flex-direction: column; gap: 0.3rem; }
+    .window-field { display: flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.76rem; white-space: nowrap; }
+    .window-input { width: 5rem; padding-block: 0.25rem; }
     .operator { text-align: center; font-size: 0.86rem; color: var(--muted); }
     .preview-card { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--surface); display: flex; flex-direction: column; gap: 0.55rem; }
     .preview-sample { display: flex; flex-direction: column; gap: 0.3rem; }
@@ -468,6 +499,7 @@ export class CampaignsAdminComponent implements OnInit {
   readonly campaigns = signal<PlatformCampaign[]>([]);
   readonly benefits = signal<PlatformBenefit[]>([]);
   readonly capabilities = signal<PlatformCampaignCapabilities | null>(null);
+  readonly capabilitiesError = signal('');
   readonly audiencePreview = signal<CampaignAudiencePreview | null>(null);
   readonly previewLoading = signal(false);
   readonly loading = signal(true);
@@ -493,16 +525,27 @@ export class CampaignsAdminComponent implements OnInit {
   async load(): Promise<void> {
     this.loading.set(true);
     try {
-      const [campaigns, benefits, capabilities] = await Promise.all([
+      const [campaigns, benefits] = await Promise.all([
         firstValueFrom(this.api.platformCampaigns()),
-        firstValueFrom(this.api.platformBenefits()),
-        firstValueFrom(this.api.platformCampaignCapabilities())
+        firstValueFrom(this.api.platformBenefits())
       ]);
       this.campaigns.set(campaigns);
       this.benefits.set(benefits);
-      this.capabilities.set(capabilities);
     } catch (err) {
       this.toast.error(errorMessage(err));
+    }
+
+    try {
+      this.capabilities.set(await firstValueFrom(this.api.platformCampaignCapabilities()));
+      this.capabilitiesError.set('');
+    } catch (err) {
+      this.capabilities.set(null);
+      this.capabilitiesError.set(
+        errorMessage(
+          err,
+          'No se pudieron cargar las capacidades del motor. Reiniciá el backend y volvé a cargar esta pantalla.'
+        )
+      );
     } finally {
       this.loading.set(false);
     }
@@ -655,12 +698,16 @@ export class CampaignsAdminComponent implements OnInit {
   private ruleForApi(rule: CampaignRule): CampaignRule {
     const capability = this.ruleCapability(rule.field);
     let value = rule.value;
-    if (capability?.valueType === 'integer') {
+    if (capability?.valueType === 'integer' || capability?.valueType === 'number') {
       value = Number(value);
     } else if (capability?.valueType === 'datetime' && value) {
       value = new Date(String(value)).toISOString();
     }
-    return { ...rule, value };
+    return {
+      ...rule,
+      value,
+      windowDays: capability?.requiresWindow ? Number(rule.windowDays) : null
+    };
   }
 
   resetRule(rule: CampaignRule): void {
@@ -672,22 +719,28 @@ export class CampaignsAdminComponent implements OnInit {
     }
     if (capability.valueType === 'boolean') {
       rule.value = false;
-    } else if (capability.valueType === 'integer') {
+    } else if (capability.valueType === 'integer' || capability.valueType === 'number') {
       rule.value = 0;
     } else if (capability.valueType === 'enum') {
       rule.value = capability.options[0]?.value ?? '';
     } else {
       rule.value = '';
     }
+    rule.windowDays = capability.requiresWindow ? 30 : null;
     this.audiencePreview.set(null);
   }
 
   canSave(): boolean {
     return (
+      !!this.capabilities() &&
       !!this.form.name.trim() &&
       !!this.form.benefitId &&
       this.form.action === 'GRANT_BENEFIT' &&
-      this.form.priority > 0
+      this.form.priority > 0 &&
+      this.form.rules.every((rule) => {
+        const capability = this.ruleCapability(rule.field);
+        return !capability?.requiresWindow || Number(rule.windowDays) > 0;
+      })
     );
   }
 
