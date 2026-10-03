@@ -179,6 +179,7 @@ function isoDate(value: string): string | null {
             <label class="field">
               Beneficio que aplica
               <select class="input" name="cBenefit" [(ngModel)]="form.benefitId" required>
+                <option [ngValue]="null" disabled>Elegí un beneficio</option>
                 @for (benefit of activeBenefits(); track benefit.id) {
                   <option [ngValue]="benefit.id">{{ benefit.name }}</option>
                 }
