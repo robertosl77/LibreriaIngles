@@ -39,6 +39,7 @@ class CampaignRuleIn(BaseModel):
     field: str = Field(min_length=2, max_length=60)
     operator: str = Field(default="EQ", min_length=2, max_length=12)
     value: Any
+    windowDays: int | None = Field(default=None, ge=1, le=3650)
 
 
 class CampaignAssistIn(BaseModel):
@@ -78,7 +79,7 @@ Devolvé SOLO JSON con esta forma:
     "name": "nombre claro",
     "benefitId": 123 o null,
     "trigger": "trigger disponible",
-    "rules": [{"field":"...", "operator":"...", "value":...}],
+    "rules": [{"field":"...", "operator":"...", "value":..., "windowDays": null o número}],
     "priority": 100,
     "stackable": false,
     "maxRecipients": null,
@@ -256,7 +257,7 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 def _validate_rule(rule: CampaignRuleIn) -> dict:
     try:
-        return validate_rule(rule.field, rule.operator, rule.value)
+        return validate_rule(rule.field, rule.operator, rule.value, rule.windowDays)
     except CampaignCapabilityError as exc:
         raise HTTPException(422, str(exc)) from exc
 
