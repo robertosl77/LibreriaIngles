@@ -16,6 +16,7 @@ from app.benefits.service import (
     BenefitApplication,
     apply_service_benefit,
     seed_benefits,
+    seed_fidelity_lab_benefits,
 )
 from app.campaigns.models import (
     Campaign,
@@ -26,6 +27,7 @@ from app.campaigns.models import (
     CampaignStatus,
     CampaignTrigger,
 )
+from app.core.config import settings
 from app.learning.models import ClassSession, ClassSessionStatus, SessionKind
 from app.memberships.models import Membership, MembershipStatus
 from app.study_profiles.models import (
@@ -39,6 +41,168 @@ from app.subscriptions.service import effective_service
 
 WELCOME_CODE = "WELCOME_PLATFORM"
 WELCOME_BENEFIT_CODE = "WELCOME_PLATFORM_3D"
+
+# Laboratorio visible solo en local/dev. Todos los casos nacen en DRAFT y son idempotentes.
+FIDELITY_LAB_CAMPAIGNS = (
+    {
+        "code": "LAB_FID_01_6M_AVG5",
+        "name": "LAB 01 · Permanencia 6 meses + promedio alto",
+        "benefit": "LAB_FID_6M_AVG5",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 180},
+            {"field": "AVERAGE_CLASSES_PER_DAY", "operator": "GTE", "value": 5, "windowDays": 30},
+        ],
+        "message": "Tu permanencia y constancia merecen un reconocimiento.",
+    },
+    {
+        "code": "LAB_FID_02_ANNIVERSARY",
+        "name": "LAB 02 · Aniversario de 1 año",
+        "benefit": "LAB_FID_1Y",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365},
+        ],
+        "message": "Gracias por acompañarnos durante todo un año.",
+    },
+    {
+        "code": "LAB_FID_03_DAILY_7",
+        "name": "LAB 03 · Constancia diaria 7 días",
+        "benefit": "LAB_FID_DAILY_7",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "MIN_CLASSES_PER_ACTIVE_DAY", "operator": "GTE", "value": 3, "windowDays": 7},
+            {"field": "ACTIVE_STUDY_DAYS", "operator": "GTE", "value": 7, "windowDays": 7},
+        ],
+        "message": "Siete días de constancia: seguí construyendo el hábito.",
+    },
+    {
+        "code": "LAB_FID_04_STREAK_14",
+        "name": "LAB 04 · Racha de estudio 14 días",
+        "benefit": "LAB_FID_STREAK_14",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "STUDY_STREAK_DAYS", "operator": "GTE", "value": 14},
+        ],
+        "message": "Tu racha de 14 días merece un premio.",
+    },
+    {
+        "code": "LAB_FID_05_ACTIVE_20",
+        "name": "LAB 05 · Alta presencia mensual",
+        "benefit": "LAB_FID_ACTIVE_20",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "ACTIVE_STUDY_DAYS", "operator": "GTE", "value": 20, "windowDays": 30},
+        ],
+        "message": "Tu presencia constante durante el mes se nota.",
+    },
+    {
+        "code": "LAB_FID_06_VOLUME_50",
+        "name": "LAB 06 · Volumen mensual de 50 clases",
+        "benefit": "LAB_FID_VOLUME_50",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "CLASSES_COMPLETED", "operator": "GTE", "value": 50, "windowDays": 30},
+        ],
+        "message": "Completaste un gran volumen de práctica este mes.",
+    },
+    {
+        "code": "LAB_FID_07_A1_INTENSE",
+        "name": "LAB 07 · Impulso A1 intensivo",
+        "benefit": "LAB_FID_A1_INTENSE",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "CURRENT_LEVEL", "operator": "EQ", "value": "A1"},
+            {"field": "CLASSES_COMPLETED", "operator": "GTE", "value": 30, "windowDays": 14},
+        ],
+        "message": "Tu intensidad de práctica en A1 merece un impulso extra.",
+    },
+    {
+        "code": "LAB_FID_08_WINBACK_30",
+        "name": "LAB 08 · Volvé después de 30 días",
+        "benefit": "LAB_FID_WINBACK_30",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+            {"field": "DAYS_SINCE_LAST_ACTIVITY", "operator": "GTE", "value": 30},
+        ],
+        "message": "Hace tiempo que no practicás. Te damos un impulso para volver.",
+    },
+    {
+        "code": "LAB_FID_09_WINBACK_90",
+        "name": "LAB 09 · Recuperación larga 90 días",
+        "benefit": "LAB_FID_WINBACK_90",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+            {"field": "DAYS_SINCE_LAST_ACTIVITY", "operator": "GTE", "value": 90},
+        ],
+        "message": "Queremos ayudarte a retomar después de una pausa larga.",
+    },
+    {
+        "code": "LAB_FID_10_EXPIRED_30",
+        "name": "LAB 10 · Regreso tras servicio vencido",
+        "benefit": "LAB_FID_EXPIRED_30",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+            {"field": "DAYS_SINCE_SERVICE_EXPIRED", "operator": "GTE", "value": 30},
+        ],
+        "message": "Tu servicio venció hace tiempo; tenemos una propuesta para volver.",
+    },
+    {
+        "code": "LAB_FID_11_NEVER_STARTED",
+        "name": "LAB 11 · Registrado pero nunca empezó",
+        "benefit": "LAB_FID_NEVER_STARTED",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "NEVER_STUDIED", "operator": "EQ", "value": True},
+        ],
+        "message": "Tu primera práctica todavía te está esperando.",
+    },
+    {
+        "code": "LAB_FID_12_LOW_ACTIVITY",
+        "name": "LAB 12 · Riesgo por baja actividad",
+        "benefit": "LAB_FID_LOW_ACTIVITY",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "CLASSES_COMPLETED", "operator": "LTE", "value": 3, "windowDays": 30},
+        ],
+        "message": "Vimos poca actividad reciente; te damos un incentivo para retomar.",
+    },
+    {
+        "code": "LAB_FID_13_BYOK_6M",
+        "name": "LAB 13 · Fidelidad usando propias keys",
+        "benefit": "LAB_FID_BYOK_6M",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "SERVICE_SOURCE", "operator": "EQ", "value": "BYOK"},
+            {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 180},
+        ],
+        "message": "Gracias por seguir aprendiendo con tus propias conexiones de IA.",
+    },
+    {
+        "code": "LAB_FID_14_HYBRID_ACTIVE",
+        "name": "LAB 14 · Fidelidad híbrida + actividad",
+        "benefit": "LAB_FID_HYBRID_ACTIVE",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "SERVICE_SOURCE", "operator": "EQ", "value": "HYBRID"},
+            {"field": "ACTIVE_STUDY_DAYS", "operator": "GTE", "value": 15, "windowDays": 30},
+        ],
+        "message": "Tu uso sostenido del servicio híbrido merece un reconocimiento.",
+    },
+    {
+        "code": "LAB_FID_15_COMPLAINT",
+        "name": "LAB 15 · Compensación manual post-reclamo · editar email",
+        "benefit": "LAB_FID_COMPLAINT",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "ACCOUNT_EMAIL", "operator": "EQ", "value": "reemplazar@ejemplo.invalid"},
+        ],
+        "message": "Compensación de cortesía luego de resolver tu reclamo.",
+    },
+)
 
 
 def utcnow() -> datetime:
@@ -89,6 +253,48 @@ def seed_campaigns(db: Session) -> None:
             message="Bienvenido: tenés 3 días para probar la IA de Librería Inglés.",
         )
     )
+    db.flush()
+
+    if settings.app_env.lower() in {"local", "dev", "development"}:
+        _seed_fidelity_lab_campaigns(db)
+
+
+def _seed_fidelity_lab_campaigns(db: Session) -> None:
+    """Siembra 15 campañas DRAFT del laboratorio T-065 solo en bases locales/dev."""
+    benefits = seed_fidelity_lab_benefits(db)
+
+    for index, spec in enumerate(FIDELITY_LAB_CAMPAIGNS, start=1):
+        code = spec["code"]
+        marker = db.get(CampaignSeedMarker, code)
+        if marker is not None:
+            continue
+
+        existing = db.scalar(select(Campaign).where(Campaign.code == code))
+        if existing is not None:
+            db.add(CampaignSeedMarker(code=code))
+            continue
+
+        benefit = benefits.get(spec["benefit"])
+        if benefit is None:
+            continue
+
+        db.add(CampaignSeedMarker(code=code))
+        db.add(
+            Campaign(
+                code=code,
+                name=spec["name"],
+                benefit_id=benefit.id,
+                action=CampaignAction.GRANT_BENEFIT,
+                action_config={},
+                status=CampaignStatus.DRAFT,
+                trigger=CampaignTrigger.LOGIN,
+                eligibility={"mode": "ALL", "rules": spec["rules"]},
+                priority=200 + index,
+                stackable=False,
+                notification=CampaignNotification.IN_APP,
+                message=spec["message"],
+            )
+        )
     db.flush()
 
 
@@ -290,6 +496,9 @@ def rule_evaluation(
         else:
             actual = service.source.value
             matched = operator == "EQ" and actual == str(expected).upper()
+    elif field == "ACCOUNT_EMAIL":
+        actual = account.email.lower()
+        matched = operator == "EQ" and actual == str(expected).strip().lower()
     elif field == "EMAIL_DOMAIN":
         actual = account.email.rsplit("@", 1)[-1].lower() if "@" in account.email else ""
         matched = operator == "EQ" and actual == str(expected).strip().lower()
