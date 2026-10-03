@@ -216,6 +216,7 @@ def grant_service(
     now = utcnow()
     subscription = Subscription(
         plan_id=plan.id,
+        benefit_id=benefit_id,
         account_id=account.id,
         status=SubscriptionStatus.ACTIVE,
         started_at=now,
