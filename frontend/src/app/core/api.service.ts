@@ -9,6 +9,7 @@ import {
   AuthConfig,
   Certificate,
   CampaignAssistResult,
+  CampaignAudiencePreview,
   CampaignNotice,
   ClassDetail,
   ClassSummary,
@@ -26,6 +27,7 @@ import {
   PlatformBenefit,
   PlatformBenefitDraft,
   PlatformCampaign,
+  PlatformCampaignCapabilities,
   PlatformCampaignDraft,
   PlatformInvitation,
   PlatformInvitationDraft,
@@ -313,6 +315,14 @@ export class ApiService {
   // Campañas (T-004 etapa 2)
   platformCampaigns(): Observable<PlatformCampaign[]> {
     return this.http.get<PlatformCampaign[]>(`${this.base}/platform/campaigns`);
+  }
+
+  platformCampaignCapabilities(): Observable<PlatformCampaignCapabilities> {
+    return this.http.get<PlatformCampaignCapabilities>(`${this.base}/platform/campaigns/capabilities`);
+  }
+
+  previewPlatformCampaign(draft: PlatformCampaignDraft): Observable<CampaignAudiencePreview> {
+    return this.http.post<CampaignAudiencePreview>(`${this.base}/platform/campaigns/preview`, draft);
   }
 
   createPlatformCampaign(draft: PlatformCampaignDraft): Observable<PlatformCampaign> {
