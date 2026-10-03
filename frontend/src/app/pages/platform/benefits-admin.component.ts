@@ -99,7 +99,6 @@ function numberOrNull(value: unknown): number | null {
                 <th>Beneficio</th>
                 <th>Servicio</th>
                 <th>Duración</th>
-                <th>Usos</th>
                 <th>Estado</th>
                 <th></th>
               </tr>
@@ -110,9 +109,6 @@ function numberOrNull(value: unknown): number | null {
                   <td><strong>{{ benefit.name }}</strong></td>
                   <td>{{ benefit.serviceName }}</td>
                   <td>{{ benefit.durationDays ? benefit.durationDays + ' días' : 'sin vencimiento' }}</td>
-                  <td class="small">
-                    {{ benefit.usedByCampaigns }} campaña(s) · {{ benefit.usedByInvitations }} invitación(es)
-                  </td>
                   <td>
                     <span [class]="benefit.active ? 'chip chip-ok' : 'chip'">
                       {{ benefit.active ? 'Activo' : 'Inactivo' }}
