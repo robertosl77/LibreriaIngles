@@ -560,3 +560,21 @@ def test_combination_cannot_be_disabled_while_active_benefit_or_account_uses_it(
     )
     assert disabled.status_code == 200, disabled.text
     assert disabled.json()["active"] is False
+
+
+def test_default_personal_account_protects_individual_byok_combination(client) -> None:
+    owner = login(client, OWNER)
+    byok = _services(client, owner)["INDIVIDUAL_BYOK"]
+    _student(client, "default-byok@example.com")
+
+    listed = _services(client, owner)["INDIVIDUAL_BYOK"]
+    assert listed["activeAccounts"] >= 1
+    assert listed["canDisable"] is False
+
+    blocked = client.put(
+        f"{API}/platform/services/{byok['id']}",
+        headers=owner,
+        json={"active": False},
+    )
+    assert blocked.status_code == 409
+    assert "cuenta" in blocked.json()["detail"]
