@@ -69,6 +69,13 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         (("BYOK", "Propias keys"), ("PLATFORM", "Plataforma"), ("HYBRID", "Híbrido")),
     ),
     RuleCapability(
+        "ACCOUNT_EMAIL",
+        "Email exacto",
+        "string",
+        ("EQ",),
+        "Cuenta concreta identificada por su email. Útil para compensaciones o gestiones manuales.",
+    ),
+    RuleCapability(
         "EMAIL_DOMAIN",
         "Dominio de email",
         "string",
@@ -322,6 +329,10 @@ def validate_rule(field: str, operator: str, value: Any, window_days: Any = None
             value = value.lower().lstrip("@")
             if not value or "." not in value:
                 raise CampaignCapabilityError("Dominio de email inválido.")
+        elif field == "ACCOUNT_EMAIL":
+            value = value.lower()
+            if "@" not in value or "." not in value.rsplit("@", 1)[-1]:
+                raise CampaignCapabilityError("Email inválido.")
         elif not value:
             raise CampaignCapabilityError(f"{field} no puede quedar vacío.")
 
