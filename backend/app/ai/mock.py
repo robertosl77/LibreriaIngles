@@ -185,7 +185,14 @@ class MockProvider:
             not daily_average
             and any(
                 phrase in lower
-                for phrase in ("todos los días", "todos los dias", "cada día", "cada dia")
+                for phrase in (
+                    "todos los días",
+                    "todos los dias",
+                    "cada día",
+                    "cada dia",
+                    "clases diarias",
+                    "clase diaria",
+                )
             )
         )
         low_bound = any(
