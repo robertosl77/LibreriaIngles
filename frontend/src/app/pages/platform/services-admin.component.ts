@@ -2,25 +2,19 @@ import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, output, sig
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
-import { AiSource, LinkType, PlatformService } from '../../core/models';
+import { AiSource, PlatformService } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
-import { ActiveToggleComponent } from '../../shared/ui/active-toggle.component';
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 
-const SOURCE_SHORT: Record<AiSource, string> = {
-  BYOK: 'Propias keys (BYOK)',
-  PLATFORM: 'Plataforma',
-  HYBRID: 'Híbrido'
-};
-
-const LINK_SHORT: Record<LinkType, string> = {
-  PERSONAL: 'Individual',
-  CORPORATE: 'Empresa'
-};
+const SOURCES: { key: AiSource; label: string }[] = [
+  { key: 'BYOK', label: 'Propias keys' },
+  { key: 'PLATFORM', label: 'Plataforma' },
+  { key: 'HYBRID', label: 'Híbrido' }
+];
 
 @Component({
   selector: 'app-services-admin',
-  imports: [ActiveToggleComponent, CollapseCardComponent],
+  imports: [CollapseCardComponent],
   template: `
     <app-collapse-card
       title="Servicios"
@@ -28,41 +22,66 @@ const LINK_SHORT: Record<LinkType, string> = {
     >
       <div class="service-types">
         <article>
-          <strong>Individual</strong>
-          <p class="muted small">Cuenta personal, sin empresa asociada.</p>
+          <strong>Personal</strong>
+          <p class="muted small">Cuenta individual, sin organización asociada.</p>
         </article>
       </div>
       <p class="muted tiny note">
-        Empresa se incorpora con la etapa corporativa. Los tipos de servicio no se crean ni editan desde este portal.
+        Corporativa se incorpora con la etapa de empresas. Los servicios no se crean ni editan desde este portal.
       </p>
     </app-collapse-card>
 
     <app-collapse-card
-      title="Combinaciones"
-      description="Habilitá qué cruces Servicio × Fuente pueden utilizarse."
+      title="Membresías"
+      description="Definen qué cruces entre Servicio y Fuente de IA están habilitados."
     >
       @if (loading()) {
         <p class="muted"><span class="spinner"></span></p>
       } @else {
-        <div class="combinations">
-          @for (item of personalCombinations(); track item.id) {
-            <article class="combination" [class.inactive]="!item.active">
-              <div>
-                <strong>{{ linkShort[item.linkType] }}</strong>
-                <p class="source">{{ sourceShort[item.source] }}</p>
-              </div>
+        <div class="membership-table-wrap">
+          <table class="membership-table">
+            <thead>
+              <tr>
+                <th>Servicio</th>
+                @for (source of sources; track source.key) {
+                  <th>{{ source.label }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th class="service-label">Personal</th>
+                @for (source of sources; track source.key) {
+                  @if (membership(source.key); as item) {
+                    <td>
+                      <div class="membership-cell" [class.inactive]="!item.active">
+                        <span [class]="item.active ? 'chip chip-ok' : 'chip'">
+                          {{ item.active ? 'Habilitada' : 'Deshabilitada' }}
+                        </span>
 
-              <app-active-toggle
-                [value]="item.active"
-                [disabled]="busyId() === item.id || (item.active && !item.canDisable)"
-                (valueChange)="setActive(item, $event)"
-              />
+                        <button
+                          class="btn btn-sm"
+                          [class.btn-danger]="item.active"
+                          type="button"
+                          (click)="setActive(item, !item.active)"
+                          [disabled]="busyId() === item.id || (item.active && !item.canDisable)"
+                          [title]="item.active && !item.canDisable ? disableReason(item) : ''"
+                        >
+                          {{ item.active ? 'Deshabilitar' : 'Habilitar' }}
+                        </button>
 
-              @if (item.active && !item.canDisable) {
-                <p class="muted tiny blocker">{{ disableReason(item) }}</p>
-              }
-            </article>
-          }
+                        @if (item.active && !item.canDisable) {
+                          <p class="muted tiny blocker">{{ disableReason(item) }}</p>
+                        }
+                      </div>
+                    </td>
+                  } @else {
+                    <td><span class="muted small">No disponible</span></td>
+                  }
+                }
+              </tr>
+            </tbody>
+          </table>
         </div>
       }
     </app-collapse-card>
@@ -70,39 +89,70 @@ const LINK_SHORT: Record<LinkType, string> = {
   styles: `
     :host { display: contents; }
 
-    .service-types,
-    .combinations {
+    .service-types {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 0.75rem;
     }
 
-    article {
+    .service-types article {
+      max-width: 18rem;
       padding: 0.75rem;
       border: 1px solid var(--border);
       border-radius: 0.6rem;
       background: var(--bg);
     }
 
-    article p { margin: 0.25rem 0 0; }
-    .service-types article { max-width: 18rem; }
-    .source { font-size: 0.9rem; }
+    .service-types article p { margin: 0.25rem 0 0; }
     .note { margin: 0.8rem 0 0; }
     .tiny { font-size: 0.76rem; }
 
-    .combination {
-      display: flex;
-      flex-direction: column;
-      gap: 0.7rem;
-      justify-content: space-between;
+    .membership-table-wrap { overflow-x: auto; }
+    .membership-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0.6rem;
+      margin: -0.6rem;
     }
 
-    .combination.inactive { opacity: 0.68; }
-    .blocker { min-height: 2.1em; }
+    .membership-table th {
+      text-align: left;
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 600;
+      padding: 0.25rem 0.35rem;
+      white-space: nowrap;
+    }
+
+    .membership-table td {
+      min-width: 13rem;
+      vertical-align: top;
+      padding: 0;
+    }
+
+    .service-label {
+      color: inherit !important;
+      font-size: 0.95rem !important;
+      vertical-align: middle;
+    }
+
+    .membership-cell {
+      min-height: 7.6rem;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.65rem;
+      padding: 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      background: var(--bg);
+    }
+
+    .membership-cell.inactive { opacity: 0.7; }
+    .blocker { margin: 0; line-height: 1.35; }
 
     @media (max-width: 760px) {
-      .service-types,
-      .combinations { grid-template-columns: 1fr; }
+      .service-types { grid-template-columns: 1fr; }
     }
   `
 })
@@ -113,14 +163,15 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
   @Input() refreshVersion = 0;
   readonly changed = output<void>();
 
-  readonly sourceShort = SOURCE_SHORT;
-  readonly linkShort = LINK_SHORT;
+  readonly sources = SOURCES;
   readonly combinations = signal<PlatformService[]>([]);
   readonly loading = signal(true);
   readonly busyId = signal<number | null>(null);
 
-  personalCombinations(): PlatformService[] {
-    return this.combinations().filter((item) => item.linkType === 'PERSONAL');
+  membership(source: AiSource): PlatformService | null {
+    return this.combinations().find(
+      (item) => item.linkType === 'PERSONAL' && item.source === source
+    ) ?? null;
   }
 
   async ngOnInit(): Promise<void> {
@@ -150,7 +201,7 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
     if (item.activeBenefits) blockers.push(`${item.activeBenefits} beneficio(s)`);
     if (item.activeCampaigns) blockers.push(`${item.activeCampaigns} campaña(s)`);
     if (item.activeInvitations) blockers.push(`${item.activeInvitations} invitación(es)`);
-    return 'No se puede deshabilitar: ' + blockers.join(', ') + ' vigente(s).';
+    return 'En uso por ' + blockers.join(', ') + ' vigente(s).';
   }
 
   async setActive(item: PlatformService, active: boolean): Promise<void> {
@@ -159,7 +210,7 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
     try {
       await firstValueFrom(this.api.updatePlatformService(item.id, { active }));
       await this.load();
-      this.toast.success(active ? 'Combinación habilitada.' : 'Combinación deshabilitada.');
+      this.toast.success(active ? 'Membresía habilitada.' : 'Membresía deshabilitada.');
       this.changed.emit();
     } catch (err) {
       this.toast.error(errorMessage(err));
