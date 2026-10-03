@@ -15,6 +15,10 @@ from sqlalchemy import case, func, select
 from app.accounts.models import Account, PlatformRole
 from app.ai.models import AIConnection, AIConnectionOwnerType, AIUsageEvent, utcnow
 from app.ai.service import HEALTH_CHECK
+from app.benefits.models import Benefit
+from app.campaigns.models import Campaign
+from app.invitations.models import Invitation
+from app.subscriptions.service import effective_service
 from app.core.deps import CurrentAccount, DbSession
 from app.learning.models import ClassSession
 
