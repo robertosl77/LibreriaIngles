@@ -7,6 +7,7 @@
 """
 
 import random
+import re
 
 from app.ai.models import AIConnectionStatus
 from app.ai.providers import ModelInfo, ProviderError
@@ -97,6 +98,7 @@ class MockProvider:
         lower = description.lower()
         benefits = task.get("benefits") or []
         benefit_id = benefits[0].get("id") if benefits else None
+        warnings = []
 
         trigger = "FIRST_LOGIN" if any(
             word in lower for word in ("bienvenida", "primer login", "primera vez", "nuevo usuario")
@@ -147,7 +149,74 @@ class MockProvider:
                 rules.append({"field": "CURRENT_LEVEL", "operator": "EQ", "value": level})
                 break
 
-        warnings = []
+        window_match = re.search(
+            r"(?:últim(?:os|as)?|ultim(?:os|as)?|durante|por|en)\s+(?:los\s+)?(\d+)\s+d[ií]as",
+            lower,
+        )
+        window_days = int(window_match.group(1)) if window_match else None
+
+        classes_match = re.search(r"(\d+)\s+clases?", lower)
+        daily_frequency = any(
+            phrase in lower
+            for phrase in ("clases diarias", "clase diaria", "cada día", "cada dia", "todos los días", "todos los dias")
+        )
+        if classes_match:
+            class_count = int(classes_match.group(1))
+            if daily_frequency:
+                metric_window = window_days or 30
+                rules.append(
+                    {
+                        "field": "MIN_CLASSES_PER_ACTIVE_DAY",
+                        "operator": "GTE",
+                        "value": class_count,
+                        "windowDays": metric_window,
+                    }
+                )
+                rules.append(
+                    {
+                        "field": "ACTIVE_STUDY_DAYS",
+                        "operator": "GTE",
+                        "value": metric_window,
+                        "windowDays": metric_window,
+                    }
+                )
+                if window_days is None:
+                    warnings.append(
+                        "No se indicó durante cuántos días sostener la frecuencia diaria; "
+                        "se propusieron 30 días como ventana editable."
+                    )
+            elif window_days is not None:
+                rules.append(
+                    {
+                        "field": "CLASSES_COMPLETED",
+                        "operator": "GTE",
+                        "value": class_count,
+                        "windowDays": window_days,
+                    }
+                )
+
+        active_days_match = re.search(r"(\d+)\s+d[ií]as?\s+(?:activos?|con actividad)", lower)
+        if active_days_match:
+            active_days = int(active_days_match.group(1))
+            metric_window = window_days or max(active_days, 30)
+            rules.append(
+                {
+                    "field": "ACTIVE_STUDY_DAYS",
+                    "operator": "GTE",
+                    "value": active_days,
+                    "windowDays": metric_window,
+                }
+            )
+
+        streak_match = re.search(r"racha(?:\s+de)?\s+(\d+)\s+d[ií]as", lower)
+        if streak_match:
+            rules.append(
+                {
+                    "field": "STUDY_STREAK_DAYS",
+                    "operator": "GTE",
+                    "value": int(streak_match.group(1)),
+                }
+            )
         if "%" in description or "descuento" in lower or "bonific" in lower:
             warnings.append(
                 "El motor actual de campañas no configura descuentos o precios; "
