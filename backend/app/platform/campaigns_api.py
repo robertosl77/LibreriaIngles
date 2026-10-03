@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import json
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -100,11 +101,14 @@ Para métricas de estudio usá las capacidades del catálogo:
 - CLASSES_COMPLETED cuenta clases completadas dentro de windowDays.
 - ACTIVE_STUDY_DAYS cuenta días distintos con actividad dentro de windowDays.
 - MIN_CLASSES_PER_ACTIVE_DAY mide el mínimo de clases de cada día en que hubo actividad.
-- AVERAGE_CLASSES_PER_ACTIVE_DAY mide el promedio por día activo.
+- AVERAGE_CLASSES_PER_ACTIVE_DAY mide el promedio solo entre los días donde hubo actividad.
+- AVERAGE_CLASSES_PER_DAY mide el promedio real de toda la ventana: los días sin estudiar cuentan como cero.
 - STUDY_STREAK_DAYS mide la racha consecutiva actual y no usa windowDays.
-Si el usuario pide "N clases todos los días durante K días", combiná MIN_CLASSES_PER_ACTIVE_DAY >= N
-con ACTIVE_STUDY_DAYS >= K, ambas con windowDays=K. Si pide frecuencia diaria pero no informa
-período, usá windowDays=30 y agregá una advertencia clara para que revise esa ventana.
+Si el usuario pide "promedio de N clases por día/diarias", usá AVERAGE_CLASSES_PER_DAY >= N.
+Si pide "N clases todos los días durante K días", combiná MIN_CLASSES_PER_ACTIVE_DAY >= N con
+ACTIVE_STUDY_DAYS >= K, ambas con windowDays=K. No confundas "promedio diario" con "mínimo todos
+los días": son criterios distintos. Si pide una frecuencia/promedio y no informa período, usá
+windowDays=30 y agregá una advertencia clara para que revise esa ventana.
 
 Elegí benefitId únicamente entre los beneficios provistos y solo si la intención lo deja claro;
 si no, devolvé null. El resultado es siempre un BORRADOR: nunca actives ni guardes una campaña."""
@@ -221,6 +225,81 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
         warnings.append(
             "El motor actual no administra descuentos, precios ni porcentajes; solo puede otorgar un beneficio existente."
         )
+
+    # "Promedio de N clases diarias" debe incluir los días sin actividad en el denominador.
+    # Se corrige de forma determinística para no depender de una interpretación variable del LLM.
+    mentions_daily_average = (
+        "promedio" in lower
+        and "clase" in lower
+        and any(term in lower for term in ("diaria", "diario", "por día", "por dia", "al día", "al dia"))
+    )
+    if mentions_daily_average:
+        classes_match = re.search(r"(\d+(?:[\.,]\d+)?)\s+clases?", lower)
+        if classes_match:
+            expected = float(classes_match.group(1).replace(",", "."))
+            expected = int(expected) if expected.is_integer() else expected
+            window_days = next(
+                (
+                    int(rule["windowDays"])
+                    for rule in rules
+                    if rule.get("windowDays") is not None
+                    and rule.get("field") in {
+                        "MIN_CLASSES_PER_ACTIVE_DAY",
+                        "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+                        "AVERAGE_CLASSES_PER_DAY",
+                        "ACTIVE_STUDY_DAYS",
+                    }
+                ),
+                None,
+            )
+            if window_days is None:
+                window_match = re.search(
+                    r"(?:últim(?:os|as)?|ultim(?:os|as)?|durante|por|en)\s+(?:los\s+)?(\d+)\s+d[ií]as",
+                    lower,
+                )
+                window_days = int(window_match.group(1)) if window_match else 30
+                if window_match is None and not any("30 días" in warning for warning in warnings):
+                    warnings.append(
+                        "No se indicó el período del promedio diario; se propusieron 30 días como ventana editable."
+                    )
+            normalized["draft"]["rules"] = [
+                rule
+                for rule in rules
+                if rule.get("field")
+                not in {
+                    "MIN_CLASSES_PER_ACTIVE_DAY",
+                    "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+                    "AVERAGE_CLASSES_PER_DAY",
+                }
+                and not (
+                    rule.get("field") == "ACTIVE_STUDY_DAYS"
+                    and rule.get("windowDays") == window_days
+                    and rule.get("value") == window_days
+                )
+            ]
+            normalized["draft"]["rules"].append(
+                {
+                    "field": "AVERAGE_CLASSES_PER_DAY",
+                    "operator": "GTE",
+                    "value": expected,
+                    "windowDays": window_days,
+                }
+            )
+            rules = normalized["draft"]["rules"]
+
+    unsupported_audience_terms = {
+        "reclamo": "El motor todavía no tiene datos de reclamos/soporte para segmentar esta campaña.",
+        "queja": "El motor todavía no tiene datos de reclamos/soporte para segmentar esta campaña.",
+        "ticket de soporte": "El motor todavía no tiene datos de reclamos/soporte para segmentar esta campaña.",
+        "referid": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+        "invitó a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+        "invito a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+    }
+    for term, warning in unsupported_audience_terms.items():
+        if term in lower and not any(warning.lower() == item.lower() for item in warnings):
+            warnings.append(warning)
+            normalized["draft"]["benefitId"] = None
+            break
 
     mentions_payment_tenure = any(
         phrase in lower
