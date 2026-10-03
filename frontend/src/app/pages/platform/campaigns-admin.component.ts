@@ -308,7 +308,7 @@ function isoDate(value: string): string | null {
             <button class="btn btn-primary btn-sm" type="submit" [disabled]="saving() || !canSave()">
               @if (saving()) { <span class="spinner"></span> } Guardar
             </button>
-            <button class="btn btn-sm" type="button" (click)="editingId.set(null)">Cancelar</button>
+            <button class="btn btn-sm" type="button" (click)="cancelForm()">Cancelar</button>
           </div>
         </form>
       }
@@ -425,6 +425,13 @@ export class CampaignsAdminComponent implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly editingId = signal<number | null>(null);
+  readonly newMode = signal<NewCampaignMode>(null);
+  readonly aiLoading = signal(false);
+  readonly draftSummary = signal('');
+  readonly draftWarnings = signal<string[]>([]);
+  readonly templates = CAMPAIGN_TEMPLATES;
+  aiDescription = '';
+
   activeBenefits(): PlatformBenefit[] {
     return this.benefits().filter((benefit) => benefit.active);
   }
@@ -452,8 +459,87 @@ export class CampaignsAdminComponent implements OnInit {
   }
 
   startNew(): void {
+    this.editingId.set(null);
+    this.draftSummary.set('');
+    this.draftWarnings.set([]);
+    this.aiDescription = '';
+    this.newMode.set('choose');
+  }
+
+  startManual(): void {
     this.form = emptyForm(this.activeBenefits()[0]?.id ?? null);
+    this.draftSummary.set('');
+    this.draftWarnings.set([]);
+    this.newMode.set(null);
     this.editingId.set(0);
+  }
+
+  applyTemplate(template: CampaignTemplate): void {
+    this.form = {
+      name: template.name,
+      benefitId: this.activeBenefits()[0]?.id ?? null,
+      trigger: template.trigger,
+      rules: template.rules.map((rule) => ({ ...rule })),
+      priority: template.priority,
+      stackable: template.stackable,
+      maxRecipients: template.maxRecipients,
+      startsAt: '',
+      endsAt: '',
+      notification: template.notification,
+      message: template.message
+    };
+    this.draftSummary.set(`Plantilla "${template.title}" aplicada. Revisá el beneficio y los valores antes de guardar.`);
+    this.draftWarnings.set([]);
+    this.newMode.set(null);
+    this.editingId.set(0);
+  }
+
+  cancelNew(): void {
+    this.newMode.set(null);
+    this.aiDescription = '';
+  }
+
+  cancelForm(): void {
+    this.editingId.set(null);
+    this.draftSummary.set('');
+    this.draftWarnings.set([]);
+  }
+
+  async generateWithAi(): Promise<void> {
+    const description = this.aiDescription.trim();
+    if (description.length < 8) return;
+
+    this.aiLoading.set(true);
+    try {
+      const result = await firstValueFrom(this.api.assistPlatformCampaign(description));
+      this.form = {
+        name: result.draft.name,
+        benefitId: result.draft.benefitId,
+        trigger: result.draft.trigger,
+        rules: result.draft.rules.map((rule) => ({
+          ...rule,
+          value:
+            rule.field === 'CREATED_AT' && typeof rule.value === 'string'
+              ? localDate(rule.value)
+              : rule.value
+        })),
+        priority: result.draft.priority,
+        stackable: result.draft.stackable,
+        maxRecipients: result.draft.maxRecipients,
+        startsAt: localDate(result.draft.startsAt),
+        endsAt: localDate(result.draft.endsAt),
+        notification: result.draft.notification,
+        message: result.draft.message ?? ''
+      };
+      this.draftSummary.set(result.summary || 'Borrador generado por IA. Revisalo antes de guardar.');
+      this.draftWarnings.set(result.warnings ?? []);
+      this.newMode.set(null);
+      this.editingId.set(0);
+    } catch (err) {
+      this.toast.error(errorMessage(err, 'No se pudo generar el borrador con IA.'));
+    } finally {
+      this.aiLoading.set(false);
+    }
   }
 
   startEdit(campaign: PlatformCampaign): void {
@@ -476,6 +562,9 @@ export class CampaignsAdminComponent implements OnInit {
       notification: campaign.notification,
       message: campaign.message ?? ''
     };
+    this.newMode.set(null);
+    this.draftSummary.set('');
+    this.draftWarnings.set([]);
     this.editingId.set(campaign.id);
   }
 
@@ -531,7 +620,7 @@ export class CampaignsAdminComponent implements OnInit {
         id ? this.api.updatePlatformCampaign(id, draft) : this.api.createPlatformCampaign(draft)
       );
       this.toast.success(id ? 'Campaña actualizada.' : 'Campaña creada en borrador.');
-      this.editingId.set(null);
+      this.cancelForm();
       await this.load();
     } catch (err) {
       this.toast.error(errorMessage(err));
