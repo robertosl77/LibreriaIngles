@@ -69,7 +69,7 @@ function isoDate(value: string): string | null {
               <select class="input" name="iBenefit" [(ngModel)]="form.benefitId" required>
                 @for (benefit of activeBenefits(); track benefit.id) {
                   <option [ngValue]="benefit.id">
-                    {{ benefit.name }} · {{ benefit.serviceName }}
+                    {{ benefit.name }} · {{ benefit.combinationName }}
                   </option>
                 }
               </select>
