@@ -83,6 +83,10 @@ export interface PlatformBenefit {
   active: boolean;
   usedByCampaigns: number;
   usedByInvitations: number;
+  activeBeneficiaries: number;
+  activeCampaigns: number;
+  activeInvitations: number;
+  canDelete: boolean;
 }
 
 export interface PlatformBenefitDraft {
