@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, computed, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
@@ -316,10 +316,13 @@ function numberOrNull(value: unknown): number | null {
     }
   `
 })
-export class ServicesAdminComponent implements OnInit {
+export class ServicesAdminComponent implements OnInit, OnChanges {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
+
+  @Input() refreshVersion = 0;
+  readonly changed = output<void>();
 
   readonly sourceShort = SOURCE_SHORT;
   readonly services = signal<PlatformService[]>([]);
@@ -347,6 +350,12 @@ export class ServicesAdminComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await Promise.all([this.loadServices(), this.loadBenefits(), this.loadAccounts()]);
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['refreshVersion'] && !changes['refreshVersion'].firstChange) {
+      void Promise.all([this.loadBenefits(), this.loadAccounts()]);
+    }
   }
 
   async loadServices(): Promise<void> {
@@ -402,6 +411,7 @@ export class ServicesAdminComponent implements OnInit {
       this.toast.success(id ? 'Servicio actualizado.' : 'Servicio creado.');
       this.editingId.set(null);
       await Promise.all([this.loadServices(), this.loadAccounts()]);
+      this.changed.emit();
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
