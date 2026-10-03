@@ -449,3 +449,166 @@ def test_benefit_cannot_be_deleted_while_campaign_is_active_or_paused(client) ->
     )
     assert listed["activeCampaigns"] == 0
     assert listed["canDelete"] is True
+
+
+def test_campaign_assist_builds_reviewable_draft_without_persisting(client, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import app.platform.campaigns_api as campaigns_api
+
+    owner, services = _owner_and_services(client)
+    benefit = _benefit(
+        client,
+        owner,
+        services["INDIVIDUAL_PLATFORM"]["id"],
+        name="Fidelidad",
+        days=30,
+    )
+    before = len(_campaigns(client, owner))
+
+    def fake_assist(*args, **kwargs):
+        return SimpleNamespace(
+            data={
+                "draft": {
+                    "name": "Aniversario",
+                    "benefitId": benefit["id"],
+                    "trigger": "SCHEDULED",
+                    "rules": [
+                        {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+                        {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365},
+                    ],
+                    "priority": 50,
+                    "stackable": True,
+                    "maxRecipients": 100,
+                    "notification": "IN_APP",
+                    "message": "Gracias por seguir con nosotros.",
+                },
+                "warnings": ["El pedido menciona un descuento, que el motor actual no administra."],
+                "summary": "Fidelización al cumplir un año.",
+            }
+        )
+
+    monkeypatch.setattr(campaigns_api, "run_platform_json_task", fake_assist)
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={"description": "Al cumplir un año, dar un beneficio y 20% de descuento."},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["draft"]["name"] == "Aniversario"
+    assert body["draft"]["benefitId"] == benefit["id"]
+    assert body["draft"]["trigger"] == "LOGIN"
+    assert body["draft"]["rules"][1] == {
+        "field": "DAYS_SINCE_CREATED",
+        "operator": "GTE",
+        "value": 365,
+    }
+    assert any("disparador" in warning.lower() for warning in body["warnings"])
+    assert any("descuento" in warning.lower() for warning in body["warnings"])
+    assert len(_campaigns(client, owner)) == before
+
+
+def test_campaign_assist_uses_platform_ai_only_and_does_not_create_campaign(client) -> None:
+    from app.ai.models import AIConnectionOwnerType, AIUsageEvent
+    from app.db import SessionLocal
+
+    owner, _ = _owner_and_services(client)
+
+    own = client.post(
+        f"{API}/ai/connections",
+        headers=owner,
+        json={
+            "provider": "MOCK",
+            "name": "Owner BYOK",
+            "model": "mock",
+            "priority": 1,
+            "scope": "account",
+        },
+    )
+    assert own.status_code == 201, own.text
+
+    platform = client.post(
+        f"{API}/ai/connections",
+        headers=owner,
+        json={
+            "provider": "MOCK",
+            "name": "Asistente plataforma",
+            "model": "mock",
+            "priority": 20,
+            "scope": "platform",
+        },
+    )
+    assert platform.status_code == 201, platform.text
+
+    before = len(_campaigns(client, owner))
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={"description": "Usuarios con al menos un año desde el registro, al volver a ingresar."},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["draft"]["trigger"] == "LOGIN"
+    assert any(
+        rule["field"] == "DAYS_SINCE_CREATED"
+        and rule["operator"] == "GTE"
+        and rule["value"] == 365
+        for rule in body["draft"]["rules"]
+    )
+    assert len(_campaigns(client, owner)) == before
+
+    with SessionLocal() as db:
+        events = list(
+            db.scalars(
+                select(AIUsageEvent).where(AIUsageEvent.operation == "campaign_assist")
+            )
+        )
+        assert len(events) == 1
+        assert events[0].owner_type == AIConnectionOwnerType.PLATFORM
+        assert events[0].connection_id == platform.json()["id"]
+
+
+def test_campaign_assist_is_owner_only(client) -> None:
+    user = login(client, "campaign-assist-user@example.com")
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=user,
+        json={"description": "Crear una campaña de bienvenida para usuarios nuevos."},
+    )
+    assert response.status_code == 403
+
+
+def test_campaign_assist_warns_instead_of_faking_paid_tenure_or_discount(client) -> None:
+    owner, _ = _owner_and_services(client)
+    platform = client.post(
+        f"{API}/ai/connections",
+        headers=owner,
+        json={
+            "provider": "MOCK",
+            "name": "Asistente plataforma",
+            "model": "mock",
+            "priority": 1,
+            "scope": "platform",
+        },
+    )
+    assert platform.status_code == 201, platform.text
+
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={
+            "description": (
+                "Para quienes llegan a un año de servicio pago, bonificar por tres meses "
+                "un 20% cuando vuelvan a ingresar."
+            )
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert not any(
+        rule["field"] == "DAYS_SINCE_CREATED" for rule in body["draft"]["rules"]
+    )
+    joined = " ".join(body["warnings"]).lower()
+    assert "descuento" in joined or "porcentaje" in joined
+    assert "suscripción" in joined or "pago" in joined

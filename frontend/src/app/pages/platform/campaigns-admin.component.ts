@@ -13,6 +13,9 @@ import {
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
+import { CAMPAIGN_TEMPLATES, CampaignTemplate } from './campaign-templates';
+
+type NewCampaignMode = 'choose' | 'templates' | 'ai' | null;
 
 interface CampaignForm {
   name: string;
@@ -75,13 +78,98 @@ function isoDate(value: string): string | null {
       title="Campañas"
       description="Cuándo evaluar + condiciones + beneficio + notificación + límites. Cada persona recibe cada campaña una sola vez."
     >
-      @if (editingId() === null) {
+      @if (editingId() === null && !newMode()) {
         <div class="collapse-actions">
           <button class="btn btn-sm" type="button" (click)="startNew()">Nueva campaña</button>
         </div>
       }
 
+      @if (newMode()) {
+        <section class="creator stack">
+          <div class="row spread creator-head">
+            <div>
+              <strong>Nueva campaña</strong>
+              <div class="muted small">Elegí cómo querés armar el borrador. Los tres caminos terminan en el mismo formulario.</div>
+            </div>
+            <button class="btn btn-sm" type="button" (click)="cancelNew()">Cancelar</button>
+          </div>
+
+          @if (newMode() === 'choose') {
+            <div class="creation-options">
+              <button class="choice-card" type="button" (click)="newMode.set('templates')">
+                <strong>Usar plantilla</strong>
+                <span>Partí de casos frecuentes ya configurados y ajustá los valores.</span>
+              </button>
+              <button class="choice-card" type="button" (click)="newMode.set('ai')">
+                <strong>Describir con IA</strong>
+                <span>Contá qué querés lograr y la IA arma un borrador revisable.</span>
+              </button>
+              <button class="choice-card" type="button" (click)="startManual()">
+                <strong>Configurar manualmente</strong>
+                <span>Usá directamente el constructor completo de campañas.</span>
+              </button>
+            </div>
+          }
+
+          @if (newMode() === 'templates') {
+            <div class="row spread">
+              <strong>Plantillas</strong>
+              <button class="btn btn-sm" type="button" (click)="newMode.set('choose')">Volver</button>
+            </div>
+            <div class="template-grid">
+              @for (template of templates; track template.id) {
+                <button class="template-card" type="button" (click)="applyTemplate(template)">
+                  <strong>{{ template.title }}</strong>
+                  <span>{{ template.description }}</span>
+                </button>
+              }
+            </div>
+          }
+
+          @if (newMode() === 'ai') {
+            <div class="row spread">
+              <strong>Describí la campaña</strong>
+              <button class="btn btn-sm" type="button" (click)="newMode.set('choose')">Volver</button>
+            </div>
+            <label class="field">
+              Qué querés lograr
+              <textarea
+                class="input ai-description"
+                name="campaignAiDescription"
+                [(ngModel)]="aiDescription"
+                maxlength="2000"
+                rows="4"
+                placeholder="Ej. A quienes cumplen un año desde el registro, darles un beneficio de fidelización cuando vuelvan a ingresar."
+              ></textarea>
+            </label>
+            <p class="muted tiny">
+              La IA usa una conexión de la plataforma y genera únicamente un borrador con las capacidades actuales.
+              Nunca guarda ni activa la campaña.
+            </p>
+            <div class="row">
+              <button
+                class="btn btn-primary btn-sm"
+                type="button"
+                (click)="generateWithAi()"
+                [disabled]="aiLoading() || aiDescription.trim().length < 8"
+              >
+                @if (aiLoading()) { <span class="spinner"></span> }
+                Generar borrador
+              </button>
+            </div>
+          }
+        </section>
+      }
+
       @if (editingId() !== null) {
+        @if (draftSummary()) {
+          <div class="banner small draft-banner">
+            <strong>{{ draftSummary() }}</strong>
+            @for (warning of draftWarnings(); track warning) {
+              <div>· {{ warning }}</div>
+            }
+          </div>
+        }
         <form class="editor stack" (ngSubmit)="save()">
           <div class="grid">
             <label class="field">
@@ -91,6 +179,7 @@ function isoDate(value: string): string | null {
             <label class="field">
               Beneficio que aplica
               <select class="input" name="cBenefit" [(ngModel)]="form.benefitId" required>
+                <option [ngValue]="null" disabled>Elegí un beneficio</option>
                 @for (benefit of activeBenefits(); track benefit.id) {
                   <option [ngValue]="benefit.id">{{ benefit.name }}</option>
                 }
@@ -219,7 +308,7 @@ function isoDate(value: string): string | null {
             <button class="btn btn-primary btn-sm" type="submit" [disabled]="saving() || !canSave()">
               @if (saving()) { <span class="spinner"></span> } Guardar
             </button>
-            <button class="btn btn-sm" type="button" (click)="editingId.set(null)">Cancelar</button>
+            <button class="btn btn-sm" type="button" (click)="cancelForm()">Cancelar</button>
           </div>
         </form>
       }
@@ -282,7 +371,31 @@ function isoDate(value: string): string | null {
   styles: `
     :host { display: contents; }
     .collapse-actions { display: flex; justify-content: flex-end; margin-bottom: 0.8rem; }
-    .editor, .rules { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
+    .creator, .editor, .rules { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
+    .creator { margin-bottom: 0.8rem; }
+    .creator-head { align-items: flex-start; }
+    .creation-options, .template-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.65rem;
+    }
+    .choice-card, .template-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      text-align: left;
+      padding: 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+    }
+    .choice-card:hover, .template-card:hover { background: var(--bg); }
+    .choice-card span, .template-card span { color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
+    .ai-description { min-height: 6.5rem; resize: vertical; }
+    .draft-banner { margin-bottom: 0.8rem; }
     .spread { justify-content: space-between; }
     .check-row { display: flex; gap: 0.5rem; align-items: flex-start; }
     .rule-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(6rem, 0.7fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
@@ -295,6 +408,7 @@ function isoDate(value: string): string | null {
     .dim .campaign-main { opacity: 0.65; }
     .tiny { font-size: 0.76rem; }
     @media (max-width: 760px) {
+      .creation-options, .template-grid { grid-template-columns: 1fr; }
       .rule-row { grid-template-columns: 1fr; }
       .operator { text-align: left; }
       .campaign { flex-direction: column; }
@@ -311,6 +425,13 @@ export class CampaignsAdminComponent implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly editingId = signal<number | null>(null);
+  readonly newMode = signal<NewCampaignMode>(null);
+  readonly aiLoading = signal(false);
+  readonly draftSummary = signal('');
+  readonly draftWarnings = signal<string[]>([]);
+  readonly templates = CAMPAIGN_TEMPLATES;
+  aiDescription = '';
+
   activeBenefits(): PlatformBenefit[] {
     return this.benefits().filter((benefit) => benefit.active);
   }
@@ -338,8 +459,87 @@ export class CampaignsAdminComponent implements OnInit {
   }
 
   startNew(): void {
+    this.editingId.set(null);
+    this.draftSummary.set('');
+    this.draftWarnings.set([]);
+    this.aiDescription = '';
+    this.newMode.set('choose');
+  }
+
+  startManual(): void {
     this.form = emptyForm(this.activeBenefits()[0]?.id ?? null);
+    this.draftSummary.set('');
+    this.draftWarnings.set([]);
+    this.newMode.set(null);
     this.editingId.set(0);
+  }
+
+  applyTemplate(template: CampaignTemplate): void {
+    this.form = {
+      name: template.name,
+      benefitId: null,
+      trigger: template.trigger,
+      rules: template.rules.map((rule) => ({ ...rule })),
+      priority: template.priority,
+      stackable: template.stackable,
+      maxRecipients: template.maxRecipients,
+      startsAt: '',
+      endsAt: '',
+      notification: template.notification,
+      message: template.message
+    };
+    this.draftSummary.set(`Plantilla "${template.title}" aplicada. Revisá el beneficio y los valores antes de guardar.`);
+    this.draftWarnings.set([]);
+    this.newMode.set(null);
+    this.editingId.set(0);
+  }
+
+  cancelNew(): void {
+    this.newMode.set(null);
+    this.aiDescription = '';
+  }
+
+  cancelForm(): void {
+    this.editingId.set(null);
+    this.draftSummary.set('');
+    this.draftWarnings.set([]);
+  }
+
+  async generateWithAi(): Promise<void> {
+    const description = this.aiDescription.trim();
+    if (description.length < 8) return;
+
+    this.aiLoading.set(true);
+    try {
+      const result = await firstValueFrom(this.api.assistPlatformCampaign(description));
+      this.form = {
+        name: result.draft.name,
+        benefitId: result.draft.benefitId,
+        trigger: result.draft.trigger,
+        rules: result.draft.rules.map((rule) => ({
+          ...rule,
+          value:
+            rule.field === 'CREATED_AT' && typeof rule.value === 'string'
+              ? localDate(rule.value)
+              : rule.value
+        })),
+        priority: result.draft.priority,
+        stackable: result.draft.stackable,
+        maxRecipients: result.draft.maxRecipients,
+        startsAt: localDate(result.draft.startsAt),
+        endsAt: localDate(result.draft.endsAt),
+        notification: result.draft.notification,
+        message: result.draft.message ?? ''
+      };
+      this.draftSummary.set(result.summary || 'Borrador generado por IA. Revisalo antes de guardar.');
+      this.draftWarnings.set(result.warnings ?? []);
+      this.newMode.set(null);
+      this.editingId.set(0);
+    } catch (err) {
+      this.toast.error(errorMessage(err, 'No se pudo generar el borrador con IA.'));
+    } finally {
+      this.aiLoading.set(false);
+    }
   }
 
   startEdit(campaign: PlatformCampaign): void {
@@ -362,6 +562,9 @@ export class CampaignsAdminComponent implements OnInit {
       notification: campaign.notification,
       message: campaign.message ?? ''
     };
+    this.newMode.set(null);
+    this.draftSummary.set('');
+    this.draftWarnings.set([]);
     this.editingId.set(campaign.id);
   }
 
@@ -417,7 +620,7 @@ export class CampaignsAdminComponent implements OnInit {
         id ? this.api.updatePlatformCampaign(id, draft) : this.api.createPlatformCampaign(draft)
       );
       this.toast.success(id ? 'Campaña actualizada.' : 'Campaña creada en borrador.');
-      this.editingId.set(null);
+      this.cancelForm();
       await this.load();
     } catch (err) {
       this.toast.error(errorMessage(err));

@@ -62,6 +62,8 @@ class MockProvider:
             return self._generate(task)
         if task.get("kind") == "evaluate_answer":
             return self._evaluate(task)
+        if task.get("kind") == "campaign_assist":
+            return self._campaign_assist(task)
         raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Tarea desconocida para el mock.")
 
     def transcribe_audio(self, audio: bytes, mime_type: str) -> str:
@@ -88,6 +90,68 @@ class MockProvider:
                 "fluency": 75,
             },
         )
+
+    def _campaign_assist(self, task: dict) -> dict:
+        """Borrador determinístico para probar el asistente de campañas en local."""
+        description = str(task.get("description") or "").strip()
+        lower = description.lower()
+        benefits = task.get("benefits") or []
+        benefit_id = benefits[0].get("id") if benefits else None
+
+        trigger = "FIRST_LOGIN" if any(
+            word in lower for word in ("bienvenida", "primer login", "primera vez", "nuevo usuario")
+        ) else "LOGIN"
+        rules = [{"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"}]
+        if "sin membres" in lower:
+            rules.append({"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False})
+        elif "con membres" in lower:
+            rules.append({"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": True})
+
+        source = None
+        if "byok" in lower or "propias" in lower:
+            source = "BYOK"
+        elif "híbr" in lower or "hibr" in lower:
+            source = "HYBRID"
+        elif "plataforma" in lower:
+            source = "PLATFORM"
+        if source:
+            rules.append({"field": "SERVICE_SOURCE", "operator": "EQ", "value": source})
+
+        payment_tenure = any(
+            phrase in lower
+            for phrase in ("servicio pago", "servicio pagado", "membresía paga", "membresia paga")
+        )
+        if ("año" in lower or "365" in lower) and not payment_tenure:
+            rules.append({"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365})
+
+        warnings = []
+        if "%" in description or "descuento" in lower or "bonific" in lower:
+            warnings.append(
+                "El motor actual de campañas no configura descuentos o precios; "
+                "solo puede otorgar un beneficio existente."
+            )
+        if payment_tenure:
+            warnings.append(
+                "El motor actual no tiene una condición por antigüedad de una suscripción paga."
+            )
+
+        return {
+            "draft": {
+                "name": "Campaña sugerida por IA",
+                "benefitId": benefit_id,
+                "trigger": trigger,
+                "rules": rules,
+                "priority": 100,
+                "stackable": False,
+                "maxRecipients": None,
+                "startsAt": None,
+                "endsAt": None,
+                "notification": "IN_APP",
+                "message": description[:500] if description else None,
+            },
+            "warnings": warnings,
+            "summary": "Borrador generado con las capacidades actuales del motor de campañas.",
+        }
 
     def _generate(self, task: dict) -> dict:
         rng = random.Random()

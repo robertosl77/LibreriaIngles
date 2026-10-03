@@ -8,6 +8,7 @@ import {
   AiConnection,
   AuthConfig,
   Certificate,
+  CampaignAssistResult,
   CampaignNotice,
   ClassDetail,
   ClassSummary,
@@ -316,6 +317,12 @@ export class ApiService {
 
   createPlatformCampaign(draft: PlatformCampaignDraft): Observable<PlatformCampaign> {
     return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns`, draft);
+  }
+
+  assistPlatformCampaign(description: string): Observable<CampaignAssistResult> {
+    return this.http.post<CampaignAssistResult>(`${this.base}/platform/campaigns/assist`, {
+      description
+    });
   }
 
   updatePlatformCampaign(id: number, draft: PlatformCampaignDraft): Observable<PlatformCampaign> {

@@ -1,6 +1,7 @@
 """Portal del PLATFORM_OWNER: constructor y control de campañas (T-004, etapa 2)."""
 
 from datetime import datetime, timezone
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -8,6 +9,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
+from app.ai.service import NoAIAvailable, run_platform_json_task
 from app.benefits.models import Benefit
 from app.benefits.service import benefit_duration, seed_benefits
 from app.campaigns.models import (
@@ -40,6 +42,10 @@ class CampaignRuleIn(BaseModel):
     value: Any
 
 
+class CampaignAssistIn(BaseModel):
+    description: str = Field(min_length=8, max_length=2000)
+
+
 class CampaignIn(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     benefitId: int
@@ -58,6 +64,193 @@ class CampaignIn(BaseModel):
         if self.startsAt and self.endsAt and self.endsAt <= self.startsAt:
             raise ValueError("La fecha de fin debe ser posterior a la de inicio.")
         return self
+
+
+CAMPAIGN_ASSIST_SYSTEM = """Sos un asistente que transforma una intención comercial en un borrador
+de campaña para Librería Inglés. No inventes capacidades que el motor no tenga.
+
+Devolvé SOLO JSON con esta forma:
+{
+  "draft": {
+    "name": "nombre claro",
+    "benefitId": 123 o null,
+    "trigger": "FIRST_LOGIN" o "LOGIN",
+    "rules": [{"field":"...", "operator":"...", "value":...}],
+    "priority": 100,
+    "stackable": false,
+    "maxRecipients": null,
+    "startsAt": null o ISO-8601,
+    "endsAt": null o ISO-8601,
+    "notification": "NONE" | "IN_APP" | "EMAIL" | "IN_APP_EMAIL",
+    "message": null o texto
+  },
+  "warnings": ["limitación o dato que debe revisar el usuario"],
+  "summary": "resumen breve de lo interpretado"
+}
+
+Reglas soportadas:
+- ACCOUNT_TYPE: EQ PERSONAL o CORPORATE
+- HAS_GRANTED_SERVICE: EQ true/false
+- SERVICE_SOURCE: EQ BYOK/PLATFORM/HYBRID
+- EMAIL_DOMAIN: EQ dominio
+- DAYS_SINCE_CREATED: EQ/GTE/LTE número
+- CREATED_AT: EQ/GTE/LTE fecha ISO
+
+El motor actual SOLO otorga un beneficio existente. No administra precios, porcentajes de
+descuento, pagos, renovaciones ni antigüedad de una suscripción paga. DAYS_SINCE_CREATED significa
+exclusivamente días desde la creación de la cuenta: nunca lo uses como sustituto de antigüedad de
+pago/membresía. Si el pedido requiere algo no soportado, avisalo en warnings y no inventes campos.
+SCHEDULED todavía no está disponible: usá FIRST_LOGIN o LOGIN.
+Elegí benefitId únicamente entre los beneficios provistos y solo si la intención lo deja claro;
+si no, devolvé null para que el usuario lo seleccione. El resultado es siempre un BORRADOR:
+nunca actives ni guardes una campaña."""
+
+
+def _assist_datetime(value, warnings: list[str], label: str) -> str | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        warnings.append(f"La IA propuso una {label} inválida; se dejó vacía.")
+        return None
+    return _as_utc(parsed).isoformat()
+
+
+def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
+    raw = data.get("draft") if isinstance(data.get("draft"), dict) else {}
+    warnings = [
+        str(item)[:300]
+        for item in (data.get("warnings") or [])
+        if isinstance(item, (str, int, float))
+    ][:8]
+
+    benefit_id = raw.get("benefitId")
+    try:
+        benefit_id = int(benefit_id) if benefit_id is not None else None
+    except (TypeError, ValueError):
+        benefit_id = None
+    if benefit_id is not None and benefit_id not in benefit_ids:
+        warnings.append("La IA eligió un beneficio no disponible; seleccioná uno manualmente.")
+        benefit_id = None
+
+    trigger = str(raw.get("trigger") or "LOGIN").upper()
+    if trigger not in {"FIRST_LOGIN", "LOGIN"}:
+        warnings.append("El disparador propuesto no está disponible; se usó Cada login.")
+        trigger = "LOGIN"
+
+    rules: list[dict] = []
+    for item in raw.get("rules") or []:
+        if not isinstance(item, dict) or len(rules) >= 20:
+            continue
+        try:
+            rules.append(_validate_rule(CampaignRuleIn.model_validate(item)))
+        except (HTTPException, ValueError, TypeError):
+            warnings.append("Se omitió una condición propuesta por IA porque no es compatible.")
+    if not any(rule["field"] == "ACCOUNT_TYPE" for rule in rules):
+        rules.insert(0, {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"})
+
+    try:
+        priority = max(1, min(10000, int(raw.get("priority") or 100)))
+    except (TypeError, ValueError):
+        priority = 100
+
+    max_recipients = raw.get("maxRecipients")
+    if max_recipients in (None, ""):
+        max_recipients = None
+    else:
+        try:
+            max_recipients = max(1, min(10_000_000, int(max_recipients)))
+        except (TypeError, ValueError):
+            max_recipients = None
+            warnings.append("El máximo de beneficiarios propuesto no era válido; se dejó sin límite.")
+
+    starts_at = _assist_datetime(raw.get("startsAt"), warnings, "fecha de inicio")
+    ends_at = _assist_datetime(raw.get("endsAt"), warnings, "fecha de fin")
+    if starts_at and ends_at and datetime.fromisoformat(ends_at) <= datetime.fromisoformat(starts_at):
+        ends_at = None
+        warnings.append("La fecha de fin no era posterior al inicio; se dejó vacía.")
+
+    notification = str(raw.get("notification") or "IN_APP").upper()
+    allowed_notifications = {item.value for item in CampaignNotification}
+    if notification not in allowed_notifications:
+        notification = "IN_APP"
+
+    name = str(raw.get("name") or "Campaña sugerida por IA").strip()[:120]
+    if len(name) < 2:
+        name = "Campaña sugerida por IA"
+    message = raw.get("message")
+    message = str(message).strip()[:500] if message else None
+
+    return {
+        "draft": {
+            "name": name,
+            "benefitId": benefit_id,
+            "trigger": trigger,
+            "rules": rules,
+            "priority": priority,
+            "stackable": bool(raw.get("stackable")) if isinstance(raw.get("stackable"), bool) else False,
+            "maxRecipients": max_recipients,
+            "startsAt": starts_at,
+            "endsAt": ends_at,
+            "notification": notification,
+            "message": message,
+        },
+        "warnings": warnings,
+        "summary": str(data.get("summary") or "Borrador generado por IA. Revisalo antes de guardar.")[:500],
+    }
+
+
+def _apply_description_capability_guards(description: str, normalized: dict) -> dict:
+    """Evita que una buena intención de la IA se convierta en una regla de negocio falsa."""
+    lower = description.lower()
+    warnings = normalized["warnings"]
+    rules = normalized["draft"]["rules"]
+
+    mentions_discount = "%" in description or any(
+        word in lower for word in ("descuento", "bonific", "rebaja", "precio")
+    )
+    if mentions_discount and not any("descuento" in warning.lower() or "precio" in warning.lower() for warning in warnings):
+        warnings.append(
+            "El motor actual no administra descuentos, precios ni porcentajes; solo puede otorgar un beneficio existente."
+        )
+
+    mentions_payment_tenure = any(
+        phrase in lower
+        for phrase in (
+            "servicio pago",
+            "servicio pagado",
+            "membresía paga",
+            "membresia paga",
+            "membresía pagada",
+            "membresia pagada",
+            "antigüedad de pago",
+            "antiguedad de pago",
+            "desde que paga",
+            "desde que pagó",
+            "desde que pago",
+            "renovación",
+            "renovacion",
+            "facturación",
+            "facturacion",
+        )
+    )
+    explicitly_account_age = any(
+        phrase in lower
+        for phrase in ("desde el registro", "desde que se registr", "antigüedad de la cuenta", "antiguedad de la cuenta")
+    )
+    if mentions_payment_tenure:
+        if not explicitly_account_age:
+            normalized["draft"]["rules"] = [
+                rule for rule in rules if rule.get("field") != "DAYS_SINCE_CREATED"
+            ]
+        if not any("pago" in warning.lower() or "suscripción" in warning.lower() or "suscripcion" in warning.lower() for warning in warnings):
+            warnings.append(
+                "Todavía no existe una condición por antigüedad de pago o suscripción; no se la reemplazó por antigüedad de la cuenta."
+            )
+
+    normalized["warnings"] = warnings[:8]
+    return normalized
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -234,6 +427,62 @@ def list_campaigns(_: PlatformOwner, db: DbSession) -> list[dict]:
         .order_by(Campaign.priority.asc(), Campaign.id.asc())
     ).all()
     return [_out(db, campaign) for campaign in campaigns]
+
+
+@router.post("/assist")
+def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSession) -> dict:
+    """Convierte lenguaje natural en un borrador; nunca persiste ni activa una campaña."""
+    benefits = db.execute(
+        select(Benefit, Plan)
+        .join(Plan, Plan.id == Benefit.plan_id)
+        .where(
+            Benefit.organization_id.is_(None),
+            Benefit.active.is_(True),
+            Benefit.deleted_at.is_(None),
+            Plan.active.is_(True),
+            Plan.link_type == ServiceLinkType.PERSONAL,
+        )
+        .order_by(Benefit.id)
+    ).all()
+    benefit_options = [
+        {
+            "id": benefit.id,
+            "name": benefit.name,
+            "source": plan.ai_source.value,
+            "durationDays": benefit_duration(benefit, plan),
+        }
+        for benefit, plan in benefits
+    ]
+
+    task = {
+        "kind": "campaign_assist",
+        "description": payload.description.strip(),
+        "benefits": benefit_options,
+    }
+    user_prompt = (
+        "Intención del usuario:\n"
+        + payload.description.strip()
+        + "\n\nBeneficios activos disponibles (solo podés usar estos IDs):\n"
+        + json.dumps(benefit_options, ensure_ascii=False)
+    )
+    try:
+        result = run_platform_json_task(
+            db,
+            owner,
+            system=CAMPAIGN_ASSIST_SYSTEM,
+            user=user_prompt,
+            task=task,
+        )
+    except NoAIAvailable as exc:
+        detail = "No hay una conexión de IA de plataforma disponible para generar el borrador."
+        if exc.errors:
+            detail += " " + "; ".join(exc.errors)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
+
+    if not isinstance(result.data, dict):
+        raise HTTPException(502, "La IA devolvió un borrador inválido.")
+    normalized = _normalize_assist(result.data, {item["id"] for item in benefit_options})
+    return _apply_description_capability_guards(payload.description.strip(), normalized)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
