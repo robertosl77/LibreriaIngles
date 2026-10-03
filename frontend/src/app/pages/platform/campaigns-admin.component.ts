@@ -513,7 +513,6 @@ export class CampaignsAdminComponent implements OnInit {
     this.draftSummary.set('');
     this.draftWarnings.set([]);
     this.audiencePreview.set(null);
-    this.audiencePreview.set(null);
     this.aiDescription = '';
     this.newMode.set('choose');
   }
@@ -558,6 +557,7 @@ export class CampaignsAdminComponent implements OnInit {
     this.editingId.set(null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.audiencePreview.set(null);
   }
 
   async generateWithAi(): Promise<void> {
@@ -612,6 +612,7 @@ export class CampaignsAdminComponent implements OnInit {
     this.newMode.set(null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.audiencePreview.set(null);
     this.editingId.set(campaign.id);
   }
 
