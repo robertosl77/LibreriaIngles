@@ -234,29 +234,28 @@ OTORGAMIENTO (cómo alguien recibe un servicio)
   tiene una empresa de por medio), AWS (base fija + uso variable) y el celular (cuenta controlada
   / línea libre).
 
-### 2. Servicios (matriz fija de vínculo × fuente)
+### 2. Servicios, fuentes y combinaciones
 
-Cada combinación vínculo × fuente es un servicio que después tendrá sus metadatos/costo:
+El modelo se separa explícitamente en dos ejes fijos y una intersección configurable:
 
 ```text
                 │ BYOK              │ PLATAFORMA          │ HÍBRIDO
 ────────────────┼───────────────────┼─────────────────────┼──────────────────────
-INDIVIDUAL      │ servicio A        │ servicio B          │ servicio C
-EMPRESA         │ servicio D        │ servicio E          │ servicio F
+INDIVIDUAL      │ combinación       │ combinación         │ combinación
+EMPRESA futuro  │ combinación       │ combinación         │ combinación
 ```
 
-**Decisión Roberto + ChatGPT, 2026-10-02:** los dos ejes forman parte del modelo de negocio y no se
-crean dinámicamente desde formularios.
+**Decisión Roberto + ChatGPT, 2026-10-02:**
 
-- **Filas:** hoy `INDIVIDUAL`; futuro `EMPRESA`. Una empresa concreta (por ejemplo Cacatúa) no es
-  una fila: es una organización que utiliza la fila Empresa.
-- **Columnas:** `BYOK`, `PLATFORM` y `HYBRID`.
-- Con Empresa implementada existirán las seis combinaciones de la matriz.
-- Agregar una nueva fila o una nueva fuente implica una decisión de modelo y cambios de código;
-  no es un alta administrativa común.
-- **Panel de Servicios:** administra únicamente metadatos de las combinaciones definidas
-  (nombre, descripción y estado). No permite crear combinaciones arbitrarias ni cambiar su vínculo
-  o fuente.
+- **Servicios (filas):** hoy solo `INDIVIDUAL`; futuro `EMPRESA`. Se muestran como información
+  del modelo de negocio y no se crean, editan, activan ni desactivan desde el portal.
+- **Fuentes (columnas):** `BYOK`, `PLATFORM` y `HYBRID`. También son fijas e informativas.
+- **Combinaciones:** la intersección Servicio × Fuente sí se administra. El OWNER puede habilitar o
+  deshabilitar, por ejemplo, `Individual × Híbrido`.
+- Una combinación **no puede deshabilitarse** mientras tenga una cuenta vigente, un beneficio
+  activo, una campaña ACTIVE/PAUSED o una invitación todavía canjeable vinculada.
+- Una empresa concreta (por ejemplo Cacatúa) no es una fila: utiliza el servicio Empresa.
+- Agregar una nueva fila o una nueva fuente implica una decisión de modelo y cambios de código.
 - Servicio **no lleva duración ni límites de consumo**. La duración pertenece exclusivamente a
   Beneficio y los límites actuales pertenecen a cada conexión de IA.
 - **Costos (futuro):** PLATAFORMA = cuota fija estimada para cubrir los tokens; HÍBRIDO = base +
@@ -617,9 +616,13 @@ Aplicados en `feat/t-004-invitations`:
 - **Fuentes de IA visibles y fijas:** Configuración tiene un bloque propio e informativo con
   BYOK / PLATFORM / HYBRID. No se agregan ni eliminan desde el portal; son columnas fijas del
   modelo de negocio.
-- **Servicios como matriz fija:** las filas son Individual y, a futuro, Empresa; cada Servicio es
-  la intersección fila × fuente. El portal solo edita nombre, descripción y estado de combinaciones
-  definidas por código.
+- **Servicios y combinaciones separados:** Servicios muestra solo las filas del modelo (hoy
+  Individual; Empresa futuro), sin editar/activar. Un bloque separado de Combinaciones administra
+  qué intersecciones Servicio × Fuente están habilitadas.
+- **Cuentas en Resumen:** Cuentas sale de Configuración. Resumen muestra las cuentas agrupadas por
+  combinación efectiva y mantiene ahí la administración manual puntual de beneficios.
+- **Beneficio separado por ejes:** al crear/editar un Beneficio se seleccionan por separado
+  Servicio, Fuente de IA y duración; ya no se elige una combinación prearmada en un único campo.
 - **Cuentas:** se renombra "Cuentas y servicios" a "Cuentas".
 - **Beneficio efectivo:** la fila de cada cuenta muestra el nombre del Benefit vigente; el Servicio
   queda como dato secundario.
