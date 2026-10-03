@@ -1,3 +1,4 @@
+import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
@@ -7,6 +8,7 @@ import { ToastService } from '../../core/toast.service';
 
 @Component({
   selector: 'app-platform-overview',
+  imports: [DatePipe],
   template: `
     <section class="stack overview">
       <div class="overview-toolbar">
@@ -133,6 +135,67 @@ import { ToastService } from '../../core/toast.service';
             </ul>
           }
         </section>
+
+        <section class="card">
+          <h2>Uso de beneficios</h2>
+          @if (d.benefitUsage.length === 0) {
+            <p class="muted">Todavía no hay beneficios configurados.</p>
+          } @else {
+            <ul class="list">
+              @for (benefit of d.benefitUsage; track benefit.id) {
+                <li class="list-item benefit-usage-row">
+                  <strong>{{ benefit.name }}</strong>
+                  <span class="small muted">
+                    {{ benefit.campaigns }} campaña(s) · {{ benefit.invitations }} invitación(es)
+                  </span>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
+        <section class="card">
+          <div class="chart-head">
+            <div>
+              <h2>Beneficios vigentes por cuenta</h2>
+              <p class="muted small">Resultado efectivo del motor de otorgamientos.</p>
+            </div>
+          </div>
+          @if (d.accountBenefits.length === 0) {
+            <p class="muted">No hay beneficios vigentes.</p>
+          } @else {
+            <div class="table-wrap">
+              <table class="account-benefits">
+                <thead>
+                  <tr>
+                    <th>Cuenta</th>
+                    <th>Beneficio</th>
+                    <th>Servicio</th>
+                    <th>Origen</th>
+                    <th>Vence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of d.accountBenefits; track row.email) {
+                    <tr>
+                      <td>{{ row.email }}</td>
+                      <td><strong>{{ row.benefitName }}</strong></td>
+                      <td>{{ row.serviceName }}</td>
+                      <td>{{ originLabel(row.origin) }}</td>
+                      <td>
+                        @if (row.expiresAt) {
+                          {{ row.expiresAt | date: 'dd/MM/yyyy HH:mm' }}
+                        } @else {
+                          sin vencimiento
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
       } @else if (loading()) {
         <p class="muted"><span class="spinner"></span></p>
       }
@@ -243,6 +306,30 @@ import { ToastService } from '../../core/toast.service';
       border-bottom: 1px solid var(--border);
     }
 
+    .benefit-usage-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    .account-benefits {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.6rem;
+      font-size: 0.85rem;
+    }
+
+    .account-benefits th,
+    .account-benefits td {
+      text-align: left;
+      padding: 0.4rem 0.9rem 0.4rem 0;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
     @media (max-width: 560px) {
       .overview-toolbar {
         align-items: flex-start;
@@ -287,5 +374,14 @@ export class PlatformOverviewComponent implements OnInit {
   shortDate(iso: string): string {
     const [, month, day] = iso.split('-');
     return `${day}/${month}`;
+  }
+
+  originLabel(origin: PlatformOverview['accountBenefits'][number]['origin']): string {
+    return {
+      MANUAL: 'Manual',
+      CAMPAIGN: 'Campaña',
+      INVITATION: 'Invitación',
+      PAYMENT: 'Pago'
+    }[origin];
   }
 }
