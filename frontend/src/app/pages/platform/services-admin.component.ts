@@ -38,50 +38,41 @@ const SOURCES: { key: AiSource; label: string }[] = [
       @if (loading()) {
         <p class="muted"><span class="spinner"></span></p>
       } @else {
-        <div class="membership-table-wrap">
-          <table class="membership-table">
-            <thead>
-              <tr>
-                <th>Servicio</th>
-                @for (source of sources; track source.key) {
-                  <th>{{ source.label }}</th>
-                }
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th class="service-label">Personal</th>
-                @for (source of sources; track source.key) {
-                  @if (membership(source.key); as item) {
-                    <td>
-                      <div class="membership-cell" [class.inactive]="!item.active">
-                        <span [class]="item.active ? 'chip chip-ok' : 'chip'">
-                          {{ item.active ? 'Habilitada' : 'Deshabilitada' }}
-                        </span>
+        <div class="membership-matrix">
+          <div class="matrix-head">Servicio</div>
+          @for (source of sources; track source.key) {
+            <div class="matrix-head">{{ source.label }}</div>
+          }
 
-                        <button
-                          class="btn btn-sm"
-                          [class.btn-danger]="item.active"
-                          type="button"
-                          (click)="setActive(item, !item.active)"
-                          [disabled]="busyId() === item.id || (item.active && !item.canDisable)"
-                          [title]="item.active && !item.canDisable ? disableReason(item) : ''"
-                        >
-                          {{ item.active ? 'Deshabilitar' : 'Habilitar' }}
-                        </button>
+          <div class="service-label">Personal</div>
+          @for (source of sources; track source.key) {
+            @if (membership(source.key); as item) {
+              <div class="membership-cell" [class.inactive]="!item.active">
+                <span [class]="item.active ? 'chip chip-ok' : 'chip'">
+                  {{ item.active ? 'Habilitada' : 'Deshabilitada' }}
+                </span>
 
-                        @if (item.active && !item.canDisable) {
-                          <p class="muted tiny blocker">{{ disableReason(item) }}</p>
-                        }
-                      </div>
-                    </td>
-                  } @else {
-                    <td><span class="muted small">No disponible</span></td>
-                  }
+                <button
+                  class="btn btn-sm"
+                  [class.btn-danger]="item.active"
+                  type="button"
+                  (click)="setActive(item, !item.active)"
+                  [disabled]="busyId() === item.id || (item.active && !item.canDisable)"
+                  [title]="item.active && !item.canDisable ? disableReason(item) : ''"
+                >
+                  {{ item.active ? 'Deshabilitar' : 'Habilitar' }}
+                </button>
+
+                @if (item.active && !item.canDisable) {
+                  <p class="muted tiny blocker">{{ disableReason(item) }}</p>
                 }
-              </tr>
-            </tbody>
-          </table>
+              </div>
+            } @else {
+              <div class="membership-cell inactive">
+                <span class="muted small">No disponible</span>
+              </div>
+            }
+          }
         </div>
       }
     </app-collapse-card>
@@ -107,37 +98,32 @@ const SOURCES: { key: AiSource; label: string }[] = [
     .note { margin: 0.8rem 0 0; }
     .tiny { font-size: 0.76rem; }
 
-    .membership-table-wrap { overflow-x: auto; }
-    .membership-table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0.6rem;
-      margin: -0.6rem;
+    .membership-matrix {
+      display: grid;
+      grid-template-columns: 5.5rem repeat(3, minmax(0, 1fr));
+      gap: 0.6rem;
+      align-items: stretch;
     }
 
-    .membership-table th {
-      text-align: left;
+    .matrix-head {
+      padding: 0 0.35rem 0.15rem;
       font-size: 0.82rem;
       color: var(--muted);
       font-weight: 600;
-      padding: 0.25rem 0.35rem;
       white-space: nowrap;
     }
 
-    .membership-table td {
-      min-width: 13rem;
-      vertical-align: top;
-      padding: 0;
-    }
-
     .service-label {
-      color: inherit !important;
-      font-size: 0.95rem !important;
-      vertical-align: middle;
+      display: flex;
+      align-items: center;
+      padding: 0.8rem 0.35rem;
+      font-size: 0.95rem;
+      font-weight: 600;
     }
 
     .membership-cell {
-      min-height: 7.6rem;
+      min-width: 0;
+      min-height: 8.2rem;
       display: flex;
       flex-direction: column;
       align-items: flex-start;
@@ -146,13 +132,31 @@ const SOURCES: { key: AiSource; label: string }[] = [
       border: 1px solid var(--border);
       border-radius: 0.6rem;
       background: var(--bg);
+      box-sizing: border-box;
     }
 
     .membership-cell.inactive { opacity: 0.7; }
-    .blocker { margin: 0; line-height: 1.35; }
+    .blocker {
+      margin: 0;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
 
     @media (max-width: 760px) {
       .service-types { grid-template-columns: 1fr; }
+
+      .membership-matrix {
+        grid-template-columns: 1fr;
+      }
+
+      .matrix-head:first-child,
+      .service-label {
+        display: none;
+      }
+
+      .matrix-head {
+        padding-top: 0.35rem;
+      }
     }
   `
 })
