@@ -152,4 +152,5 @@ def overview(_: PlatformOwner, db: DbSession) -> dict:
         "daily": daily,
         "connections": per_connection,
         "topAccounts24h": [{"email": r[0], "requests": int(r[1])} for r in top_rows],
+        "benefitUsage": benefit_usage,
     }
