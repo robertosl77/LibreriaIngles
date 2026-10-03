@@ -132,8 +132,8 @@ function numberOrNull(value: unknown): number | null {
     </section>
 
     <app-collapse-card
-      title="Cuentas y servicios"
-      description="El servicio vigente proviene de un beneficio. Para asignar manualmente se elige un beneficio; servicio y días no se vuelven a configurar acá."
+      title="Cuentas"
+      description="Administrá el beneficio asignado a cada cuenta. El servicio resultante queda como detalle."
     >
       <form class="row search-row" (ngSubmit)="loadAccounts()">
         <input class="input search" name="q" [(ngModel)]="query" placeholder="Buscar por email o nombre" />
