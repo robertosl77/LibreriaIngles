@@ -612,7 +612,10 @@ Aplicados en `feat/t-004-invitations`:
   confirmación. La suscripción anterior queda CANCELLED como historial; Campañas e Invitaciones
   conservan su política segura de no reemplazar silenciosamente un servicio distinto.
 - **Baja lógica de Benefit:** la acción Eliminar marca `deleted_at` + inactivo; las referencias
-  históricas siguen existiendo.
+  históricas siguen existiendo. La baja queda bloqueada mientras exista al menos una cuenta con el
+  beneficio vigente, una campaña ACTIVE/PAUSED que lo referencie o una invitación todavía
+  canjeable. Beneficiarios históricos, campañas terminadas e invitaciones canceladas/expiradas/
+  agotadas no bloquean. En UI el botón Eliminar permanece visible pero deshabilitado/grisado.
 - **Usos fuera de Configuración:** campañas/invitaciones que usan cada Benefit se muestran en
   Resumen, no en la tabla de edición.
 - **Resumen de beneficios por cuenta:** muestra cuenta, beneficio vigente, servicio resultante,
@@ -625,6 +628,13 @@ Aplicados en `feat/t-004-invitations`:
 
 ### 13. Pendiente de definir más adelante
 
+- **Paginación real en Cuentas:** el backend ya limita resultados, pero la UI necesita navegación
+  por páginas (o estrategia equivalente) para evitar listas/scroll interminables cuando haya cientos
+  de cuentas. Bootstrap puede resolver la apariencia del paginador, pero la paginación funcional no
+  debe depender de Bootstrap.
+- **Suspender/bloquear cuentas:** diseñar una acción administrativa distinta de eliminar. Debe
+  permitir suspender temporalmente una cuenta por abuso, exceso de consumo u otro motivo, conservar
+  historial/auditoría y definir con precisión qué acciones quedan bloqueadas durante la suspensión.
 - Nombres comerciales definitivos de los servicios.
 - Tope inicial de la bienvenida (tokens/día) y máximo de clases abiertas.
 - Unión de cuentas personal/corporativa de una misma persona (¿por DNI?).
