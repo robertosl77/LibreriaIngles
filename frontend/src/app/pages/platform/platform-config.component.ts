@@ -21,16 +21,6 @@ import { ServicesAdminComponent } from './services-admin.component';
   ],
   template: `
     <section class="stack">
-      <div class="subhead">
-        <div>
-          <h2>Configuración</h2>
-          <p class="muted small">
-            Cómo está configurada la plataforma: fuentes, servicios, beneficios, cuentas, campañas,
-            invitaciones y conexiones.
-          </p>
-        </div>
-      </div>
-
       <app-ai-sources-info />
 
       <app-services-admin
@@ -56,10 +46,7 @@ import { ServicesAdminComponent } from './services-admin.component';
       </app-collapse-card>
     </section>
   `,
-  styles: `
-    .subhead h2, .subhead p { margin: 0; }
-    .subhead p { margin-top: 0.25rem; }
-  `
+  styles: ``
 })
 export class PlatformConfigComponent {
   readonly benefitRefreshVersion = signal(0);
