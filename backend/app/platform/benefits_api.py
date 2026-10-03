@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from app.benefits.models import Benefit
+from app.benefits.models import Benefit, utcnow
 from app.benefits.service import benefit_duration, seed_benefits
 from app.campaigns.models import Campaign
 from app.core.deps import DbSession
@@ -72,7 +72,7 @@ def list_benefits(_: PlatformOwner, db: DbSession) -> list[dict]:
     db.commit()
     rows = db.scalars(
         select(Benefit)
-        .where(Benefit.organization_id.is_(None))
+        .where(Benefit.organization_id.is_(None), Benefit.deleted_at.is_(None))
         .order_by(Benefit.id.asc())
     ).all()
     return [_out(db, row) for row in rows]
@@ -100,8 +100,23 @@ def update_benefit(
     db: DbSession,
 ) -> dict:
     benefit = db.get(Benefit, benefit_id)
-    if benefit is None or benefit.organization_id is not None:
+    if benefit is None or benefit.organization_id is not None or benefit.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Beneficio inexistente.")
     _apply(benefit, payload, db)
     db.commit()
     return _out(db, benefit)
+
+
+@router.delete("/{benefit_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_benefit(
+    benefit_id: int,
+    _: PlatformOwner,
+    db: DbSession,
+) -> None:
+    """Baja lógica: conserva referencias históricas pero impide nuevos otorgamientos."""
+    benefit = db.get(Benefit, benefit_id)
+    if benefit is None or benefit.organization_id is not None or benefit.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Beneficio inexistente.")
+    benefit.active = False
+    benefit.deleted_at = utcnow()
+    db.commit()
