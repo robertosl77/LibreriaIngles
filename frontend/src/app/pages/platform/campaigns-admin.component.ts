@@ -297,7 +297,7 @@ function isoDate(value: string): string | null {
     .campaign-main { display: flex; flex-direction: column; gap: 0.3rem; }
     .actions { flex: none; flex-wrap: wrap; justify-content: flex-end; }
     .warning { color: var(--warn); }
-    .dim { opacity: 0.65; }
+    .dim .campaign-main { opacity: 0.65; }
     .tiny { font-size: 0.76rem; }
     @media (max-width: 760px) {
       .rule-row { grid-template-columns: 1fr; }
