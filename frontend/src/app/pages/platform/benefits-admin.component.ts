@@ -5,7 +5,6 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService, errorMessage } from '../../core/api.service';
 import {
   AiSource,
-  LinkType,
   PlatformBenefit,
   PlatformBenefitDraft,
   PlatformService
@@ -18,11 +17,6 @@ const SOURCE_SHORT: Record<AiSource, string> = {
   BYOK: 'Propias keys (BYOK)',
   PLATFORM: 'Plataforma',
   HYBRID: 'Híbrido'
-};
-
-const SERVICE_SHORT: Record<LinkType, string> = {
-  PERSONAL: 'Personal',
-  CORPORATE: 'Corporativa'
 };
 
 function emptyDraft(source: AiSource = 'BYOK'): PlatformBenefitDraft {
@@ -201,7 +195,6 @@ export class BenefitsAdminComponent implements OnInit, OnChanges {
   readonly editingId = signal<number | null>(null);
   readonly changed = output<void>();
   readonly sourceShort = SOURCE_SHORT;
-  readonly serviceShort = SERVICE_SHORT;
 
   draft: PlatformBenefitDraft = emptyDraft();
 
