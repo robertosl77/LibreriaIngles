@@ -369,7 +369,7 @@ function isoDate(value: string): string | null {
                   @if (campaign.stackable) { <span class="chip chip-ok">Acumulable</span> }
                 </div>
                 <div class="small">
-                  {{ triggerLabel(campaign.trigger) }} → <strong>{{ campaign.benefitName }}</strong>
+                  {{ triggerLabel(campaign.trigger) }} · {{ actionLabel(campaign.action) }} → <strong>{{ campaign.benefitName }}</strong>
                   · {{ campaign.recipients }} beneficiario(s)
                   @if (campaign.maxRecipients) { / {{ campaign.maxRecipients }} máx. }
                 </div>
@@ -573,13 +573,7 @@ export class CampaignsAdminComponent implements OnInit {
         action: result.draft.action ?? 'GRANT_BENEFIT',
         actionConfig: result.draft.actionConfig ?? {},
         trigger: result.draft.trigger,
-        rules: result.draft.rules.map((rule) => ({
-          ...rule,
-          value:
-            rule.field === 'CREATED_AT' && typeof rule.value === 'string'
-              ? localDate(rule.value)
-              : rule.value
-        })),
+        rules: result.draft.rules.map((rule) => this.ruleForForm(rule)),
         priority: result.draft.priority,
         stackable: result.draft.stackable,
         maxRecipients: result.draft.maxRecipients,
@@ -606,13 +600,7 @@ export class CampaignsAdminComponent implements OnInit {
       action: campaign.action ?? 'GRANT_BENEFIT',
       actionConfig: campaign.actionConfig ?? {},
       trigger: campaign.trigger,
-      rules: campaign.rules.map((rule) => ({
-        ...rule,
-        value:
-          rule.field === 'CREATED_AT' && typeof rule.value === 'string'
-            ? localDate(rule.value)
-            : rule.value
-      })),
+      rules: campaign.rules.map((rule) => this.ruleForForm(rule)),
       priority: campaign.priority,
       stackable: campaign.stackable,
       maxRecipients: campaign.maxRecipients,
@@ -629,42 +617,88 @@ export class CampaignsAdminComponent implements OnInit {
 
   addRule(): void {
     this.form.rules.push({ field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' });
+    this.audiencePreview.set(null);
   }
 
   removeRule(index: number): void {
     this.form.rules.splice(index, 1);
+    this.audiencePreview.set(null);
+  }
+
+  ruleCapabilities(): CampaignRuleCapability[] {
+    return (this.capabilities()?.rules ?? []).filter((rule) => rule.available);
+  }
+
+  ruleCapability(field: string): CampaignRuleCapability | null {
+    return this.ruleCapabilities().find((rule) => rule.key === field) ?? null;
+  }
+
+  operatorLabel(operator: string, valueType: CampaignRuleCapability['valueType']): string {
+    if (valueType === 'datetime') {
+      return operator === 'GTE' ? 'desde' : operator === 'LTE' ? 'hasta' : 'exactamente';
+    }
+    return operator === 'GTE' ? 'al menos' : operator === 'LTE' ? 'como máximo' : 'es';
+  }
+
+  private ruleForForm(rule: CampaignRule): CampaignRule {
+    const capability = this.ruleCapability(rule.field);
+    return {
+      ...rule,
+      value:
+        capability?.valueType === 'datetime' && typeof rule.value === 'string'
+          ? localDate(rule.value)
+          : rule.value
+    };
+  }
+
+  private ruleForApi(rule: CampaignRule): CampaignRule {
+    const capability = this.ruleCapability(rule.field);
+    let value = rule.value;
+    if (capability?.valueType === 'integer') {
+      value = Number(value);
+    } else if (capability?.valueType === 'datetime' && value) {
+      value = new Date(String(value)).toISOString();
+    }
+    return { ...rule, value };
   }
 
   resetRule(rule: CampaignRule): void {
-    rule.operator = 'EQ';
-    if (rule.field === 'ACCOUNT_TYPE') rule.value = 'PERSONAL';
-    else if (rule.field === 'HAS_GRANTED_SERVICE') rule.value = false;
-    else if (rule.field === 'SERVICE_SOURCE') rule.value = 'BYOK';
-    else if (rule.field === 'DAYS_SINCE_CREATED') rule.value = 0;
-    else if (rule.field === 'CREATED_AT') rule.value = '';
-    else rule.value = '';
+    const capability = this.ruleCapability(rule.field);
+    rule.operator = capability?.operators[0] ?? 'EQ';
+    if (!capability) {
+      rule.value = '';
+      return;
+    }
+    if (capability.valueType === 'boolean') {
+      rule.value = false;
+    } else if (capability.valueType === 'integer') {
+      rule.value = 0;
+    } else if (capability.valueType === 'enum') {
+      rule.value = capability.options[0]?.value ?? '';
+    } else {
+      rule.value = '';
+    }
+    this.audiencePreview.set(null);
   }
 
   canSave(): boolean {
-    return !!this.form.name.trim() && !!this.form.benefitId && this.form.priority > 0;
+    return (
+      !!this.form.name.trim() &&
+      !!this.form.benefitId &&
+      this.form.action === 'GRANT_BENEFIT' &&
+      this.form.priority > 0
+    );
   }
 
-  async save(): Promise<void> {
-    const id = this.editingId();
-    if (id === null || !this.form.benefitId) return;
-    const draft: PlatformCampaignDraft = {
+  private buildDraft(): PlatformCampaignDraft | null {
+    if (!this.canSave() || !this.form.benefitId) return null;
+    return {
       name: this.form.name.trim(),
       benefitId: this.form.benefitId,
+      action: this.form.action,
+      actionConfig: this.form.actionConfig ?? {},
       trigger: this.form.trigger,
-      rules: this.form.rules.map((rule) => ({
-        ...rule,
-        value:
-          rule.field === 'DAYS_SINCE_CREATED'
-            ? Number(rule.value)
-            : rule.field === 'CREATED_AT' && rule.value
-              ? new Date(String(rule.value)).toISOString()
-              : rule.value
-      })),
+      rules: this.form.rules.map((rule) => this.ruleForApi(rule)),
       priority: Math.max(1, Math.round(Number(this.form.priority) || 100)),
       stackable: this.form.stackable,
       maxRecipients: numberOrNull(this.form.maxRecipients),
@@ -673,6 +707,25 @@ export class CampaignsAdminComponent implements OnInit {
       notification: this.form.notification,
       message: this.form.message.trim() || null
     };
+  }
+
+  async previewAudience(): Promise<void> {
+    const draft = this.buildDraft();
+    if (!draft) return;
+    this.previewLoading.set(true);
+    try {
+      this.audiencePreview.set(await firstValueFrom(this.api.previewPlatformCampaign(draft)));
+    } catch (err) {
+      this.toast.error(errorMessage(err, 'No se pudo previsualizar la audiencia.'));
+    } finally {
+      this.previewLoading.set(false);
+    }
+  }
+
+  async save(): Promise<void> {
+    const id = this.editingId();
+    const draft = this.buildDraft();
+    if (id === null || !draft) return;
     this.saving.set(true);
     try {
       await firstValueFrom(
@@ -726,6 +779,10 @@ export class CampaignsAdminComponent implements OnInit {
   }
   triggerLabel(trigger: CampaignTrigger): string {
     return trigger === 'FIRST_LOGIN' ? 'Primer login' : trigger === 'LOGIN' ? 'Cada login' : 'Programada';
+  }
+
+  actionLabel(action: CampaignAction): string {
+    return this.capabilities()?.actions.find((item) => item.key === action)?.label ?? action;
   }
 
   notificationLabel(notification: CampaignNotification): string {
