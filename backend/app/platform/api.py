@@ -124,6 +124,18 @@ def overview(_: PlatformOwner, db: DbSession) -> dict:
         )
     )
 
+    benefit_usage = []
+    benefits = db.scalars(
+        select(Benefit).where(Benefit.deleted_at.is_(None)).order_by(Benefit.id)
+    ).all()
+    for item in benefits:
+        benefit_usage.append({
+            "id": item.id,
+            "name": item.name,
+            "campaigns": int(db.scalar(select(func.count(Campaign.id)).where(Campaign.benefit_id == item.id)) or 0),
+            "invitations": int(db.scalar(select(func.count(Invitation.id)).where(Invitation.benefit_id == item.id)) or 0),
+        })
+
     return {
         "last24h": {
             "all": _counts(db, AIUsageEvent.created_at >= last_24h),
