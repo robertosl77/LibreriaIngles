@@ -188,8 +188,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     maxRecipients: 100,
     notification: 'IN_APP',
     message: ''
-  }
-,
+  },
   {
     id: 'win-back-inactive',
     title: 'Volvé a estudiar',
