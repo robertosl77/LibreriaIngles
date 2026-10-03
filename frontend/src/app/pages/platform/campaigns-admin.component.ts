@@ -92,13 +92,10 @@ function isoDate(value: string): string | null {
               Beneficio que aplica
               <select class="input" name="cBenefit" [(ngModel)]="form.benefitId" required>
                 @for (benefit of activeBenefits(); track benefit.id) {
-                  <option [ngValue]="benefit.id">
-                    {{ benefit.name }} · {{ benefit.combinationName }}
-                    @if (benefit.durationDays) { · {{ benefit.durationDays }} días }
-                  </option>
+                  <option [ngValue]="benefit.id">{{ benefit.name }}</option>
                 }
               </select>
-              <span class="muted tiny">Servicio + fuente + duración se configuran una sola vez en Beneficios.</span>
+              <span class="muted tiny">La composición del beneficio se consulta y edita en Beneficios.</span>
             </label>
             <label class="field">
               Cuándo se evalúa
@@ -143,7 +140,7 @@ function isoDate(value: string): string | null {
               <div class="rule-row">
                 <select class="input" [name]="'rField' + i" [(ngModel)]="rule.field" (ngModelChange)="resetRule(rule)">
                   <option value="ACCOUNT_TYPE">Tipo de cuenta</option>
-                  <option value="HAS_GRANTED_SERVICE">Tiene servicio otorgado</option>
+                  <option value="HAS_GRANTED_SERVICE">Tiene membresía otorgada</option>
                   <option value="SERVICE_SOURCE">Fuente de IA actual</option>
                   <option value="EMAIL_DOMAIN">Dominio de email</option>
                   <option value="DAYS_SINCE_CREATED">Días desde registro</option>
@@ -215,7 +212,7 @@ function isoDate(value: string): string | null {
 
           <label class="check-row small">
             <input type="checkbox" name="cStack" [(ngModel)]="form.stackable" />
-            Acumulable con otras campañas. Para sumar días, ambas deben permitir acumulación y otorgar el MISMO servicio; si son servicios distintos, la segunda no se aplica.
+            Acumulable con otras campañas. Para sumar días, ambas deben permitir acumulación y otorgar la MISMA membresía; si son distintas, la segunda no se aplica.
           </label>
 
           <div class="row">
@@ -244,8 +241,6 @@ function isoDate(value: string): string | null {
                 </div>
                 <div class="small">
                   {{ triggerLabel(campaign.trigger) }} → <strong>{{ campaign.benefitName }}</strong>
-                  · {{ campaign.serviceName }}
-                  · {{ campaign.grantDays ? campaign.grantDays + ' días' : 'sin vencimiento' }}
                   · {{ campaign.recipients }} beneficiario(s)
                   @if (campaign.maxRecipients) { / {{ campaign.maxRecipients }} máx. }
                 </div>
