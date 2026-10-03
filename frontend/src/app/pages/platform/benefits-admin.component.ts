@@ -1,9 +1,11 @@
-import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, computed, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import {
+  AiSource,
+  LinkType,
   PlatformBenefit,
   PlatformBenefitDraft,
   PlatformService
@@ -12,10 +14,22 @@ import { ToastService } from '../../core/toast.service';
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 import { ActiveToggleComponent } from '../../shared/ui/active-toggle.component';
 
-function emptyDraft(serviceId: number | null): PlatformBenefitDraft {
+const SOURCE_SHORT: Record<AiSource, string> = {
+  BYOK: 'Propias keys (BYOK)',
+  PLATFORM: 'Plataforma',
+  HYBRID: 'Híbrido'
+};
+
+const SERVICE_SHORT: Record<LinkType, string> = {
+  PERSONAL: 'Individual',
+  CORPORATE: 'Empresa'
+};
+
+function emptyDraft(source: AiSource = 'BYOK'): PlatformBenefitDraft {
   return {
     name: '',
-    serviceId: serviceId ?? 0,
+    service: 'PERSONAL',
+    source,
     durationDays: null,
     active: true
   };
@@ -32,7 +46,7 @@ function numberOrNull(value: unknown): number | null {
   template: `
     <app-collapse-card
       title="Beneficios"
-      description="Define qué se otorga: un servicio + su duración. Campañas, invitaciones y otorgamientos manuales reutilizan esta definición."
+      description="Define qué se otorga: servicio + fuente de IA + duración. Campañas, invitaciones y otorgamientos manuales reutilizan esta definición."
     >
       @if (editingId() === null) {
         <div class="collapse-actions">
@@ -46,16 +60,27 @@ function numberOrNull(value: unknown): number | null {
             <label class="field">
               Nombre
               <input class="input" name="bName" [(ngModel)]="draft.name" required maxlength="120"
-                placeholder="Ej. Plataforma 30 días" />
+                placeholder="Ej. Regalo 30 días" />
             </label>
+
             <label class="field">
               Servicio
-              <select class="input" name="bService" [(ngModel)]="draft.serviceId" required>
-                @for (service of grantableServices(); track service.id) {
-                  <option [ngValue]="service.id">{{ service.name }}</option>
+              <select class="input" name="bService" [(ngModel)]="draft.service" (ngModelChange)="ensureSource()">
+                <option value="PERSONAL">Individual</option>
+              </select>
+            </label>
+
+            <label class="field">
+              Fuente de IA
+              <select class="input" name="bSource" [(ngModel)]="draft.source" required>
+                @for (item of availableCombinations(); track item.id) {
+                  <option [ngValue]="item.source" [disabled]="!item.active">
+                    {{ sourceShort[item.source] }}{{ item.active ? '' : ' · deshabilitada' }}
+                  </option>
                 }
               </select>
             </label>
+
             <label class="field">
               Duración (días)
               <input class="input" type="number" min="1" name="bDays" [(ngModel)]="draft.durationDays"
@@ -81,7 +106,7 @@ function numberOrNull(value: unknown): number | null {
 
           <div class="row">
             <button class="btn btn-primary btn-sm" type="submit"
-              [disabled]="saving() || !draft.name.trim() || !draft.serviceId">
+              [disabled]="saving() || !draft.name.trim() || !canSaveCombination()">
               @if (saving()) { <span class="spinner"></span> } Guardar
             </button>
             <button class="btn btn-sm" type="button" (click)="editingId.set(null)">Cancelar</button>
@@ -98,6 +123,7 @@ function numberOrNull(value: unknown): number | null {
               <tr>
                 <th>Beneficio</th>
                 <th>Servicio</th>
+                <th>Fuente</th>
                 <th>Duración</th>
                 <th>Estado</th>
                 <th></th>
@@ -108,6 +134,7 @@ function numberOrNull(value: unknown): number | null {
                 <tr [class.inactive]="!benefit.active">
                   <td><strong>{{ benefit.name }}</strong></td>
                   <td>{{ benefit.serviceName }}</td>
+                  <td>{{ sourceShort[benefit.source] }}</td>
                   <td>{{ benefit.durationDays ? benefit.durationDays + ' días' : 'sin vencimiento' }}</td>
                   <td>
                     <span [class]="benefit.active ? 'chip chip-ok' : 'chip'">
@@ -162,35 +189,45 @@ function numberOrNull(value: unknown): number | null {
     tr.inactive { opacity: 0.62; }
   `
 })
-export class BenefitsAdminComponent implements OnInit {
+export class BenefitsAdminComponent implements OnInit, OnChanges {
   private readonly api = inject(ApiService);
   private readonly toast = inject(ToastService);
 
+  @Input() refreshVersion = 0;
   readonly benefits = signal<PlatformBenefit[]>([]);
-  readonly services = signal<PlatformService[]>([]);
+  readonly combinations = signal<PlatformService[]>([]);
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly editingId = signal<number | null>(null);
   readonly changed = output<void>();
-  readonly grantableServices = computed(() =>
-    this.services().filter((service) => service.active && service.linkType === 'PERSONAL')
-  );
+  readonly sourceShort = SOURCE_SHORT;
+  readonly serviceShort = SERVICE_SHORT;
 
-  draft: PlatformBenefitDraft = emptyDraft(null);
+  draft: PlatformBenefitDraft = emptyDraft();
+
+  readonly editingBenefit = computed(() =>
+    this.benefits().find((benefit) => benefit.id === this.editingId()) ?? null
+  );
 
   async ngOnInit(): Promise<void> {
     await this.load();
   }
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['refreshVersion'] && !changes['refreshVersion'].firstChange) {
+      void this.load();
+    }
+  }
+
   async load(): Promise<void> {
     this.loading.set(true);
     try {
-      const [benefits, services] = await Promise.all([
+      const [benefits, combinations] = await Promise.all([
         firstValueFrom(this.api.platformBenefits()),
         firstValueFrom(this.api.platformServices())
       ]);
       this.benefits.set(benefits);
-      this.services.set(services);
+      this.combinations.set(combinations);
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
@@ -198,15 +235,40 @@ export class BenefitsAdminComponent implements OnInit {
     }
   }
 
+  availableCombinations(): PlatformService[] {
+    const currentId = this.editingBenefit()?.combinationId ?? null;
+    return this.combinations().filter(
+      (item) =>
+        item.linkType === this.draft.service &&
+        (item.active || item.id === currentId)
+    );
+  }
+
+  canSaveCombination(): boolean {
+    const selected = this.availableCombinations().find((item) => item.source === this.draft.source);
+    return !!selected && (selected.active || !this.draft.active);
+  }
+
+  ensureSource(): void {
+    const options = this.availableCombinations();
+    if (!options.some((item) => item.source === this.draft.source)) {
+      this.draft.source = options.find((item) => item.active)?.source ?? 'BYOK';
+    }
+  }
+
   startNew(): void {
-    this.draft = emptyDraft(this.grantableServices()[0]?.id ?? null);
+    const first = this.combinations().find(
+      (item) => item.linkType === 'PERSONAL' && item.active
+    );
+    this.draft = emptyDraft(first?.source ?? 'BYOK');
     this.editingId.set(0);
   }
 
   startEdit(benefit: PlatformBenefit): void {
     this.draft = {
       name: benefit.name,
-      serviceId: benefit.serviceId,
+      service: benefit.service,
+      source: benefit.source,
       durationDays: benefit.durationDays,
       active: benefit.active
     };
@@ -215,7 +277,7 @@ export class BenefitsAdminComponent implements OnInit {
 
   async save(): Promise<void> {
     const id = this.editingId();
-    if (id === null || !this.draft.serviceId) return;
+    if (id === null || !this.canSaveCombination()) return;
     const draft: PlatformBenefitDraft = {
       ...this.draft,
       name: this.draft.name.trim(),
@@ -259,5 +321,4 @@ export class BenefitsAdminComponent implements OnInit {
       this.toast.error(errorMessage(err));
     }
   }
-
 }
