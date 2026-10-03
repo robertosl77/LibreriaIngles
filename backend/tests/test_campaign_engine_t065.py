@@ -732,3 +732,54 @@ def test_fifteen_fidelity_campaigns_are_simulated_and_supported_ones_can_be_crea
     assert rows.status_code == 200
     persisted_names = {row["name"] for row in rows.json()}
     assert set(created_names) <= persisted_names
+
+
+
+def test_local_fidelity_lab_seed_creates_fifteen_drafts_idempotently(client) -> None:
+    from app.campaigns.service import FIDELITY_LAB_CAMPAIGNS, _seed_fidelity_lab_campaigns
+
+    owner = _owner(client)
+    _welcome_benefit_id(client, owner)
+
+    with SessionLocal() as db:
+        _seed_fidelity_lab_campaigns(db)
+        db.commit()
+
+    rows = client.get(f"{API}/platform/campaigns", headers=owner)
+    assert rows.status_code == 200, rows.text
+    lab_rows = [row for row in rows.json() if row["code"].startswith("LAB_FID_")]
+    assert len(lab_rows) == 15
+    assert len({row["code"] for row in lab_rows}) == 15
+    assert all(row["status"] == "DRAFT" for row in lab_rows)
+    assert {row["code"] for row in lab_rows} == {
+        spec["code"] for spec in FIDELITY_LAB_CAMPAIGNS
+    }
+
+    complaint = next(row for row in lab_rows if row["code"] == "LAB_FID_15_COMPLAINT")
+    assert complaint["rules"] == [
+        {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+        {
+            "field": "ACCOUNT_EMAIL",
+            "operator": "EQ",
+            "value": "reemplazar@ejemplo.invalid",
+        },
+    ]
+
+    avg = next(row for row in lab_rows if row["code"] == "LAB_FID_01_6M_AVG5")
+    assert any(
+        rule["field"] == "AVERAGE_CLASSES_PER_DAY"
+        and rule["operator"] == "GTE"
+        and rule["value"] == 5
+        and rule["windowDays"] == 30
+        for rule in avg["rules"]
+    )
+
+    with SessionLocal() as db:
+        _seed_fidelity_lab_campaigns(db)
+        db.commit()
+
+    rows_again = client.get(f"{API}/platform/campaigns", headers=owner)
+    assert rows_again.status_code == 200
+    assert len(
+        [row for row in rows_again.json() if row["code"].startswith("LAB_FID_")]
+    ) == 15
