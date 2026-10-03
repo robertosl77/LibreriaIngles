@@ -217,9 +217,9 @@ FUENTE DE IA (lo único que elige la persona)
    PLATAFORMA  → las keys de sr.macros
    HÍBRIDO     → las propias primero; si fallan de fondo, las de sr.macros
 
-SERVICIO     = fila del modelo de negocio (INDIVIDUAL; EMPRESA futuro)
+SERVICIO     = fila del modelo de negocio (PERSONAL; CORPORATIVA futuro)
 FUENTE IA    = columna fija (BYOK / PLATAFORMA / HÍBRIDO)
-COMBINACIÓN  = servicio × fuente; se puede habilitar/deshabilitar
+MEMBRESÍA    = servicio × fuente; se puede habilitar/deshabilitar
 BENEFICIO    = servicio + fuente + duración/vigencia + política de otorgamiento
 
 OTORGAMIENTO (cómo alguien recibe un servicio)
@@ -228,35 +228,35 @@ OTORGAMIENTO (cómo alguien recibe un servicio)
    CAMPAÑA     → automático a un grupo (ej. "todos los que se registren desde hoy")
 ```
 
-- **La membresía no se elige.** Personal o corporativa se deduce de si la persona vino por una
-  empresa. Es un ordenamiento interno de configuraciones, no una opción para el usuario.
+- **El servicio base** es Personal o Corporativa y se deduce del contexto de la cuenta.
+  La **membresía** es la intersección efectiva entre ese Servicio y la Fuente de IA.
 - **Hoy (sin pagos):** vínculo + fuente y ya funciona. **Con pagos:** triple restricción
   vínculo × fuente × pago (el pago habilita el servicio por un período, ej. mensual).
 - Analogías: **home banking** (uno para personas, otro para empresas: el de empresas es el que
   tiene una empresa de por medio), AWS (base fija + uso variable) y el celular (cuenta controlada
   / línea libre).
 
-### 2. Servicios, fuentes y combinaciones
+### 2. Servicios, fuentes y membresías
 
 El modelo se separa explícitamente en dos ejes fijos y una intersección configurable:
 
 ```text
                 │ BYOK              │ PLATAFORMA          │ HÍBRIDO
 ────────────────┼───────────────────┼─────────────────────┼──────────────────────
-INDIVIDUAL      │ combinación       │ combinación         │ combinación
-EMPRESA futuro  │ combinación       │ combinación         │ combinación
+PERSONAL        │ membresía         │ membresía           │ membresía
+CORPORATIVA fut.│ membresía         │ membresía           │ membresía
 ```
 
 **Decisión Roberto + ChatGPT, 2026-10-02:**
 
-- **Servicios (filas):** hoy solo `INDIVIDUAL`; futuro `EMPRESA`. Se muestran como información
+- **Servicios (filas):** hoy solo `PERSONAL`; futuro `CORPORATIVA`. Se muestran como información
   del modelo de negocio y no se crean, editan, activan ni desactivan desde el portal.
 - **Fuentes (columnas):** `BYOK`, `PLATFORM` y `HYBRID`. También son fijas e informativas.
-- **Combinaciones:** la intersección Servicio × Fuente sí se administra. El OWNER puede habilitar o
-  deshabilitar, por ejemplo, `Individual × Híbrido`.
-- Una combinación **no puede deshabilitarse** mientras tenga una cuenta vigente, un beneficio
+- **Membresías:** la intersección Servicio × Fuente sí se administra. El OWNER puede habilitar o
+  deshabilitar, por ejemplo, `Personal × Híbrido`.
+- Una membresía **no puede deshabilitarse** mientras tenga una cuenta vigente, un beneficio
   activo, una campaña ACTIVE/PAUSED o una invitación todavía canjeable vinculada.
-- Una empresa concreta (por ejemplo Cacatúa) no es una fila: utiliza el servicio Empresa.
+- Una empresa concreta (por ejemplo Cacatúa) no es una fila: utiliza el servicio Corporativa.
 - Agregar una nueva fila o una nueva fuente implica una decisión de modelo y cambios de código.
 - Servicio **no lleva duración ni límites de consumo**. La duración pertenece exclusivamente a
   Beneficio y los límites actuales pertenecen a cada conexión de IA.
@@ -332,7 +332,7 @@ Ejemplo:
 ```text
 BENEFICIO
 "Plataforma 30 días"
-  servicio = Individual
+  servicio = Personal
   fuente = Plataforma
   duración = 30 días
 
@@ -619,13 +619,18 @@ Aplicados en `feat/t-004-invitations`:
 - **Fuentes de IA visibles y fijas:** Configuración tiene un bloque propio e informativo con
   BYOK / PLATFORM / HYBRID. No se agregan ni eliminan desde el portal; son columnas fijas del
   modelo de negocio.
-- **Servicios y combinaciones separados:** Servicios muestra solo las filas del modelo (hoy
-  Individual; Empresa futuro), sin editar/activar. Un bloque separado de Combinaciones administra
+- **Servicios y membresías separados:** Servicios muestra solo las filas del modelo (hoy
+  Personal; Corporativa futuro), sin editar/activar. Un bloque separado de Membresías administra
   qué intersecciones Servicio × Fuente están habilitadas.
-- **Cuentas en Resumen:** Cuentas sale de Configuración. Resumen muestra las cuentas agrupadas por
-  combinación efectiva y mantiene ahí la administración manual puntual de beneficios.
+- **Cuentas en dos vistas con responsabilidades distintas:** Resumen muestra únicamente información
+  de cuentas y membresías efectivas, sin acciones. Configuración conserva la administración de
+  cuentas (otorgar/cambiar/quitar beneficio y acciones DEV).
 - **Beneficio separado por ejes:** al crear/editar un Beneficio se seleccionan por separado
-  Servicio, Fuente de IA y duración; ya no se elige una combinación prearmada en un único campo.
+  Servicio, Fuente de IA y duración; ya no se elige una membresía prearmada en un único campo.
+- **Campañas e Invitaciones muestran solo el nombre del Beneficio:** la composición
+  Servicio/Fuente/Duración se consulta en Beneficios y no se repite en esos selectores/listados.
+- **Filtro de Campañas:** la etiqueta visible `Tiene servicio otorgado` pasa a
+  `Tiene membresía otorgada`; el identificador técnico interno puede conservarse por compatibilidad.
 - **Cuentas:** se renombra "Cuentas y servicios" a "Cuentas".
 - **Beneficio efectivo:** la fila de cada cuenta muestra el nombre del Benefit vigente; el Servicio
   queda como dato secundario.
