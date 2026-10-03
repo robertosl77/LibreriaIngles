@@ -499,7 +499,7 @@ def test_benefit_cannot_be_deleted_with_current_beneficiary(client) -> None:
 
 def test_combination_cannot_be_disabled_while_active_benefit_or_account_uses_it(client) -> None:
     owner = login(client, OWNER)
-    service = _services(client, owner)["INDIVIDUAL_PLATFORM"]
+    service = _services(client, owner)["INDIVIDUAL_HYBRID"]
 
     benefit = client.post(
         f"{API}/platform/benefits",
@@ -507,7 +507,7 @@ def test_combination_cannot_be_disabled_while_active_benefit_or_account_uses_it(
         json={
             "name": "Combinación protegida",
             "service": "PERSONAL",
-            "source": "PLATFORM",
+            "source": "HYBRID",
             "durationDays": 30,
             "active": True,
         },
@@ -537,7 +537,7 @@ def test_combination_cannot_be_disabled_while_active_benefit_or_account_uses_it(
         json={
             "name": "Combinación protegida",
             "service": "PERSONAL",
-            "source": "PLATFORM",
+            "source": "HYBRID",
             "durationDays": 30,
             "active": False,
         },
