@@ -84,7 +84,92 @@ function isoDate(value: string): string | null {
         </div>
       }
 
+      @if (newMode()) {
+        <section class="creator stack">
+          <div class="row spread creator-head">
+            <div>
+              <strong>Nueva campaña</strong>
+              <div class="muted small">Elegí cómo querés armar el borrador. Los tres caminos terminan en el mismo formulario.</div>
+            </div>
+            <button class="btn btn-sm" type="button" (click)="cancelNew()">Cancelar</button>
+          </div>
+
+          @if (newMode() === 'choose') {
+            <div class="creation-options">
+              <button class="choice-card" type="button" (click)="newMode.set('templates')">
+                <strong>Usar plantilla</strong>
+                <span>Partí de casos frecuentes ya configurados y ajustá los valores.</span>
+              </button>
+              <button class="choice-card" type="button" (click)="newMode.set('ai')">
+                <strong>Describir con IA</strong>
+                <span>Contá qué querés lograr y la IA arma un borrador revisable.</span>
+              </button>
+              <button class="choice-card" type="button" (click)="startManual()">
+                <strong>Configurar manualmente</strong>
+                <span>Usá directamente el constructor completo de campañas.</span>
+              </button>
+            </div>
+          }
+
+          @if (newMode() === 'templates') {
+            <div class="row spread">
+              <strong>Plantillas</strong>
+              <button class="btn btn-sm" type="button" (click)="newMode.set('choose')">Volver</button>
+            </div>
+            <div class="template-grid">
+              @for (template of templates; track template.id) {
+                <button class="template-card" type="button" (click)="applyTemplate(template)">
+                  <strong>{{ template.title }}</strong>
+                  <span>{{ template.description }}</span>
+                </button>
+              }
+            </div>
+          }
+
+          @if (newMode() === 'ai') {
+            <div class="row spread">
+              <strong>Describí la campaña</strong>
+              <button class="btn btn-sm" type="button" (click)="newMode.set('choose')">Volver</button>
+            </div>
+            <label class="field">
+              Qué querés lograr
+              <textarea
+                class="input ai-description"
+                name="campaignAiDescription"
+                [(ngModel)]="aiDescription"
+                maxlength="2000"
+                rows="4"
+                placeholder="Ej. A quienes cumplen un año desde el registro, darles un beneficio de fidelización cuando vuelvan a ingresar."
+              ></textarea>
+            </label>
+            <p class="muted tiny">
+              La IA usa una conexión de la plataforma y genera únicamente un borrador con las capacidades actuales.
+              Nunca guarda ni activa la campaña.
+            </p>
+            <div class="row">
+              <button
+                class="btn btn-primary btn-sm"
+                type="button"
+                (click)="generateWithAi()"
+                [disabled]="aiLoading() || aiDescription.trim().length < 8"
+              >
+                @if (aiLoading()) { <span class="spinner"></span> }
+                Generar borrador
+              </button>
+            </div>
+          }
+        </section>
+      }
+
       @if (editingId() !== null) {
+        @if (draftSummary()) {
+          <div class="banner small draft-banner">
+            <strong>{{ draftSummary() }}</strong>
+            @for (warning of draftWarnings(); track warning) {
+              <div>· {{ warning }}</div>
+            }
+          </div>
+        }
         <form class="editor stack" (ngSubmit)="save()">
           <div class="grid">
             <label class="field">
