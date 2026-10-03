@@ -208,6 +208,7 @@ def grant_service(
     granted_by: Account | None,
     days: int | None = None,
     origin: SubscriptionOrigin = SubscriptionOrigin.MANUAL,
+    benefit_id: int | None = None,
     note: str | None = None,
 ) -> Subscription:
     """Otorga un servicio a la cuenta. Reemplaza al que tuviera vigente."""
