@@ -69,6 +69,9 @@ class Subscription(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.id"))
+    benefit_id: Mapped[int | None] = mapped_column(
+        ForeignKey("benefits.id"), nullable=True, index=True
+    )
     account_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts.id"), nullable=True, index=True
     )
