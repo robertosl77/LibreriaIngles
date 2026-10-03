@@ -268,10 +268,6 @@ export class ApiService {
     return this.http.get<PlatformService[]>(`${this.base}/platform/services`);
   }
 
-  createPlatformService(draft: PlatformServiceDraft): Observable<PlatformService> {
-    return this.http.post<PlatformService>(`${this.base}/platform/services`, draft);
-  }
-
   updatePlatformService(id: number, draft: PlatformServiceDraft): Observable<PlatformService> {
     return this.http.put<PlatformService>(`${this.base}/platform/services/${id}`, draft);
   }
