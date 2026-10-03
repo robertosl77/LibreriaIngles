@@ -107,6 +107,8 @@ class EffectiveService:
             "linkType": self.link_type.value,
             "granted": self.granted,
             "origin": self.origin.value if self.origin else None,
+            "benefitId": self.benefit_id,
+            "benefitName": self.benefit_name,
             "expiresAt": self.expires_at,
             "ownKeys": OWN_KEYS_ROLE[self.source],
             "expired": (
