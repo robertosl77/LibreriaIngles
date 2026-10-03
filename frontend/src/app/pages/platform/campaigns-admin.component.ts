@@ -78,7 +78,7 @@ function isoDate(value: string): string | null {
       title="Campañas"
       description="Cuándo evaluar + condiciones + beneficio + notificación + límites. Cada persona recibe cada campaña una sola vez."
     >
-      @if (editingId() === null) {
+      @if (editingId() === null && !newMode()) {
         <div class="collapse-actions">
           <button class="btn btn-sm" type="button" (click)="startNew()">Nueva campaña</button>
         </div>
@@ -477,7 +477,7 @@ export class CampaignsAdminComponent implements OnInit {
   applyTemplate(template: CampaignTemplate): void {
     this.form = {
       name: template.name,
-      benefitId: this.activeBenefits()[0]?.id ?? null,
+      benefitId: null,
       trigger: template.trigger,
       rules: template.rules.map((rule) => ({ ...rule })),
       priority: template.priority,
