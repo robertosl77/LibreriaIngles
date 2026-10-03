@@ -39,6 +39,7 @@ class CampaignRuleIn(BaseModel):
     field: str = Field(min_length=2, max_length=60)
     operator: str = Field(default="EQ", min_length=2, max_length=12)
     value: Any
+    windowDays: int | None = Field(default=None, ge=1, le=3650)
 
 
 class CampaignAssistIn(BaseModel):
@@ -78,7 +79,7 @@ Devolvé SOLO JSON con esta forma:
     "name": "nombre claro",
     "benefitId": 123 o null,
     "trigger": "trigger disponible",
-    "rules": [{"field":"...", "operator":"...", "value":...}],
+    "rules": [{"field":"...", "operator":"...", "value":..., "windowDays": null o número}],
     "priority": 100,
     "stackable": false,
     "maxRecipients": null,
@@ -94,6 +95,17 @@ Devolvé SOLO JSON con esta forma:
 El motor actual ejecuta GRANT_BENEFIT sobre un beneficio existente. No inventes descuentos,
 precios, pagos, renovaciones ni otras acciones todavía no disponibles. Si una intención requiere
 una capacidad inexistente, explicalo en warnings y no la reemplaces por otra condición parecida.
+
+Para métricas de estudio usá las capacidades del catálogo:
+- CLASSES_COMPLETED cuenta clases completadas dentro de windowDays.
+- ACTIVE_STUDY_DAYS cuenta días distintos con actividad dentro de windowDays.
+- MIN_CLASSES_PER_ACTIVE_DAY mide el mínimo de clases de cada día en que hubo actividad.
+- AVERAGE_CLASSES_PER_ACTIVE_DAY mide el promedio por día activo.
+- STUDY_STREAK_DAYS mide la racha consecutiva actual y no usa windowDays.
+Si el usuario pide "N clases todos los días durante K días", combiná MIN_CLASSES_PER_ACTIVE_DAY >= N
+con ACTIVE_STUDY_DAYS >= K, ambas con windowDays=K. Si pide frecuencia diaria pero no informa
+período, usá windowDays=30 y agregá una advertencia clara para que revise esa ventana.
+
 Elegí benefitId únicamente entre los beneficios provistos y solo si la intención lo deja claro;
 si no, devolvé null. El resultado es siempre un BORRADOR: nunca actives ni guardes una campaña."""
 
@@ -256,7 +268,7 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 def _validate_rule(rule: CampaignRuleIn) -> dict:
     try:
-        return validate_rule(rule.field, rule.operator, rule.value)
+        return validate_rule(rule.field, rule.operator, rule.value, rule.windowDays)
     except CampaignCapabilityError as exc:
         raise HTTPException(422, str(exc)) from exc
 

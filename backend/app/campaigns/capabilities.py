@@ -24,6 +24,9 @@ class RuleCapability:
     description: str
     options: tuple[tuple[str, str], ...] = ()
     available: bool = True
+    requires_window: bool = False
+    window_min_days: int = 1
+    window_max_days: int = 3650
 
     def payload(self) -> dict:
         return {
@@ -34,6 +37,9 @@ class RuleCapability:
             "description": self.description,
             "options": [{"value": value, "label": label} for value, label in self.options],
             "available": self.available,
+            "requiresWindow": self.requires_window,
+            "windowMinDays": self.window_min_days if self.requires_window else None,
+            "windowMaxDays": self.window_max_days if self.requires_window else None,
         }
 
 
@@ -112,6 +118,45 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         ("EQ",),
         "Nivel operativo/seleccionado del perfil de estudio vinculado a la cuenta.",
         tuple((level, level) for level in ("A1", "A2", "B1", "B2", "C1", "C2")),
+    ),
+    RuleCapability(
+        "CLASSES_COMPLETED",
+        "Clases completadas",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de clases de práctica completadas dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "ACTIVE_STUDY_DAYS",
+        "Días con actividad",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de días distintos con al menos una clase completada dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "MIN_CLASSES_PER_ACTIVE_DAY",
+        "Mínimo de clases por día activo",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Mínimo de clases completadas en cada día en el que hubo actividad dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+        "Promedio de clases por día activo",
+        "number",
+        ("EQ", "GTE", "LTE"),
+        "Promedio de clases completadas por cada día con actividad dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "STUDY_STREAK_DAYS",
+        "Racha de estudio",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de días consecutivos con clases completadas, terminando hoy o ayer.",
     ),
 )
 
@@ -217,12 +262,24 @@ def _as_utc(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def validate_rule(field: str, operator: str, value: Any) -> dict:
+def validate_rule(field: str, operator: str, value: Any, window_days: Any = None) -> dict:
     field = field.strip().upper()
     operator = operator.strip().upper()
     capability = RULES_BY_KEY.get(field)
     if capability is None or not capability.available or operator not in capability.operators:
         raise CampaignCapabilityError(f"Condición no soportada: {field} {operator}.")
+
+    normalized_window: int | None = None
+    if capability.requires_window:
+        try:
+            normalized_window = int(window_days)
+        except (TypeError, ValueError):
+            raise CampaignCapabilityError(f"{field} requiere una ventana en días.")
+        if not capability.window_min_days <= normalized_window <= capability.window_max_days:
+            raise CampaignCapabilityError(
+                f"{field} requiere una ventana entre {capability.window_min_days} y "
+                f"{capability.window_max_days} días."
+            )
 
     if capability.value_type == "boolean":
         if not isinstance(value, bool):
@@ -232,6 +289,13 @@ def validate_rule(field: str, operator: str, value: Any) -> dict:
             value = int(value)
         except (TypeError, ValueError):
             raise CampaignCapabilityError(f"{field} requiere un entero.")
+        if value < 0:
+            raise CampaignCapabilityError(f"{field} no puede ser negativo.")
+    elif capability.value_type == "number":
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            raise CampaignCapabilityError(f"{field} requiere un número.")
         if value < 0:
             raise CampaignCapabilityError(f"{field} no puede ser negativo.")
     elif capability.value_type == "datetime":
@@ -253,7 +317,10 @@ def validate_rule(field: str, operator: str, value: Any) -> dict:
         elif not value:
             raise CampaignCapabilityError(f"{field} no puede quedar vacío.")
 
-    return {"field": field, "operator": operator, "value": value}
+    result = {"field": field, "operator": operator, "value": value}
+    if normalized_window is not None:
+        result["windowDays"] = normalized_window
+    return result
 
 
 def ai_capabilities_text() -> str:
@@ -263,7 +330,10 @@ def ai_capabilities_text() -> str:
         options = ""
         if rule.options:
             options = " valores=" + ",".join(value for value, _ in rule.options)
-        lines.append(f"- {rule.key}: {ops}; tipo={rule.value_type}{options}. {rule.description}")
+        window = "; requiere windowDays" if rule.requires_window else ""
+        lines.append(
+            f"- {rule.key}: {ops}; tipo={rule.value_type}{options}{window}. {rule.description}"
+        )
     lines.append(
         "- Triggers disponibles ahora: "
         + ", ".join(item["key"] for item in TRIGGER_CAPABILITIES if item["available"])

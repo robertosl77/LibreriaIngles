@@ -123,6 +123,7 @@ export interface CampaignRule {
   field: string;
   operator: string;
   value: string | number | boolean;
+  windowDays?: number | null;
 }
 
 export interface PlatformCampaign {
@@ -194,11 +195,14 @@ export interface CampaignAssistResult {
 export interface CampaignRuleCapability {
   key: string;
   label: string;
-  valueType: 'boolean' | 'integer' | 'datetime' | 'enum' | 'string';
+  valueType: 'boolean' | 'integer' | 'number' | 'datetime' | 'enum' | 'string';
   operators: string[];
   description: string;
   options: { value: string; label: string }[];
   available: boolean;
+  requiresWindow: boolean;
+  windowMinDays: number | null;
+  windowMaxDays: number | null;
 }
 
 export interface CampaignChoiceCapability {
@@ -222,6 +226,7 @@ export interface CampaignAudienceRuleResult {
   expected: string | number | boolean;
   actual: string | number | boolean | null;
   matched: boolean;
+  windowDays?: number | null;
 }
 
 export interface CampaignAudienceSample {

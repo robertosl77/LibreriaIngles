@@ -205,3 +205,162 @@ def test_unavailable_action_is_rejected_instead_of_faked(client) -> None:
         },
     )
     assert response.status_code == 422
+
+
+def _add_completed_classes(email: str, day_offsets: list[int], classes_per_day: list[int]) -> None:
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == email))
+        assert account is not None
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert link is not None
+        now = datetime.now(timezone.utc)
+        for offset, count in zip(day_offsets, classes_per_day, strict=True):
+            for index in range(count):
+                db.add(
+                    ClassSession(
+                        study_profile_id=link.study_profile_id,
+                        account_id=account.id,
+                        status=ClassSessionStatus.COMPLETED,
+                        kind=SessionKind.CLASS,
+                        target_level="A1",
+                        evaluated_at=now - timedelta(days=offset, minutes=index),
+                    )
+                )
+        db.commit()
+
+
+def test_activity_metrics_can_express_five_classes_each_day_for_a_week(client) -> None:
+    user = login(client, "loyal-week@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+    _add_completed_classes(
+        "loyal-week@example.com",
+        day_offsets=[0, 1, 2, 3, 4, 5, 6],
+        classes_per_day=[5, 5, 5, 5, 5, 5, 5],
+    )
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "MIN_CLASSES_PER_ACTIVE_DAY",
+                "operator": "GTE",
+                "value": 5,
+                "windowDays": 7,
+            },
+            {
+                "field": "ACTIVE_STUDY_DAYS",
+                "operator": "GTE",
+                "value": 7,
+                "windowDays": 7,
+            },
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = {row["field"]: row for row in body["sample"][0]["rules"]}
+    assert values["MIN_CLASSES_PER_ACTIVE_DAY"]["actual"] == 5
+    assert values["MIN_CLASSES_PER_ACTIVE_DAY"]["windowDays"] == 7
+    assert values["ACTIVE_STUDY_DAYS"]["actual"] == 7
+
+
+def test_activity_metrics_support_total_average_and_streak(client) -> None:
+    user = login(client, "loyal-metrics@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+    _add_completed_classes(
+        "loyal-metrics@example.com",
+        day_offsets=[0, 1, 2],
+        classes_per_day=[3, 5, 7],
+    )
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {"field": "CLASSES_COMPLETED", "operator": "GTE", "value": 15, "windowDays": 7},
+            {
+                "field": "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+                "operator": "GTE",
+                "value": 5,
+                "windowDays": 7,
+            },
+            {"field": "STUDY_STREAK_DAYS", "operator": "GTE", "value": 3},
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = {row["field"]: row["actual"] for row in body["sample"][0]["rules"]}
+    assert values["CLASSES_COMPLETED"] == 15
+    assert values["AVERAGE_CLASSES_PER_ACTIVE_DAY"] == 5.0
+    assert values["STUDY_STREAK_DAYS"] == 3
+
+
+def test_metric_rule_requires_explicit_window(client) -> None:
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "CLASSES_COMPLETED", "operator": "GTE", "value": 5}],
+    )
+    assert response.status_code == 422
+    assert "ventana" in response.text.lower()
+
+
+def test_campaign_assist_understands_daily_classes_and_keeps_discount_as_warning(client) -> None:
+    owner = _owner(client)
+    _welcome_benefit_id(client, owner)
+    connection = client.post(
+        f"{API}/ai/connections",
+        headers=owner,
+        json={
+            "provider": "MOCK",
+            "name": "T-065 assistant",
+            "model": "mock",
+            "priority": 1,
+            "scope": "platform",
+        },
+    )
+    assert connection.status_code == 201, connection.text
+
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={
+            "description": (
+                "Alumnos personales que realizan por lo menos 5 clases diarias: "
+                "darles un beneficio y un 10% de descuento."
+            )
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    rules = body["draft"]["rules"]
+    assert any(
+        rule["field"] == "MIN_CLASSES_PER_ACTIVE_DAY"
+        and rule["operator"] == "GTE"
+        and rule["value"] == 5
+        and rule["windowDays"] == 30
+        for rule in rules
+    )
+    assert any(
+        rule["field"] == "ACTIVE_STUDY_DAYS"
+        and rule["operator"] == "GTE"
+        and rule["value"] == 30
+        and rule["windowDays"] == 30
+        for rule in rules
+    )
+    warnings = " ".join(body["warnings"]).lower()
+    assert "30 días" in warnings
+    assert "descuento" in warnings or "precio" in warnings
