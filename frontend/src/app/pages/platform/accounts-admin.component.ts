@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, computed, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
@@ -199,11 +199,12 @@ const SOURCE_SHORT: Record<AiSource, string> = {
     }
   `
 })
-export class AccountsAdminComponent implements OnInit {
+export class AccountsAdminComponent implements OnInit, OnChanges {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
 
+  @Input() refreshVersion = 0;
   readonly changed = output<void>();
   readonly sourceShort = SOURCE_SHORT;
   readonly benefits = signal<PlatformBenefit[]>([]);
@@ -223,6 +224,12 @@ export class AccountsAdminComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await Promise.all([this.loadBenefits(), this.loadAccounts()]);
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['refreshVersion'] && !changes['refreshVersion'].firstChange) {
+      void Promise.all([this.loadBenefits(), this.loadAccounts()]);
+    }
   }
 
   async loadBenefits(): Promise<void> {
