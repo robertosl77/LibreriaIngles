@@ -77,7 +77,7 @@ def test_campaign_portal_is_owner_only_and_welcome_is_seeded_as_draft(client) ->
     welcome = next(row for row in _campaigns(client, owner) if row["code"] == "WELCOME_PLATFORM")
     assert welcome["status"] == "DRAFT"
     assert welcome["trigger"] == "FIRST_LOGIN"
-    assert welcome["benefitName"] == "Plataforma · 3 días"
+    assert welcome["benefitName"] == "Bienvenida"
     assert welcome["grantDays"] == 3
     assert welcome["notification"] == "IN_APP"
 
