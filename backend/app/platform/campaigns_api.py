@@ -221,10 +221,14 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
     mentions_discount = "%" in description or any(
         word in lower for word in ("descuento", "bonific", "rebaja", "precio")
     )
-    if mentions_discount and not any("descuento" in warning.lower() or "precio" in warning.lower() for warning in warnings):
-        warnings.append(
-            "El motor actual no administra descuentos, precios ni porcentajes; solo puede otorgar un beneficio existente."
-        )
+    if mentions_discount:
+        # Un descuento pedido como recompensa no se sustituye por un Benefit de servicio.
+        normalized["draft"]["benefitId"] = None
+        if not any("descuento" in warning.lower() or "precio" in warning.lower() for warning in warnings):
+            warnings.append(
+                "El motor actual no administra descuentos, precios ni porcentajes; "
+                "no se sustituyó el descuento por un beneficio de servicio."
+            )
 
     # "Promedio de N clases diarias" debe incluir los días sin actividad en el denominador.
     # Se corrige de forma determinística para no depender de una interpretación variable del LLM.
