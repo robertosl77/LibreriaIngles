@@ -47,7 +47,7 @@ function isoDate(value: string): string | null {
   imports: [FormsModule, DatePipe, CollapseCardComponent],
   template: `
     <app-collapse-card
-      title="Pre-invitaciones e invitaciones"
+      title="Invitaciones"
       description="Nominada = identidad concreta. Abierta = cualquiera con el link hasta el cupo configurado. El beneficio se define una sola vez."
     >
       @if (!creating()) {
