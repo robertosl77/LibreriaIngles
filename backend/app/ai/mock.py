@@ -280,7 +280,7 @@ class MockProvider:
                 "El motor actual no tiene datos de reclamos o soporte para segmentar esta campaña."
             )
             benefit_id = None
-        if any(term in lower for term in ("referid", "invitó a", "invito a", "recomendó a", "recomendo a")):
+        if any(term in lower for term in ("referid", "invitó a", "invito a", "invitaron a", "invitar a", "recomendó a", "recomendo a")):
             warnings.append(
                 "El motor actual no registra referidos o invitaciones exitosas como métrica de campaña."
             )
