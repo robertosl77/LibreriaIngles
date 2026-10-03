@@ -123,8 +123,26 @@ class MockProvider:
             phrase in lower
             for phrase in ("servicio pago", "servicio pagado", "membresía paga", "membresia paga")
         )
-        if ("año" in lower or "365" in lower) and not payment_tenure:
-            rules.append({"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365})
+        if not payment_tenure:
+            account_age_days = None
+            months_match = re.search(r"(\d+)\s+mes(?:es)?", lower)
+            days_since_register_match = re.search(
+                r"(\d+)\s+d[ií]as?[^.]{0,45}(?:registro|registrad|en la app|de antig[uü]edad)",
+                lower,
+            )
+            if "año" in lower or "365" in lower:
+                account_age_days = 365
+            elif months_match:
+                account_age_days = int(months_match.group(1)) * 30
+            elif days_since_register_match:
+                account_age_days = int(days_since_register_match.group(1))
+            if account_age_days is not None and any(
+                term in lower
+                for term in ("antigü", "antigu", "registro", "registrad", "en la app", "desde que creó", "desde que creo")
+            ):
+                rules.append(
+                    {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": account_age_days}
+                )
 
         if "nunca" in lower and ("estudi" in lower or "clase" in lower):
             rules.append({"field": "NEVER_STUDIED", "operator": "EQ", "value": True})
@@ -155,31 +173,71 @@ class MockProvider:
         )
         window_days = int(window_match.group(1)) if window_match else None
 
-        classes_match = re.search(r"(\d+)\s+clases?", lower)
-        daily_frequency = any(
-            phrase in lower
-            for phrase in ("clases diarias", "clase diaria", "cada día", "cada dia", "todos los días", "todos los dias")
+        classes_match = re.search(r"(\d+(?:[\.,]\d+)?)\s+clases?", lower)
+        daily_average = (
+            "promedio" in lower
+            and any(
+                phrase in lower
+                for phrase in ("clases diarias", "clase diaria", "por día", "por dia", "al día", "al dia")
+            )
         )
+        strict_daily = (
+            not daily_average
+            and any(
+                phrase in lower
+                for phrase in (
+                    "todos los días",
+                    "todos los dias",
+                    "cada día",
+                    "cada dia",
+                    "clases diarias",
+                    "clase diaria",
+                )
+            )
+        )
+        low_bound = any(
+            phrase in lower
+            for phrase in ("como máximo", "como maximo", "máximo", "maximo", "menos de", "no más de", "no mas de")
+        )
+        metric_operator = "LTE" if low_bound else "GTE"
+
         if classes_match:
-            class_count = int(classes_match.group(1))
-            if daily_frequency:
+            raw_count = float(classes_match.group(1).replace(",", "."))
+            class_count = int(raw_count) if raw_count.is_integer() else raw_count
+            if daily_average:
                 metric_window = window_days or 30
                 rules.append(
                     {
-                        "field": "MIN_CLASSES_PER_ACTIVE_DAY",
-                        "operator": "GTE",
+                        "field": "AVERAGE_CLASSES_PER_DAY",
+                        "operator": metric_operator,
                         "value": class_count,
                         "windowDays": metric_window,
                     }
                 )
+                if window_days is None:
+                    warnings.append(
+                        "No se indicó el período del promedio diario; "
+                        "se propusieron 30 días como ventana editable."
+                    )
+            elif strict_daily:
+                metric_window = window_days or 30
                 rules.append(
                     {
-                        "field": "ACTIVE_STUDY_DAYS",
-                        "operator": "GTE",
-                        "value": metric_window,
+                        "field": "MIN_CLASSES_PER_ACTIVE_DAY",
+                        "operator": metric_operator,
+                        "value": class_count,
                         "windowDays": metric_window,
                     }
                 )
+                if metric_operator == "GTE":
+                    rules.append(
+                        {
+                            "field": "ACTIVE_STUDY_DAYS",
+                            "operator": "GTE",
+                            "value": metric_window,
+                            "windowDays": metric_window,
+                        }
+                    )
                 if window_days is None:
                     warnings.append(
                         "No se indicó durante cuántos días sostener la frecuencia diaria; "
@@ -189,7 +247,7 @@ class MockProvider:
                 rules.append(
                     {
                         "field": "CLASSES_COMPLETED",
-                        "operator": "GTE",
+                        "operator": metric_operator,
                         "value": class_count,
                         "windowDays": window_days,
                     }
@@ -217,6 +275,17 @@ class MockProvider:
                     "value": int(streak_match.group(1)),
                 }
             )
+        if any(term in lower for term in ("reclamo", "queja", "ticket de soporte")):
+            warnings.append(
+                "El motor actual no tiene datos de reclamos o soporte para segmentar esta campaña."
+            )
+            benefit_id = None
+        if any(term in lower for term in ("referid", "invitó a", "invito a", "invitaron a", "invitar a", "recomendó a", "recomendo a")):
+            warnings.append(
+                "El motor actual no registra referidos o invitaciones exitosas como métrica de campaña."
+            )
+            benefit_id = None
+
         if "%" in description or "descuento" in lower or "bonific" in lower:
             warnings.append(
                 "El motor actual de campañas no configura descuentos o precios; "

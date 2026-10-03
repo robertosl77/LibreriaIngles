@@ -152,6 +152,14 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         requires_window=True,
     ),
     RuleCapability(
+        "AVERAGE_CLASSES_PER_DAY",
+        "Promedio de clases por día",
+        "number",
+        ("EQ", "GTE", "LTE"),
+        "Promedio diario real dentro de una ventana de N días; los días sin clases cuentan como cero.",
+        requires_window=True,
+    ),
+    RuleCapability(
         "STUDY_STREAK_DAYS",
         "Racha de estudio",
         "integer",

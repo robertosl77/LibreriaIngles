@@ -226,6 +226,8 @@ def _activity_metric(
         return min(counts.values()) if counts else 0
     if field == "AVERAGE_CLASSES_PER_ACTIVE_DAY":
         return round(sum(counts.values()) / len(counts), 2) if counts else 0.0
+    if field == "AVERAGE_CLASSES_PER_DAY":
+        return round(sum(counts.values()) / window_days, 2) if window_days else None
     return None
 
 
@@ -334,6 +336,7 @@ def rule_evaluation(
         "ACTIVE_STUDY_DAYS",
         "MIN_CLASSES_PER_ACTIVE_DAY",
         "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+        "AVERAGE_CLASSES_PER_DAY",
         "STUDY_STREAK_DAYS",
     }:
         window_days = rule.get("windowDays")

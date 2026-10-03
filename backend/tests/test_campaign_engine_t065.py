@@ -364,3 +364,371 @@ def test_campaign_assist_understands_daily_classes_and_keeps_discount_as_warning
     warnings = " ".join(body["warnings"]).lower()
     assert "30 días" in warnings
     assert "descuento" in warnings or "precio" in warnings
+
+
+
+def test_average_classes_per_day_counts_inactive_days_in_window(client) -> None:
+    user = login(client, "average-real@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+    # 150 clases concentradas en 10 días: promedio real de una ventana de 30 = 5/día.
+    _add_completed_classes(
+        "average-real@example.com",
+        day_offsets=list(range(10)),
+        classes_per_day=[15] * 10,
+    )
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "AVERAGE_CLASSES_PER_DAY",
+                "operator": "GTE",
+                "value": 5,
+                "windowDays": 30,
+            },
+            {
+                "field": "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+                "operator": "GTE",
+                "value": 15,
+                "windowDays": 30,
+            },
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = {row["field"]: row["actual"] for row in body["sample"][0]["rules"]}
+    assert values["AVERAGE_CLASSES_PER_DAY"] == 5.0
+    assert values["AVERAGE_CLASSES_PER_ACTIVE_DAY"] == 15.0
+
+
+def _ensure_mock_campaign_assistant(client, owner) -> None:
+    response = client.post(
+        f"{API}/ai/connections",
+        headers=owner,
+        json={
+            "provider": "MOCK",
+            "name": "T-065 fidelity lab",
+            "model": "mock",
+            "priority": 1,
+            "scope": "platform",
+        },
+    )
+    assert response.status_code == 201, response.text
+
+
+def _create_scenario_benefit(client, owner, service_id: int, *, index: int, name: str) -> dict:
+    durations = [7, 5, 3, 10, 14, 7, 5, 10, 3, 14, 7, 5]
+    response = client.post(
+        f"{API}/platform/benefits",
+        headers=owner,
+        json={
+            "name": f"T065 · {name}",
+            "serviceId": service_id,
+            "durationDays": durations[index % len(durations)],
+            "active": True,
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _assert_rule(draft: dict, expected: dict) -> None:
+    candidates = [rule for rule in draft["rules"] if rule["field"] == expected["field"]]
+    assert candidates, f"Falta regla {expected['field']} en {draft['rules']}"
+    assert any(
+        all(rule.get(key) == value for key, value in expected.items())
+        for rule in candidates
+    ), f"No se encontró {expected}; reglas: {candidates}"
+
+
+def test_fifteen_fidelity_campaigns_are_simulated_and_supported_ones_can_be_created(client) -> None:
+    owner = _owner(client)
+    _welcome_benefit_id(client, owner)
+    _ensure_mock_campaign_assistant(client, owner)
+    services = client.get(f"{API}/platform/services", headers=owner)
+    assert services.status_code == 200, services.text
+    service_id = next(
+        row["id"] for row in services.json() if row["code"] == "INDIVIDUAL_PLATFORM"
+    )
+
+    scenarios = [
+        {
+            "name": "Premio aniversario",
+            "description": (
+                "Premiar a alumnos personales con más de 1 año de antigüedad en la app "
+                "con un beneficio de agradecimiento."
+            ),
+            "rules": [{"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365}],
+            "executable": True,
+        },
+        {
+            "name": "Promedio diario alto",
+            "description": (
+                "Premiar a alumnos personales con un promedio mínimo de 5 clases por día "
+                "en los últimos 30 días con un beneficio."
+            ),
+            "rules": [
+                {
+                    "field": "AVERAGE_CLASSES_PER_DAY",
+                    "operator": "GTE",
+                    "value": 5,
+                    "windowDays": 30,
+                }
+            ],
+            "executable": True,
+        },
+        {
+            "name": "Constancia diaria estricta",
+            "description": (
+                "Premiar a alumnos personales que hagan al menos 3 clases todos los días "
+                "durante 7 días con un beneficio."
+            ),
+            "rules": [
+                {
+                    "field": "MIN_CLASSES_PER_ACTIVE_DAY",
+                    "operator": "GTE",
+                    "value": 3,
+                    "windowDays": 7,
+                },
+                {
+                    "field": "ACTIVE_STUDY_DAYS",
+                    "operator": "GTE",
+                    "value": 7,
+                    "windowDays": 7,
+                },
+            ],
+            "executable": True,
+        },
+        {
+            "name": "Racha de estudio",
+            "description": (
+                "Premiar a alumnos personales con una racha de 14 días de estudio con un beneficio."
+            ),
+            "rules": [{"field": "STUDY_STREAK_DAYS", "operator": "GTE", "value": 14}],
+            "executable": True,
+        },
+        {
+            "name": "Alta presencia mensual",
+            "description": (
+                "Premiar a alumnos personales con al menos 20 días con actividad "
+                "en los últimos 30 días con un beneficio."
+            ),
+            "rules": [
+                {
+                    "field": "ACTIVE_STUDY_DAYS",
+                    "operator": "GTE",
+                    "value": 20,
+                    "windowDays": 30,
+                }
+            ],
+            "executable": True,
+        },
+        {
+            "name": "Volumen mensual",
+            "description": (
+                "Premiar a alumnos personales que completen al menos 50 clases "
+                "en los últimos 30 días con un beneficio."
+            ),
+            "rules": [
+                {
+                    "field": "CLASSES_COMPLETED",
+                    "operator": "GTE",
+                    "value": 50,
+                    "windowDays": 30,
+                }
+            ],
+            "executable": True,
+        },
+        {
+            "name": "Regreso por inactividad",
+            "description": (
+                "Hacer volver a alumnos personales sin membresía que no estudian hace 60 días "
+                "ofreciéndoles un beneficio de regreso."
+            ),
+            "rules": [
+                {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+                {"field": "DAYS_SINCE_LAST_ACTIVITY", "operator": "GTE", "value": 60},
+            ],
+            "executable": True,
+        },
+        {
+            "name": "Regreso tras vencimiento",
+            "description": (
+                "Recuperar alumnos personales sin membresía cuyo servicio venció hace 30 días "
+                "con un beneficio para volver."
+            ),
+            "rules": [
+                {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+                {"field": "DAYS_SINCE_SERVICE_EXPIRED", "operator": "GTE", "value": 30},
+            ],
+            "executable": True,
+        },
+        {
+            "name": "Nunca empezó",
+            "description": (
+                "Motivar a alumnos personales que nunca estudiaron ni completaron una clase "
+                "con un beneficio de primera práctica."
+            ),
+            "rules": [{"field": "NEVER_STUDIED", "operator": "EQ", "value": True}],
+            "executable": True,
+        },
+        {
+            "name": "Impulso A1 intensivo",
+            "description": (
+                "Premiar alumnos personales A1 que completen al menos 30 clases "
+                "en los últimos 14 días con un beneficio."
+            ),
+            "rules": [
+                {"field": "CURRENT_LEVEL", "operator": "EQ", "value": "A1"},
+                {
+                    "field": "CLASSES_COMPLETED",
+                    "operator": "GTE",
+                    "value": 30,
+                    "windowDays": 14,
+                },
+            ],
+            "executable": True,
+        },
+        {
+            "name": "Riesgo por baja actividad",
+            "description": (
+                "Reactivar alumnos personales con como máximo 3 clases "
+                "en los últimos 30 días con un beneficio para volver."
+            ),
+            "rules": [
+                {
+                    "field": "CLASSES_COMPLETED",
+                    "operator": "LTE",
+                    "value": 3,
+                    "windowDays": 30,
+                }
+            ],
+            "executable": True,
+        },
+        {
+            "name": "Riesgo por promedio bajo",
+            "description": (
+                "Reactivar alumnos personales cuyo promedio sea como máximo 1 clase por día "
+                "en los últimos 14 días con un beneficio."
+            ),
+            "rules": [
+                {
+                    "field": "AVERAGE_CLASSES_PER_DAY",
+                    "operator": "LTE",
+                    "value": 1,
+                    "windowDays": 14,
+                }
+            ],
+            "executable": True,
+        },
+        {
+            "name": "Recuperación de reclamo",
+            "description": (
+                "Dar una compensación a alumnos personales que tuvieron un reclamo resuelto "
+                "por soporte durante la última semana."
+            ),
+            "rules": [],
+            "executable": False,
+            "warning": "reclamos",
+        },
+        {
+            "name": "Premio por referidos",
+            "description": (
+                "Premiar a alumnos personales que invitaron a 3 amigos que se registraron "
+                "con un beneficio especial."
+            ),
+            "rules": [],
+            "executable": False,
+            "warning": "referid",
+        },
+        {
+            "name": "Antigüedad y promedio con descuento",
+            "description": (
+                "Necesito crear una campaña para beneficiar a los alumnos personal no corporativos "
+                "que lleven más de 6 meses en la app y hagan un promedio de 5 clases diarias como mínimo; "
+                "a estos les quiero ofrecer un 10% de descuento en la membresía."
+            ),
+            "rules": [
+                {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 180},
+                {
+                    "field": "AVERAGE_CLASSES_PER_DAY",
+                    "operator": "GTE",
+                    "value": 5,
+                    "windowDays": 30,
+                },
+            ],
+            "executable": False,
+            "warning": "descuento",
+        },
+    ]
+
+    created_names: list[str] = []
+    simulated: list[dict] = []
+    reward_index = 0
+
+    for scenario in scenarios:
+        response = client.post(
+            f"{API}/platform/campaigns/assist",
+            headers=owner,
+            json={"description": scenario["description"]},
+        )
+        assert response.status_code == 200, f"{scenario['name']}: {response.text}"
+        body = response.json()
+        draft = body["draft"]
+        for expected_rule in scenario["rules"]:
+            _assert_rule(draft, expected_rule)
+
+        simulated.append(
+            {
+                "name": scenario["name"],
+                "draft": draft,
+                "warnings": body["warnings"],
+            }
+        )
+
+        if not scenario["executable"]:
+            warning_text = " ".join(body["warnings"]).lower()
+            assert scenario["warning"] in warning_text, (scenario["name"], body)
+            assert draft["benefitId"] is None, (
+                f"{scenario['name']} no debe quedar listo para guardar automáticamente"
+            )
+            continue
+
+        benefit = _create_scenario_benefit(
+            client,
+            owner,
+            service_id,
+            index=reward_index,
+            name=scenario["name"],
+        )
+        reward_index += 1
+        final_draft = {
+            **draft,
+            "name": scenario["name"],
+            "benefitId": benefit["id"],
+        }
+        created = client.post(
+            f"{API}/platform/campaigns",
+            headers=owner,
+            json=final_draft,
+        )
+        assert created.status_code == 201, f"{scenario['name']}: {created.text}"
+        created_body = created.json()
+        assert created_body["name"] == scenario["name"]
+        assert created_body["status"] == "DRAFT"
+        assert created_body["action"] == "GRANT_BENEFIT"
+        created_names.append(created_body["name"])
+
+    assert len(simulated) == 15
+    assert len(created_names) == 12
+    assert len(set(created_names)) == 12
+
+    rows = client.get(f"{API}/platform/campaigns", headers=owner)
+    assert rows.status_code == 200
+    persisted_names = {row["name"] for row in rows.json()}
+    assert set(created_names) <= persisted_names
