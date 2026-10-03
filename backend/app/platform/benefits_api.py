@@ -38,8 +38,8 @@ class BenefitIn(BaseModel):
 
 
 SERVICE_LABELS = {
-    ServiceLinkType.PERSONAL: "Individual",
-    ServiceLinkType.CORPORATE: "Empresa",
+    ServiceLinkType.PERSONAL: "Personal",
+    ServiceLinkType.CORPORATE: "Corporativa",
 }
 
 
