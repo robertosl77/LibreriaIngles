@@ -40,7 +40,7 @@ def seed_benefits(db: Session) -> None:
     db.add(
         Benefit(
             code=WELCOME_BENEFIT_CODE,
-            name="Plataforma · 3 días",
+            name="Bienvenida",
             plan_id=plan.id,
             duration_days=3,
             active=True,
@@ -82,13 +82,13 @@ def apply_service_benefit(
     granted_by: Account | None,
     origin: SubscriptionOrigin,
     note: str | None = None,
+    replace_existing: bool = False,
 ) -> BenefitApplication:
-    """Aplica un beneficio sin reemplazar silenciosamente otro servicio distinto.
+    """Aplica un beneficio.
 
-    Política actual (conservadora):
-    - sin servicio otorgado: crea una suscripción con grant_service;
-    - mismo servicio: suma días (o lo deja sin vencimiento si el beneficio no vence);
-    - servicio distinto: no aplica. Una futura política explícita decidirá reemplazo/crédito.
+    Campañas/invitaciones conservan la política segura: mismo servicio extiende y un servicio
+    distinto no se reemplaza silenciosamente. El otorgamiento manual del OWNER puede pedir
+    reemplazo explícito, preservando la suscripción anterior como historial.
     """
     plan = db.get(Plan, benefit.plan_id)
     if plan is None or not plan.active or not benefit.active:
