@@ -90,10 +90,10 @@ Luego proteger `main` para que los cambios entren mediante Pull Request y requie
 
 ## T-002 — Revisar vulnerabilidades npm
 
-**Estado:** Resuelta (PR #28 a `develop`) · Claude  
-**Estado:** Resuelta (PR a `develop`) · Claude
+**Estado:** Reabierta para revisión (2026-10-03) · la resolución anterior de PR #28 sigue vigente para
+las vulnerabilidades originales.
 
-Resolución (2026-10-01): `npm audit` pasó de **29 (2 críticas, 14 altas) a 0**.
+Resolución anterior (2026-10-01): `npm audit` pasó de **29 (2 críticas, 14 altas) a 0**.
 
 1. Causa: Angular 19 ya no recibe parches (todas las 19.x afectadas: XSS en el compilador,
    hidratación/SSR, etc.), y sus herramientas fijaban versiones viejas de vite, piscina, tar…
@@ -109,6 +109,14 @@ Resolución (2026-10-01): `npm audit` pasó de **29 (2 críticas, 14 altas) a 0*
 6. CI: Node 22 y `npm audit --audit-level=high` en el job del frontend. Se borra el workflow
    viejo `t002-npm-audit.yml` (aplicaba `npm audit fix` automático en una rama que ya no existe).
 7. Requisito: Node.js 22.12+ (o 20.19+/24+). Después de actualizar: `npm ci` en el frontend.
+
+**Nueva detección (2026-10-03):** durante la validación de T-004, `npm audit --audit-level=high`
+volvió a informar **9 vulnerabilidades altas** por el advisory
+`GHSA-ch52-4w7c-c8xp` de `http-cache-semantics`, arrastrado por dependencias de
+`@angular/cli`/npm (`make-fetch-happen`, `sigstore`, `pacote`, etc.). El build de Angular
+sigue pasando. npm propone corregirlo únicamente con `npm audit fix --force`, que actualizaría a
+Angular CLI 22.2.1 y es un cambio mayor; **no aplicar automáticamente** dentro de T-004. Revisar
+como tarea separada.
 
 Durante la instalación actual npm informó vulnerabilidades, incluyendo una crítica.
 
