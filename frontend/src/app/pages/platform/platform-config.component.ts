@@ -30,12 +30,15 @@ import { ServicesAdminComponent } from './services-admin.component';
         (changed)="configurationChanged()"
       />
 
-      <app-benefits-admin
+      <app-accounts-admin
         [refreshVersion]="configurationRefreshVersion()"
         (changed)="configurationChanged()"
       />
 
-      <app-accounts-admin (changed)="configurationChanged()" />
+      <app-benefits-admin
+        [refreshVersion]="configurationRefreshVersion()"
+        (changed)="configurationChanged()"
+      />
 
       <app-campaigns-admin />
 
