@@ -217,8 +217,10 @@ FUENTE DE IA (lo único que elige la persona)
    PLATAFORMA  → las keys de sr.macros
    HÍBRIDO     → las propias primero; si fallan de fondo, las de sr.macros
 
-SERVICIO     = vínculo + fuente + metadatos comerciales + costo futuro
-BENEFICIO    = servicio + duración/vigencia + política de otorgamiento
+SERVICIO     = fila del modelo de negocio (INDIVIDUAL; EMPRESA futuro)
+FUENTE IA    = columna fija (BYOK / PLATAFORMA / HÍBRIDO)
+COMBINACIÓN  = servicio × fuente; se puede habilitar/deshabilitar
+BENEFICIO    = servicio + fuente + duración/vigencia + política de otorgamiento
 
 OTORGAMIENTO (cómo alguien recibe un servicio)
    PAGO        → lo contrata el cliente (futuro)
@@ -312,7 +314,7 @@ PLAN / SERVICIO
         ▼
 BENEFICIO
 ¿Qué se otorga?
-servicio + duración + política de conflicto
+servicio + fuente + duración + política de conflicto
         │
         ├────────────────┐
         ▼                ▼
@@ -330,7 +332,8 @@ Ejemplo:
 ```text
 BENEFICIO
 "Plataforma 30 días"
-  servicio = Individual · Plataforma
+  servicio = Individual
+  fuente = Plataforma
   duración = 30 días
 
 CAMPAÑA "Volvé a estudiar" ────────┐
