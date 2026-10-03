@@ -216,44 +216,39 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 
 def seed_campaigns(db: Session) -> None:
-    """Crea una sola vez la campaña ejemplo de bienvenida como BORRADOR."""
+    """Crea seeds idempotentes: bienvenida siempre; laboratorio T-065 solo en local/dev."""
     marker = db.get(CampaignSeedMarker, WELCOME_CODE)
-    if marker is not None:
-        return
-
-    existing = db.scalar(select(Campaign).where(Campaign.code == WELCOME_CODE))
-    if existing is not None:
-        db.add(CampaignSeedMarker(code=WELCOME_CODE))
-        db.flush()
-        return
-
-    seed_benefits(db)
-    benefit = db.scalar(select(Benefit).where(Benefit.code == WELCOME_BENEFIT_CODE))
-    if benefit is None:
-        return
-
-    db.add(CampaignSeedMarker(code=WELCOME_CODE))
-    db.add(
-        Campaign(
-            code=WELCOME_CODE,
-            name="Bienvenida · 3 días de Plataforma",
-            benefit_id=benefit.id,
-            status=CampaignStatus.DRAFT,
-            trigger=CampaignTrigger.FIRST_LOGIN,
-            eligibility={
-                "mode": "ALL",
-                "rules": [
-                    {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
-                    {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
-                ],
-            },
-            priority=100,
-            stackable=False,
-            notification=CampaignNotification.IN_APP,
-            message="Bienvenido: tenés 3 días para probar la IA de Librería Inglés.",
-        )
-    )
-    db.flush()
+    if marker is None:
+        existing = db.scalar(select(Campaign).where(Campaign.code == WELCOME_CODE))
+        if existing is not None:
+            db.add(CampaignSeedMarker(code=WELCOME_CODE))
+            db.flush()
+        else:
+            seed_benefits(db)
+            benefit = db.scalar(select(Benefit).where(Benefit.code == WELCOME_BENEFIT_CODE))
+            if benefit is not None:
+                db.add(CampaignSeedMarker(code=WELCOME_CODE))
+                db.add(
+                    Campaign(
+                        code=WELCOME_CODE,
+                        name="Bienvenida · 3 días de Plataforma",
+                        benefit_id=benefit.id,
+                        status=CampaignStatus.DRAFT,
+                        trigger=CampaignTrigger.FIRST_LOGIN,
+                        eligibility={
+                            "mode": "ALL",
+                            "rules": [
+                                {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+                                {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+                            ],
+                        },
+                        priority=100,
+                        stackable=False,
+                        notification=CampaignNotification.IN_APP,
+                        message="Bienvenido: tenés 3 días para probar la IA de Librería Inglés.",
+                    )
+                )
+                db.flush()
 
     if settings.app_env.lower() in {"local", "dev", "development"}:
         _seed_fidelity_lab_campaigns(db)
