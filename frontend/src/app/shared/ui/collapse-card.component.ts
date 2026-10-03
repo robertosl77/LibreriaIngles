@@ -91,11 +91,9 @@ import { Component, input } from '@angular/core';
     }
 
     .collapse-body {
-      padding: 0 1.1rem 1rem;
+      padding: 0.8rem 1.1rem 1rem;
       border-top: 1px solid var(--border);
     }
-
-    .collapse-body > :first-child { margin-top: 0.8rem; }
 
     @media (max-width: 560px) {
       summary {
@@ -103,7 +101,7 @@ import { Component, input } from '@angular/core';
         gap: 0.55rem;
       }
 
-      .collapse-body { padding: 0 0.9rem 0.9rem; }
+      .collapse-body { padding: 0.75rem 0.9rem 0.9rem; }
     }
 
     @media (prefers-reduced-motion: reduce) {
