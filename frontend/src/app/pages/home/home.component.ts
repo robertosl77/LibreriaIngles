@@ -5,14 +5,15 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { ClassSummary } from '../../core/models';
+import { CampaignNotice, ClassSummary } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { ExamCardComponent } from '../../shared/exam-card.component';
+import { MyServiceComponent } from '../../shared/my-service.component';
 import { STATUS_LABELS, statusChip } from '../../shared/status';
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink, DatePipe, ExamCardComponent],
+  imports: [RouterLink, DatePipe, ExamCardComponent, MyServiceComponent],
   styles: `
     .new-class { display: flex; flex-direction: column; align-items: flex-end; gap: 0.35rem; }
     .setup h2 { margin-bottom: 0.8rem; }
@@ -30,6 +31,9 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
     .steps li.done strong { color: var(--muted); }
     @media (max-width: 640px) { .new-class { align-items: flex-start; } }
     .chip-exam { margin-left: 0.4rem; background: #fbf3dc; color: #8a6a1f; }
+    .campaign-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .campaign-notice p { margin: 0.15rem 0 0; }
+    @media (max-width: 640px) { .campaign-notice { align-items: flex-start; flex-direction: column; } }
   `,
   template: `
     <main class="page stack">
@@ -57,6 +61,16 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
         </div>
       </div>
 
+      @for (notice of notices(); track notice.grantId) {
+        <div class="banner banner-info campaign-notice">
+          <div>
+            <strong>{{ notice.campaign }}</strong>
+            <p class="small">{{ notice.message }}</p>
+          </div>
+          <button class="btn btn-sm" type="button" (click)="dismissNotice(notice)">Entendido</button>
+        </div>
+      }
+
       @if (!setupDone()) {
         <section class="card setup">
           <h2>Primeros pasos</h2>
@@ -77,11 +91,27 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
               <span class="check" aria-hidden="true">{{ hasAi() ? '✓' : '2' }}</span>
               <div>
                 <strong>Conectá una IA</strong>
-                @if (!hasAi()) {
-                  <p class="muted small">Cargá tu API key de OpenAI, Gemini o Anthropic. Es la que genera y corrige tus clases.</p>
+                @switch (ownKeys()) {
+                  @case ('unused') {
+                    <p class="muted small">Tu servicio usa la IA de Librería Inglés: no tenés que configurar nada.</p>
+                  }
+                  @case ('optional') {
+                    <p class="muted small">
+                      Tu servicio usa la IA de Librería Inglés. Si cargás tus propias API keys, se usan primero.
+                    </p>
+                  }
+                  @default {
+                    @if (!hasAi()) {
+                      <p class="muted small">Cargá tu API key de OpenAI, Gemini o Anthropic. Es la que genera y corrige tus clases.</p>
+                    }
+                  }
                 }
               </div>
-              @if (!hasAi()) { <a class="btn btn-sm" [class.btn-primary]="hasLevel()" routerLink="/app/ia">Configurar IA</a> }
+              @if (ownKeys() === 'optional') {
+                <a class="btn btn-sm" routerLink="/app/ia">Agregar mis keys</a>
+              } @else if (!hasAi()) {
+                <a class="btn btn-sm" [class.btn-primary]="hasLevel()" routerLink="/app/ia">Configurar IA</a>
+              }
             </li>
             <li>
               <span class="check" aria-hidden="true">3</span>
@@ -98,6 +128,8 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
           corrección se reintenta sola. <a routerLink="/app/ia">Ver conexiones</a>
         </div>
       }
+
+      <app-my-service [compact]="true" />
 
       @if (creating()) {
         <p class="banner banner-info small">
@@ -192,11 +224,16 @@ export class HomeComponent implements OnInit {
   readonly labels = STATUS_LABELS;
   readonly statusChip = statusChip;
   readonly classes = signal<ClassSummary[]>([]);
+  readonly notices = signal<CampaignNotice[]>([]);
   readonly loading = signal(true);
   readonly creating = signal(false);
   readonly overall = signal<number | null>(null);
   readonly hasLevel = computed(() => !!this.auth.me()?.studyProfile.operationalLevel);
-  readonly hasAi = computed(() => (this.auth.me()?.ai.connections ?? 0) > 0);
+  readonly ownKeys = computed(() => this.auth.me()?.service.ownKeys ?? 'required');
+  /** Paso 2 listo: el servicio no exige keys propias, o ya cargó alguna. */
+  readonly hasAi = computed(
+    () => this.ownKeys() !== 'required' || (this.auth.me()?.ai.own ?? 0) > 0
+  );
   readonly setupDone = computed(() => this.hasLevel() && this.hasAi());
   readonly canCreate = computed(() => this.setupDone());
   readonly name = computed(() => this.auth.me()?.account.displayName?.split(' ')[0] ?? '');
@@ -220,10 +257,26 @@ export class HomeComponent implements OnInit {
       ]);
       this.classes.set(classes);
       this.overall.set(progress.overallScore);
+
+      // Los avisos de campaña son accesorios: si fallan, Inicio debe seguir funcionando.
+      try {
+        this.notices.set(await firstValueFrom(this.api.campaignNotices()));
+      } catch {
+        this.notices.set([]);
+      }
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  async dismissNotice(notice: CampaignNotice): Promise<void> {
+    try {
+      await firstValueFrom(this.api.readCampaignNotice(notice.grantId));
+      this.notices.update((items) => items.filter((item) => item.grantId !== notice.grantId));
+    } catch (err) {
+      this.toast.error(errorMessage(err));
     }
   }
 

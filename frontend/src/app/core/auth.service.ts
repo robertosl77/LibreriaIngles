@@ -24,9 +24,13 @@ export class AuthService {
   readonly me = signal<Me | null>(null);
   readonly isLoggedIn = computed(() => this.token() !== null);
 
-  async completeLogin(accessToken: string): Promise<void> {
+  async completeLogin(accessToken: string, redirectTo: string | null = null): Promise<void> {
     this.setToken(accessToken);
     await this.refreshMe();
+    if (redirectTo) {
+      await this.router.navigateByUrl(redirectTo);
+      return;
+    }
     const me = this.me();
     await this.router.navigate(me?.studyProfile.operationalLevel ? ['/app'] : ['/app/nivel']);
   }

@@ -105,7 +105,7 @@ def test_engine_assigns_presentation_and_guarantees_listening() -> None:
     assert all(s["response"] in ("WRITE", "SELECT") for s in slots)
 
 
-def test_listening_class_flow_and_modality_progress(client) -> None:
+def test_listening_class_flow_and_ability_progress(client) -> None:
     headers = _setup(client)
     klass = client.post(f"{API}/classes", headers=headers).json()
     listened = [e for e in klass["exercises"] if e["presentation"] == "LISTEN"]
@@ -114,17 +114,21 @@ def test_listening_class_flow_and_modality_progress(client) -> None:
     assert item["type"] in EXERCISE_TYPES
     assert item["stimulus"]["mode"] == "LISTEN" and item["stimulus"]["text"]
     assert item["stimulus"]["lang"] == "en-US" and item["stimulus"]["rate"] == 0.85
-    assert item["response"] == ("SELECT" if item["type"].endswith("multiple_choice") else "WRITE")
+    if item["type"].endswith("multiple_choice"):
+        assert item["response"] == "SELECT"
+    else:
+        assert item["response"] in ("WRITE", "SPEAK")
 
     with SessionLocal() as db:
-        answers = {
-            str(e["id"]): (
-                "My name is Ana. I live in Rosario and I work in an office."
-                if db.get(Exercise, e["id"]).exercise_type == "short_writing"
-                else db.get(Exercise, e["id"]).answer_key["acceptedAnswers"][0]
-            )
-            for e in klass["exercises"]
-        }
+        answers = {}
+        for e in klass["exercises"]:
+            exercise = db.get(Exercise, e["id"])
+            if exercise.exercise_type == "short_writing":
+                answers[str(e["id"])] = "My name is Ana. I live in Rosario and I work in an office."
+            elif exercise.exercise_type == "conversation":
+                answers[str(e["id"])] = "Hi! I'm Ana. I'm fine, thanks."
+            else:
+                answers[str(e["id"])] = exercise.answer_key["acceptedAnswers"][0]
     result = client.post(
         f"{API}/classes/{klass['id']}/submit", json={"answers": answers}, headers=headers
     ).json()
@@ -132,9 +136,10 @@ def test_listening_class_flow_and_modality_progress(client) -> None:
     assert corrected["result"]["score"] == 100
 
     progress = client.get(f"{API}/progress", headers=headers).json()
-    listen = next(m for m in progress["modalities"] if m["key"] == "LISTEN")
-    assert listen["name"] == "Escucha"
-    assert listen["attemptCount"] == len(listened)
-    assert listen["score"] == 100
-    # Habla todavía no tiene práctica: no se muestra.
-    assert all(m["key"] != "SPEAK" for m in progress["modalities"])
+    assert "modalities" not in progress  # reemplazado por habilidades (T-034)
+    abilities = {a["key"]: a for a in progress["abilities"]}
+    assert abilities["LISTENING"]["evidenceCount"] >= len(listened)
+    assert abilities["LISTENING"]["score"] == 100  # sin señales de esfuerzo: sin descuento
+    spoken = [e for e in klass["exercises"] if e["response"] == "SPEAK"]
+    if spoken:
+        assert abilities["SPEAKING"]["evidenceCount"] == len(spoken)

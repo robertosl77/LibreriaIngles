@@ -5,6 +5,7 @@ Los errores se traducen a `ProviderError` con un estado de `AIConnectionStatus`,
 que el router usa para decidir el failover.
 """
 
+import base64
 import json
 import re
 from dataclasses import dataclass
@@ -29,14 +30,26 @@ class ProviderInfo:
     label: str
     default_model: str
     requires_key: bool = True
+    supports_audio_input: bool = False
 
 
 PROVIDERS: dict[str, ProviderInfo] = {
-    "OPENAI": ProviderInfo("OPENAI", "OpenAI", "gpt-4o-mini"),
-    "GEMINI": ProviderInfo("GEMINI", "Google Gemini", "gemini-2.5-flash"),
+    "OPENAI": ProviderInfo("OPENAI", "OpenAI", "gpt-4o-mini", supports_audio_input=True),
+    "GEMINI": ProviderInfo("GEMINI", "Google Gemini", "gemini-2.5-flash", supports_audio_input=True),
     "ANTHROPIC": ProviderInfo("ANTHROPIC", "Anthropic Claude", "claude-sonnet-4-5"),
-    "MOCK": ProviderInfo("MOCK", "Simulado (solo desarrollo)", "mock", requires_key=False),
+    "MOCK": ProviderInfo(
+        "MOCK", "Simulado (solo desarrollo)", "mock", requires_key=False, supports_audio_input=True
+    ),
 }
+
+
+@dataclass(frozen=True)
+class SpeechAnalysis:
+    """Resultado de una respuesta hablada: transcripción literal y, si el proveedor puede,
+    una estimación de pronunciación (dict crudo; se normaliza en app.pronunciation)."""
+
+    text: str
+    pronunciation: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -47,6 +60,10 @@ class ModelInfo:
 
 class AIProvider(Protocol):
     def complete_json(self, system: str, user: str, task: dict) -> dict: ...
+
+    def transcribe_audio(self, audio: bytes, mime_type: str) -> str: ...
+
+    def analyze_speech(self, audio: bytes, mime_type: str) -> SpeechAnalysis: ...
 
     def health_check(self) -> None: ...
 
@@ -117,6 +134,10 @@ class _HttpProvider:
             raise _classify_http_error(response)
         return response
 
+    def analyze_speech(self, audio: bytes, mime_type: str) -> SpeechAnalysis:
+        """Por defecto solo transcribe (sin estimación de pronunciación)."""
+        return SpeechAnalysis(self.transcribe_audio(audio, mime_type), None)
+
 
 class OpenAIProvider(_HttpProvider):
     base_url = "https://api.openai.com/v1"
@@ -161,6 +182,32 @@ class OpenAIProvider(_HttpProvider):
         ]
         chat.sort(key=lambda row: row.get("created", 0), reverse=True)
         return [ModelInfo(row["id"], row["id"]) for row in chat]
+
+    def transcribe_audio(self, audio: bytes, mime_type: str) -> str:
+        """Speech-to-text literal. El audio vive solo durante este request."""
+        response = self._request(
+            "POST",
+            f"{self.base_url}/audio/transcriptions",
+            headers=self._headers(),
+            data={
+                "model": "gpt-4o-mini-transcribe",
+                "language": "en",
+                "prompt": (
+                    "Transcribe exactly what the learner says in English. "
+                    "Do not fix grammar, word choice, verb forms, or pronunciation mistakes."
+                ),
+            },
+            files={"file": ("answer.webm", audio, mime_type or "audio/webm")},
+        )
+        try:
+            text = str(response.json()["text"]).strip()
+        except (KeyError, ValueError) as exc:
+            raise ProviderError(
+                AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de OpenAI al transcribir."
+            ) from exc
+        if not text:
+            raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "OpenAI no detectó voz.")
+        return text
 
 
 class GeminiProvider(_HttpProvider):
@@ -216,6 +263,97 @@ class GeminiProvider(_HttpProvider):
             if not page_token:
                 break
         return models
+
+    def transcribe_audio(self, audio: bytes, mime_type: str) -> str:
+        """Transcripción literal usando audio inline; suficiente para respuestas cortas."""
+        encoded = base64.b64encode(audio).decode("ascii")
+        mime = (mime_type or "audio/webm").split(";", 1)[0].strip()
+        response = self._request(
+            "POST",
+            f"{self.base_url}/models/{self.model}:generateContent",
+            headers=self._headers(),
+            json={
+                "systemInstruction": {
+                    "parts": [{
+                        "text": (
+                            "You are a literal speech-to-text engine for an English learner. "
+                            "Never correct grammar, vocabulary, verb forms or wording."
+                        )
+                    }]
+                },
+                "contents": [{
+                    "role": "user",
+                    "parts": [
+                        {"text": "Transcribe exactly what is spoken. Return only the transcript."},
+                        {"inlineData": {"mimeType": mime, "data": encoded}},
+                    ],
+                }],
+                "generationConfig": {"temperature": 0},
+            },
+        )
+        try:
+            parts = response.json()["candidates"][0]["content"]["parts"]
+            text = "".join(part.get("text", "") for part in parts).strip()
+        except (KeyError, IndexError, ValueError) as exc:
+            raise ProviderError(
+                AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de Gemini al transcribir."
+            ) from exc
+        if not text:
+            raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Gemini no detectó voz.")
+        return text
+
+    def analyze_speech(self, audio: bytes, mime_type: str) -> SpeechAnalysis:
+        """Una sola llamada: transcripción literal + estimación de pronunciación (T-027).
+
+        Si la respuesta no se puede interpretar, se cae a la transcripción simple: la
+        pronunciación nunca hace fallar la respuesta del alumno.
+        """
+        encoded = base64.b64encode(audio).decode("ascii")
+        mime = (mime_type or "audio/webm").split(";", 1)[0].strip()
+        response = self._request(
+            "POST",
+            f"{self.base_url}/models/{self.model}:generateContent",
+            headers=self._headers(),
+            json={
+                "systemInstruction": {"parts": [{"text": SPEECH_ANALYSIS_PROMPT}]},
+                "contents": [{
+                    "role": "user",
+                    "parts": [
+                        {"text": "Analyse this recording."},
+                        {"inlineData": {"mimeType": mime, "data": encoded}},
+                    ],
+                }],
+                "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+            },
+        )
+        try:
+            parts = response.json()["candidates"][0]["content"]["parts"]
+            data = parse_json_text("".join(part.get("text", "") for part in parts))
+            text = str(data.get("transcript") or "").strip()
+        except (KeyError, IndexError, ValueError, ProviderError):
+            return SpeechAnalysis(self.transcribe_audio(audio, mime_type), None)
+        if not text:
+            raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Gemini no detectó voz.")
+        pronunciation = data.get("pronunciation")
+        return SpeechAnalysis(text, pronunciation if isinstance(pronunciation, dict) else None)
+
+
+SPEECH_ANALYSIS_PROMPT = """You analyse a short spoken answer from an English learner.
+Return ONLY a JSON object:
+{
+  "transcript": "exactly what was said, literally. Never correct grammar, vocabulary or verb forms",
+  "pronunciation": {
+    "score": 0-100,
+    "words": [{"word": "<each word of the transcript, in order>", "score": 0-100}],
+    "phonemes": [{"phoneme": "<IPA>", "word": "<word>", "score": 0-100}],
+    "fluency": 0-100
+  }
+}
+Rules for "pronunciation":
+- Judge ONLY how the words that were actually said sound (clarity, sounds, stress, rhythm),
+  as an English teacher would for a learner. Do NOT judge grammar or whether the answer is right.
+- "phonemes": only the problematic sounds (e.g. /θ/ said as /s/); empty list if none.
+- If there is no intelligible speech, return "transcript": "" and "pronunciation": null."""
 
 
 class AnthropicProvider(_HttpProvider):

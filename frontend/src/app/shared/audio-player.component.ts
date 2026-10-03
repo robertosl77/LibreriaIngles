@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, input, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, input, output, signal } from '@angular/core';
 
 /**
  * Listening (T-025): reproduce un texto con la voz sintética del navegador (Web Speech API).
@@ -17,7 +17,7 @@ import { Component, OnDestroy, OnInit, computed, input, signal } from '@angular/
           class="play"
           type="button"
           (click)="toggle()"
-          [disabled]="!playing() && exhausted()"
+          [disabled]="disabled() || (!playing() && exhausted())"
           [attr.aria-label]="playing() ? 'Detener audio' : 'Reproducir audio'"
         >
           @if (playing()) {
@@ -36,10 +36,12 @@ import { Component, OnDestroy, OnInit, computed, input, signal } from '@angular/
             </span>
           }
         </div>
-        <div class="speed" role="group" aria-label="Velocidad">
-          <button type="button" [class.on]="slow()" (click)="slow.set(true)">Lento</button>
-          <button type="button" [class.on]="!slow()" (click)="slow.set(false)">Normal</button>
-        </div>
+        @if (allowSlow()) {
+          <div class="speed" role="group" aria-label="Velocidad">
+            <button type="button" [class.on]="slow()" [disabled]="disabled()" (click)="slow.set(true)">Lento</button>
+            <button type="button" [class.on]="!slow()" [disabled]="disabled()" (click)="slow.set(false)">Normal</button>
+          </div>
+        }
       </div>
       @if (noEnglishVoice()) {
         <p class="muted small">
@@ -69,6 +71,7 @@ import { Component, OnDestroy, OnInit, computed, input, signal } from '@angular/
     .speed { display: inline-flex; border: 1px solid #c9d6ff; border-radius: 999px; overflow: hidden; }
     .speed button { border: 0; background: transparent; padding: 0.3rem 0.7rem; font: inherit; font-size: 0.8rem; cursor: pointer; color: #2f4ab3; }
     .speed button.on { background: #2f4ab3; color: #fff; }
+    .speed button:disabled { opacity: 0.6; cursor: not-allowed; }
     @media (prefers-reduced-motion: reduce) { .playing .play { animation: none; } }
   `
 })
@@ -76,6 +79,13 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   readonly text = input.required<string>();
   readonly lang = input('en-US');
   readonly rate = input(1);
+  readonly disabled = input(false);
+  /** En el examen no hay modo lento (T-034). */
+  readonly allowSlow = input(true);
+  /** Escuchas ya registradas (sobrevive a recargar la página: el límite del examen se respeta). */
+  readonly initialPlays = input(0);
+  /** Cada vez que empieza a sonar: alimenta la evidencia de Listening. */
+  readonly played = output<{ slow: boolean }>();
   /** En el examen se limita la cantidad de reproducciones (null = sin límite). */
   readonly maxPlays = input<number | null>(null);
 
@@ -93,6 +103,7 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   private readonly onVoices = () => this.pickVoice();
 
   ngOnInit(): void {
+    this.plays.set(this.initialPlays());
     if (!this.supported()) {
       return;
     }
@@ -126,6 +137,9 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
   }
 
   toggle(): void {
+    if (this.disabled()) {
+      return;
+    }
     if (this.playing()) {
       speechSynthesis.cancel();
       this.playing.set(false);
@@ -142,11 +156,13 @@ export class AudioPlayerComponent implements OnInit, OnDestroy {
       utterance.voice = this.voice;
     }
     const base = this.rate() || 1;
-    utterance.rate = this.slow() ? Math.max(0.5, base * 0.75) : base;
+    const slow = this.allowSlow() && this.slow();
+    utterance.rate = slow ? Math.max(0.5, base * 0.75) : base;
     utterance.onend = () => this.playing.set(false);
     utterance.onerror = () => this.playing.set(false);
     this.plays.update((n) => n + 1);
     this.playing.set(true);
+    this.played.emit({ slow });
     speechSynthesis.speak(utterance);
   }
 }

@@ -141,10 +141,23 @@ Menú **Plataforma** → `/app/plataforma`.
   se puede escribir el modelo a mano. Si el modelo actual ya no figura en la lista, se avisa
   (probablemente discontinuado).
 - Cada registro de consumo guarda el modelo usado (migración `0004_usage_model`).
-- Qué conexiones usa cada usuario (propias, de plataforma o ambas según el plan) queda para
-  T-003/T-004.
+- **Qué conexiones usa cada usuario (T-003 + T-004):** lo decide el **servicio vigente**
+  de la cuenta. Sin servicio otorgado es *Individual · propias keys* (solo sus conexiones).
+  *Plataforma* usa solo las de plataforma; *Híbrido*, las propias primero y si fallan las de
+  plataforma. El `PLATFORM_OWNER` usa ambas.
+- **Servicios (T-004 etapa 1):** sección *Servicios* (catálogo: nombre, fuente de IA,
+  duración en días, tope diario de pedidos a la plataforma) y *Cuentas y servicios* (buscar
+  una cuenta, otorgarle un servicio por N días o sin vencimiento, quitarlo). Otorgar reemplaza
+  el servicio anterior. Al vencer, la cuenta vuelve a *Individual · propias keys* y ve un aviso
+  durante 14 días. El tope diario cuenta pedidos exitosos a cualquier conexión de plataforma en
+  las últimas 24 h; el alumno ve el % usado en *Tu servicio* (IA e Inicio).
+- **Privacidad de las conexiones de plataforma (T-055):** el alumno nunca ve nombre, proveedor
+  ni motor de una conexión de plataforma: en IA, en la clase, en cada corrección y en los
+  errores figura como *IA de Librería Inglés*. Con servicio *Plataforma*, el menú IA no ofrece
+  cargar keys nuevas; si ya tenía, las ve como "Tus conexiones guardadas" (puede editarlas o
+  borrarlas) y quedan sin uso hasta que venza el servicio.
 
-Migraciones: `0003_platform_ai_usage` y `0004_usage_model`.
+Migraciones: `0003_platform_ai_usage`, `0004_usage_model` y `0012_services`.
 
 ## 6.1 "Necesito lección" (T-020)
 
@@ -244,6 +257,69 @@ Migración: `0007_modalities`.
   opciones sin repetir, sin "odd one out") y que todo tema tenga lección.
 - Efecto en el examen: la habilitación pide practicar el 70 % de 37 temas (26).
 
+## 6.5 Evidencias por habilidad (T-034, etapa 1)
+
+Un ejercicio genera **varias evidencias**, una por habilidad que toca, cada una medida a su manera
+(`backend/app/progress/evidence.py`):
+
+| Situación | Habilidad | Cómo se mide |
+|---|---|---|
+| Foco del ejercicio (su área) | Grammar / Vocabulary / Reading / Writing / Listening | resultado |
+| Presentado escuchando | Listening | resultado × esfuerzo: −15 % por escucha extra, −20 % si usó lento, piso 40 % |
+| Respondido hablando | Speaking | resultado del contenido |
+| Respondido hablando | Pronunciation | estimación final; una palabra dicha como otra parecida (think/sink) la limita a 50 % |
+| Ejercicio del área Writing (armar/componer oraciones) | Writing | resultado (reescribir una oración dada en gramática **no** cuenta: es Grammar) |
+| Usó "Necesito lección" | todas sus evidencias | pesan la mitad y quedan marcadas como asistidas |
+| Escuchó más de 2 veces o en lento | Listening | además del descuento, queda marcada como asistida |
+| Practicó la pronunciación más de 2 veces | Pronunciation | pesa la mitad y queda asistida; el puntaje no baja |
+
+- Lo escuchado no cuenta como Reading; lo hablado no cuenta como Writing.
+- **Señales** (`signals` en borrador e intento, migración `0010_answer_signals`): escuchas, escuchas en
+  lento y prácticas de pronunciación, registradas con `POST /classes/{id}/exercises/{eid}/signals`
+  mientras la clase está abierta. Se muestran en la corrección ("Escuchaste el audio 3 veces (1 en lento)").
+- **Ayuda = señal de debilidad:** con ayuda en las últimas 5 evidencias, una skill o habilidad no
+  puede quedar como dominada aunque el puntaje dé (`assistedRecent`, lo usará el balanceo de la etapa 3).
+- **Respuestas habladas** (`app/classes/spoken.py`): se compara la transcripción sin puntuación ni
+  mayúsculas. Si coincide con la respuesta salvo palabras que suenan parecido (think/sink, three/tree,
+  very/berry, ship/sheep…), el contenido es correcto y se marca `PRONUNCIATION_ERROR`, sin IA. Una
+  transcripción que no coincide va a la IA aunque el ejercicio sea determinístico (si no hay IA, incorrecta).
+  Los casos más difusos los resuelve la IA con la misma regla.
+- `/progress` devuelve `abilities` (puntaje, evidencias, ayudas, ayuda reciente, tendencia, estado y, en
+  Pronunciation, prácticas con su primer y último puntaje). Ya no devuelve `modalities`.
+
+## 6.6 Dashboard por habilidad (T-034, etapa 2)
+
+- Una tarjeta por habilidad (Grammar, Vocabulary, Listening, Speaking, Pronunciation, Reading, Writing)
+  con puntaje, estado, barra, evidencias, tendencia y la marca "N reciente(s) con ayuda".
+- Desplegable nativo (`<details>`): qué suma a esa habilidad, cuántas evidencias fueron con ayuda,
+  en Listening/Speaking/Pronunciation **de qué temas vino la evidencia** (`sources`) y, si la
+  habilidad es un área del currículum, sus temas y skills.
+- Color de la barra por tramo: 0-25 rojo, 25-50 naranja, 50-75 azul, 75-100 verde. Pronunciation muestra aparte la
+  evolución de la práctica (no cambia el puntaje).
+- Se quitó "Por modalidad": lo escuchado y lo hablado ahora son Listening, Speaking y Pronunciation.
+
+## 6.7 Balanceo por habilidad (T-034, etapa 3)
+
+Al armar una clase, el motor mira las habilidades (`weak_abilities` en `classes/generation.py`):
+
+- **Débil**: estado Repasar, o menos de 70 % con al menos 2 evidencias, o ayuda en 2 o más de las
+  últimas evidencias (lección, escuchar varias veces o en lento, practicar mucho) aunque acierte.
+- Se refuerzan como máximo **2** por clase (la más necesitada primero); el resto sigue variado.
+  Speaking/Pronunciation solo si hay una IA con audio.
+- Cómo se refuerza:
+  - Grammar / Vocabulary / Reading / Writing / Listening: sus skills pesan el doble y la clase trae al
+    menos un ejercicio de esa área.
+  - Writing: además, esos ejercicios se escriben (no se pasan a hablados).
+  - Listening: al menos 2 ejercicios escuchados (normal: 1).
+  - Speaking / Pronunciation: al menos 2 respuestas habladas; si faltan tipos que se puedan hablar, se
+    cambia el tipo de un ejercicio cuya skill lo admita.
+- La clase muestra **"Esta clase refuerza"** (campo `focus`): hasta 2 habilidades (`kind: ability`)
+  y hasta 2 temas flojos que entraron en la clase (`kind: topic`, ej. "Present Continuous ·
+  Preguntas · vas 0 % y usaste la lección hace poco").
+- Contenido A1 de escritura de oraciones: About me, Daily life (rutina), Short messages, Descriptions
+  (personas y lugares) y Sentence building (ordenar palabras), cada uno con su lección.
+- **Examen sin ayudas:** sin lección, 2 escuchas por audio (el contador sobrevive a recargar) y sin modo lento.
+
 # 7. Flujo técnico
 
 ```text
@@ -261,6 +337,7 @@ POST /classes/{id}/submit
   └─ 2) evalúa cada intento:
         acceptedAnswers → RULE_MATCH
         commonErrors    → COMMON_ERROR_MATCH
+        tipeo menor     → parcial 80 % + SPELLING_ERROR (T-021, sin IA)
         opción múltiple → incorrecto por regla
         caché IA        → AI
         IA              → AI   (sin IA: queda pendiente)
@@ -269,6 +346,25 @@ POST /classes/{id}/submit
 
 El score lo calcula el backend a partir de los conceptos (correct = 100, partial = 50,
 incorrect = 0); las sugerencias de estilo no descuentan.
+
+**Ortografía menor (T-021, `app/classes/spelling.py`):** si una respuesta escrita coincide con
+una aceptada salvo 1-2 palabras con un tipeo mínimo ("taxy driver", "Wendesday", "freind"), el
+concepto cuenta como correcto, se marca `SPELLING_ERROR` y vale **80 %** ("Parcial", nunca 0 %).
+No se perdona si la palabra tiene menos de 4 letras (in/on, do/is), si el error está en una
+terminación que se enseña como gramática (-s/-es/-ies, -ed, -ing: "watchs"), ni si lo escrito
+es otra palabra que la app conoce ("sleep" por "sheep"). No aplica a respuestas habladas ni de
+opción múltiple. Si la IA corrige y el único problema es ortografía, en ejercicios cerrados
+también vale 80 % (y una apelación así nunca agrega la palabra mal escrita como aceptada).
+
+**Corrección proporcional de la escritura (T-043):**
+
+- Puntaje fino por concepto: la IA da 0-100 y se respeta dentro de la banda de su estado
+  (correcto 85-100, parcial 35-84, incorrecto 0-34). Sin puntaje fino, se usa 100/50/0 como antes.
+- Mayúsculas y puntuación ("i" → "I", falta el punto final) no son errores de gramática: se
+  convierten en **una** observación `MECHANICS_NOTE` que no descuenta.
+- El mismo error repetido se informa una vez, con `occurrences` (la corrección muestra "×3").
+- Prompt: cada concepto se evalúa solo por sus propios errores; calibración por nivel (en A1-A2
+  las expresiones por encima del nivel son sugerencias, nunca errores).
 
 ---
 
@@ -309,6 +405,10 @@ GET  /api/v1/certificates/{code}          (público: verificación)
 GET  /api/v1/progress
 
 GET  /api/v1/platform/overview      (solo PLATFORM_OWNER)
+GET  /api/v1/platform/services      POST /platform/services   PUT /platform/services/{id}
+GET  /api/v1/platform/accounts?q=   (cuentas con su servicio vigente)
+POST /api/v1/platform/accounts/{id}/service   {serviceId, days?, note?}
+DELETE /api/v1/platform/accounts/{id}/service
 ```
 
 ---

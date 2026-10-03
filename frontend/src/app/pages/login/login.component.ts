@@ -1,6 +1,6 @@
 import { AfterViewInit, Component, ElementRef, NgZone, OnInit, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
@@ -51,6 +51,9 @@ function loadGoogleScript(): Promise<void> {
         <div>
           <h1>Ingresar</h1>
           <p class="muted">Tu cuenta personal se crea automáticamente la primera vez.</p>
+          @if (inviteToken) {
+            <p class="banner small">Ingresá con la cuenta que debe recibir la invitación.</p>
+          }
         </div>
 
         @if (loading()) {
@@ -123,6 +126,7 @@ export class LoginComponent implements OnInit, AfterViewInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly zone = inject(NgZone);
+  private readonly route = inject(ActivatedRoute);
 
   readonly googleButton = viewChild<ElementRef<HTMLDivElement>>('googleButton');
   readonly config = signal<AuthConfig | null>(null);
@@ -131,8 +135,10 @@ export class LoginComponent implements OnInit, AfterViewInit {
   readonly error = signal<string | null>(null);
   email = '';
   name = '';
+  inviteToken: string | null = null;
 
   async ngOnInit(): Promise<void> {
+    this.inviteToken = this.route.snapshot.queryParamMap.get('invite');
     try {
       this.config.set(await firstValueFrom(this.api.authConfig()));
     } catch (err) {
@@ -171,11 +177,13 @@ export class LoginComponent implements OnInit, AfterViewInit {
   }
 
   private async googleLogin(credential: string): Promise<void> {
-    await this.run(() => firstValueFrom(this.api.loginGoogle(credential)));
+    await this.run(() => firstValueFrom(this.api.loginGoogle(credential, this.inviteToken)));
   }
 
   async devLogin(): Promise<void> {
-    await this.run(() => firstValueFrom(this.api.loginDev(this.email.trim(), this.name.trim() || null)));
+    await this.run(() =>
+      firstValueFrom(this.api.loginDev(this.email.trim(), this.name.trim() || null, this.inviteToken))
+    );
   }
 
   private async run(request: () => Promise<{ accessToken: string }>): Promise<void> {
@@ -183,7 +191,10 @@ export class LoginComponent implements OnInit, AfterViewInit {
     this.error.set(null);
     try {
       const token = await request();
-      await this.auth.completeLogin(token.accessToken);
+      const redirect = this.inviteToken
+        ? `/invitacion/${encodeURIComponent(this.inviteToken)}`
+        : null;
+      await this.auth.completeLogin(token.accessToken, redirect);
     } catch (err) {
       this.error.set(errorMessage(err, 'No se pudo iniciar sesión.'));
     } finally {

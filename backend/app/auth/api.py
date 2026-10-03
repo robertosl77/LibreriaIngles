@@ -1,17 +1,36 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
 from app.accounts.models import AuthMethod, PlatformRole
-from app.ai.service import candidate_connections
+from app.ai.models import AIConnection, AIConnectionOwnerType
+from app.ai.service import ai_sources, candidate_connections
 from app.auth import service
 from app.core.config import settings
 from app.core.deps import CurrentStudy, DbSession
 from app.core.security import create_access_token
 from app.curriculum.service import CEFR_LEVELS, available_levels
+from app.campaigns.service import reconcile_first_login_campaigns
 from app.learning.models import ClassSession, ClassSessionStatus
+from app.subscriptions.service import effective_service
 
 router = APIRouter(tags=["auth"])
+logger = logging.getLogger(__name__)
+
+
+def _reconcile_campaigns_safely(db: DbSession, account) -> None:
+    """Las campañas nunca deben romper endpoints esenciales de sesión."""
+    try:
+        with db.begin_nested():
+            reconcile_first_login_campaigns(db, account)
+    except Exception:
+        logger.exception(
+            "Falló la reconciliación de campañas FIRST_LOGIN para account_id=%s",
+            account.id,
+        )
+
 
 
 class AuthConfig(BaseModel):
@@ -21,11 +40,13 @@ class AuthConfig(BaseModel):
 
 class GoogleLoginRequest(BaseModel):
     credential: str = Field(min_length=10)
+    invitationToken: str | None = Field(default=None, min_length=10, max_length=500)
 
 
 class DevLoginRequest(BaseModel):
     email: EmailStr
     name: str | None = None
+    invitationToken: str | None = Field(default=None, min_length=10, max_length=500)
 
 
 class TokenResponse(BaseModel):
@@ -55,6 +76,7 @@ def login_google(payload: GoogleLoginRequest, db: DbSession) -> TokenResponse:
             google_subject=identity.subject,
             display_name=identity.name,
             auth_method=AuthMethod.GOOGLE,
+            invitation_token=payload.invitationToken,
         )
     except service.AuthError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
@@ -73,6 +95,7 @@ def login_dev(payload: DevLoginRequest, db: DbSession) -> TokenResponse:
             display_name=payload.name,
             # Simula el alta personal (Google) sin pasar por Google. Solo en local.
             auth_method=AuthMethod.GOOGLE,
+            invitation_token=payload.invitationToken,
         )
     except service.AuthError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
@@ -90,6 +113,16 @@ def _me_payload(study, db) -> dict:
         ).all()
     )
     ai_connections = candidate_connections(db, account, include_backoff=True)
+    service = effective_service(db, account)
+    uses_own, uses_platform = ai_sources(db, account)
+    service_payload = service.payload()
+    service_payload["usesOwnKeys"] = uses_own
+    service_payload["usesPlatform"] = uses_platform
+    if account.platform_role == PlatformRole.PLATFORM_OWNER:
+        # El dueño no tiene servicio: usa sus keys y las de la plataforma (T-004: "empresa dueña").
+        service_payload.update(
+            name="Dueño de la plataforma", source="HYBRID", ownKeys="optional", granted=False
+        )
     return {
         "account": {
             "id": account.id,
@@ -114,13 +147,27 @@ def _me_payload(study, db) -> dict:
         "ai": {
             "connections": len(ai_connections),
             "available": sum(1 for c in ai_connections if c.is_usable),
+            # Propias guardadas, se usen o no según el servicio (T-055).
+            "own": db.scalar(
+                select(func.count(AIConnection.id)).where(
+                    AIConnection.owner_type == AIConnectionOwnerType.ACCOUNT,
+                    AIConnection.owner_id == account.id,
+                )
+            )
+            or 0,
         },
+        "service": service_payload,
     }
 
 
 @router.get("/me")
 def me(study: CurrentStudy, db: DbSession) -> dict:
-    return _me_payload(study, db)
+    # Si el request de autenticación no alcanzó a aplicar FIRST_LOGIN, /me lo reconcilia
+    # usando first_login_at + activated_at persistidos.
+    _reconcile_campaigns_safely(db, study.account)
+    payload = _me_payload(study, db)
+    db.commit()  # persiste campaña/vencimientos perezosos del servicio
+    return payload
 
 
 @router.put("/me/level")
@@ -137,5 +184,8 @@ def set_level(payload: LevelRequest, study: CurrentStudy, db: DbSession) -> dict
     # Luego el motor puede ajustarlo con evidencia (documento funcional §6 y §8).
     study.profile.selected_level = level
     study.profile.operational_level = level
+    db.flush()
+    _reconcile_campaigns_safely(db, study.account)
+    payload = _me_payload(study, db)
     db.commit()
-    return _me_payload(study, db)
+    return payload

@@ -51,7 +51,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -60,3 +60,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Audit runtime dependencies (T-002)
+        run: npm audit --omit=dev --audit-level=high

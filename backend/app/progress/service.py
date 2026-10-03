@@ -35,8 +35,10 @@ def _confidence(count: float) -> str:
     return "low"
 
 
-def _status(score: float, count: float) -> str:
-    if score >= MASTERED_SCORE and count >= MASTERED_MIN_ATTEMPTS:
+def _status(score: float, count: float, assisted_recent: int = 0) -> str:
+    # Pedir ayuda es señal de debilidad aunque la respuesta sea correcta (T-034):
+    # con ayuda reciente no se considera dominado.
+    if score >= MASTERED_SCORE and count >= MASTERED_MIN_ATTEMPTS and not assisted_recent:
         return "MASTERED"
     if score < REVIEW_SCORE and count >= REVIEW_MIN_ATTEMPTS:
         return "NEEDS_REVIEW"
@@ -58,6 +60,23 @@ def _ema(scores: list[float], weights: list[float] | None = None) -> float:
     return value
 
 
+SECONDARY_CURRICULAR_WEIGHT = 0.5
+
+
+def secondary_skill_results(result: dict | None) -> list[dict]:
+    return [
+        item for item in (result or {}).get("secondarySkillResults") or []
+        if isinstance(item, dict)
+        and item.get("skillKey")
+        and isinstance(item.get("score"), (int, float))
+        and not isinstance(item.get("score"), bool)
+    ]
+
+
+def secondary_skill_keys(result: dict | None) -> set[str]:
+    return {item["skillKey"] for item in secondary_skill_results(result)}
+
+
 def recompute_skill(
     db: Session,
     *,
@@ -65,13 +84,13 @@ def recompute_skill(
     skill_key: str,
     organization_id: int | None = None,
 ) -> StudySkillProgress:
+    """Recalcula una skill con evidencia principal y evidencia curricular secundaria (T-048)."""
     query = (
-        select(Attempt.score, Attempt.evaluated_at, Attempt.membership_id, Attempt.assistance)
+        select(Attempt, Exercise)
         .join(Exercise, Exercise.id == Attempt.exercise_id)
         .join(ClassSession, ClassSession.id == Exercise.class_session_id)
         .where(
             Attempt.study_profile_id == study_profile_id,
-            Exercise.skill_key == skill_key,
             Attempt.score.is_not(None),
             # El examen de nivel es independiente del progreso de las clases (T-024).
             ClassSession.kind == SessionKind.CLASS,
@@ -81,11 +100,35 @@ def recompute_skill(
     if organization_id is not None:
         query = query.where(Attempt.organization_id == organization_id)
     rows = db.execute(query).all()
-    scores = [float(row.score) for row in rows]
-    weights = [
-        1.0 if (row.assistance or Assistance.NONE) == Assistance.NONE else ASSISTED_WEIGHT
-        for row in rows
-    ]
+
+    evidence_rows: list[dict] = []
+    for attempt, exercise in rows:
+        assisted = (attempt.assistance or Assistance.NONE) != Assistance.NONE
+        if exercise.skill_key == skill_key:
+            evidence_rows.append(
+                {
+                    "score": float(attempt.score),
+                    "weight": ASSISTED_WEIGHT if assisted else 1.0,
+                    "assisted": assisted,
+                    "evaluated_at": attempt.evaluated_at,
+                    "membership_id": attempt.membership_id,
+                }
+            )
+        for item in secondary_skill_results(attempt.evaluation_result):
+            if item["skillKey"] != skill_key or exercise.skill_key == skill_key:
+                continue
+            evidence_rows.append(
+                {
+                    "score": float(item["score"]),
+                    "weight": SECONDARY_CURRICULAR_WEIGHT * (ASSISTED_WEIGHT if assisted else 1.0),
+                    "assisted": assisted,
+                    "evaluated_at": attempt.evaluated_at,
+                    "membership_id": attempt.membership_id,
+                }
+            )
+
+    scores = [row["score"] for row in evidence_rows]
+    weights = [row["weight"] for row in evidence_rows]
 
     progress = db.scalar(
         select(StudySkillProgress).where(
@@ -113,16 +156,17 @@ def recompute_skill(
         delta = score - previous
         trend = "up" if delta >= 5 else "down" if delta <= -5 else "stable"
 
+    assisted_recent = sum(1 for row in evidence_rows[-RECENT_WINDOW:] if row["assisted"])
     progress.score = score
     progress.attempt_count = count
     progress.confidence = _confidence(evidence)
-    progress.status = _status(score, evidence)
-    progress.assisted_recent = sum(1 for w in weights[-RECENT_WINDOW:] if w < 1.0)
+    progress.assisted_recent = assisted_recent
+    progress.status = _status(score, evidence, assisted_recent)
     progress.trend = trend
-    progress.last_practiced_at = rows[-1].evaluated_at if rows else None
+    progress.last_practiced_at = evidence_rows[-1]["evaluated_at"] if evidence_rows else None
     progress.updated_at = utcnow()
-    if organization_id is not None and rows:
-        progress.membership_id = rows[-1].membership_id
+    if organization_id is not None and evidence_rows:
+        progress.membership_id = evidence_rows[-1]["membership_id"]
     return progress
 
 
@@ -209,6 +253,22 @@ def dashboard(db: Session, study_profile_id: int, level: str) -> dict:
         ),
         key=lambda s: s["score"],
     )[:3]
+    writing = next((area for area in result_areas if area["key"] == "writing"), None)
+    orthography_topic = (
+        next((topic for topic in writing["topics"] if topic["key"] == "orthography"), None)
+        if writing else None
+    )
+    orthography_skills = orthography_topic["skills"] if orthography_topic else []
+    orthography_practiced = [s for s in orthography_skills if s["score"] is not None]
+    orthography_score = _average([s["score"] for s in orthography_practiced])
+    orthography_attempts = sum(s["attemptCount"] for s in orthography_skills)
+    orthography_help = sum(s["assistedRecent"] for s in orthography_skills)
+    orthography_status = (
+        "NOT_STARTED"
+        if orthography_score is None
+        else _status(orthography_score, orthography_attempts, orthography_help)
+    )
+
     return {
         "level": level,
         "overallScore": _average(all_scores),
@@ -216,18 +276,29 @@ def dashboard(db: Session, study_profile_id: int, level: str) -> dict:
         "skillsTotal": len(curriculum.skills),
         "weakest": weakest,
         "areas": result_areas,
-        "modalities": modality_progress(db, study_profile_id, level),
+        "orthography": {
+            "name": "Ortografía",
+            "score": orthography_score,
+            "skillsPracticed": len(orthography_practiced),
+            "skillsTotal": len(orthography_skills),
+            "attemptCount": orthography_attempts,
+            "assistedRecent": orthography_help,
+            "status": orthography_status,
+        },
+        "abilities": ability_progress(db, study_profile_id, level),
     }
 
 
-MODALITY_NAMES = {"LISTEN": "Escucha", "SPEAK": "Habla"}
+def ability_progress(db: Session, study_profile_id: int, level: str) -> list[dict]:
+    """Progreso por habilidad del idioma (T-034) a partir de las evidencias de cada intento.
 
+    Mismo cálculo que una skill: EMA ponderada (la ayuda y las señales secundarias pesan menos),
+    tendencia sobre los últimos intentos y cuántas evidencias fueron con ayuda.
+    """
+    from app.progress.evidence import ABILITIES, attempt_evidence
 
-def modality_progress(db: Session, study_profile_id: int, level: str) -> list[dict]:
-    """Dimensión transversal (T-025): todo lo practicado escuchando (y, más adelante, hablando),
-    sin importar la habilidad. Mismo cálculo que una skill (EMA con peso por ayuda)."""
     rows = db.execute(
-        select(Attempt.score, Attempt.assistance, Attempt.response_mode, Exercise.presentation_mode)
+        select(Attempt, Exercise)
         .join(Exercise, Exercise.id == Attempt.exercise_id)
         .join(ClassSession, ClassSession.id == Exercise.class_session_id)
         .where(
@@ -238,29 +309,63 @@ def modality_progress(db: Session, study_profile_id: int, level: str) -> list[di
         )
         .order_by(Attempt.evaluated_at, Attempt.id)
     ).all()
-    buckets: dict[str, tuple[list[float], list[float]]] = {"LISTEN": ([], []), "SPEAK": ([], [])}
-    for row in rows:
-        weight = 1.0 if (row.assistance or Assistance.NONE) == Assistance.NONE else ASSISTED_WEIGHT
-        keys = []
-        if row.presentation_mode and row.presentation_mode.value == "LISTEN":
-            keys.append("LISTEN")
-        if row.response_mode and row.response_mode.value == "SPEAK":
-            keys.append("SPEAK")
-        for key in keys:
-            buckets[key][0].append(float(row.score))
-            buckets[key][1].append(weight)
+
+    series: dict[str, list] = {key: [] for key, _ in ABILITIES}
+    # De qué temas vino la evidencia de cada habilidad (para Listening/Speaking/Pronunciation).
+    sources: dict[str, dict[str, dict]] = {key: {} for key, _ in ABILITIES}
+    practice: list[float] = []
+    for attempt, exercise in rows:
+        for item in attempt_evidence(attempt, exercise):
+            series[item.ability].append(item)
+            src = sources[item.ability].setdefault(
+                exercise.skill_key or "", {"scores": [], "assisted": 0}
+            )
+            src["scores"].append(item.score)
+            src["assisted"] += int(item.assisted)
+        practice += (attempt.signals or {}).get("practiceScores") or []
+
     result = []
-    for key, (scores, weights) in buckets.items():
-        if key == "SPEAK" and not scores:
-            continue  # Habla aparece cuando exista práctica (T-026).
-        result.append(
-            {
-                "key": key,
-                "name": MODALITY_NAMES[key],
-                "score": round(_ema(scores, weights), 1) if scores else None,
-                "attemptCount": len(scores),
-            }
+    for key, name in ABILITIES:
+        items = series[key]
+        scores = [e.score for e in items]
+        weights = [e.weight for e in items]
+        count = len(scores)
+        score = round(_ema(scores, weights), 1) if scores else None
+        assisted_recent = sum(1 for e in items[-RECENT_WINDOW:] if e.assisted)
+        trend = None
+        if count >= 4:
+            delta = score - _ema(scores[:-3], weights[:-3])
+            trend = "up" if delta >= 5 else "down" if delta <= -5 else "stable"
+        item = {
+            "key": key,
+            "name": name,
+            "score": score,
+            "evidenceCount": count,
+            "assistedCount": sum(1 for e in items if e.assisted),
+            # Señal de debilidad para el balanceo (etapa 3): ayuda en las últimas evidencias.
+            "assistedRecent": assisted_recent,
+            "trend": trend,
+            "status": _status(score, sum(weights), assisted_recent) if scores else "NOT_STARTED",
+        }
+        item["sources"] = sorted(
+            (
+                {
+                    "skillKey": skill_key,
+                    "name": skill_name(skill_key) or skill_key,
+                    "count": len(src["scores"]),
+                    "score": _average(src["scores"]),
+                    "assistedCount": src["assisted"],
+                }
+                for skill_key, src in sources[key].items()
+            ),
+            key=lambda s: (-s["count"], s["name"]),
         )
+        if key == "PRONUNCIATION":
+            # La práctica no pesa en el puntaje: se muestra su evolución aparte.
+            item["practiceTrials"] = len(practice)
+            item["practiceFirst"] = practice[0] if practice else None
+            item["practiceLast"] = practice[-1] if practice else None
+        result.append(item)
     return result
 
 

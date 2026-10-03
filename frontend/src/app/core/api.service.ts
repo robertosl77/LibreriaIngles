@@ -4,19 +4,34 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import {
+  ActiveAiConnections,
   AiConnection,
   AuthConfig,
   Certificate,
+  CampaignAssistResult,
+  CampaignNotice,
   ClassDetail,
   ClassSummary,
   ConnectionDraft,
   ConnectionScope,
   Dashboard,
   ExamStatus,
+  Exercise,
   LessonResponse,
   Me,
   ModelOption,
+  InvitationPreview,
+  InvitationRedemption,
+  PlatformAccount,
+  PlatformBenefit,
+  PlatformBenefitDraft,
+  PlatformCampaign,
+  PlatformCampaignDraft,
+  PlatformInvitation,
+  PlatformInvitationDraft,
   PlatformOverview,
+  PlatformService,
+  PlatformServiceDraft,
   ProviderInfo,
   TokenResponse
 } from './models';
@@ -47,12 +62,20 @@ export class ApiService {
     return this.http.get<AuthConfig>(`${this.base}/auth/config`);
   }
 
-  loginGoogle(credential: string): Observable<TokenResponse> {
-    return this.http.post<TokenResponse>(`${this.base}/auth/google`, { credential });
+  loginGoogle(credential: string, invitationToken: string | null = null): Observable<TokenResponse> {
+    return this.http.post<TokenResponse>(`${this.base}/auth/google`, { credential, invitationToken });
   }
 
-  loginDev(email: string, name: string | null): Observable<TokenResponse> {
-    return this.http.post<TokenResponse>(`${this.base}/auth/dev-login`, { email, name });
+  loginDev(
+    email: string,
+    name: string | null,
+    invitationToken: string | null = null
+  ): Observable<TokenResponse> {
+    return this.http.post<TokenResponse>(`${this.base}/auth/dev-login`, {
+      email,
+      name,
+      invitationToken
+    });
   }
 
   me(): Observable<Me> {
@@ -70,6 +93,10 @@ export class ApiService {
 
   connections(scope: ConnectionScope = 'account'): Observable<AiConnection[]> {
     return this.http.get<AiConnection[]>(`${this.base}/ai/connections`, { params: { scope } });
+  }
+
+  activeAiConnections(): Observable<ActiveAiConnections> {
+    return this.http.get<ActiveAiConnections>(`${this.base}/ai/active`);
   }
 
   createConnection(body: ConnectionDraft): Observable<AiConnection> {
@@ -97,6 +124,13 @@ export class ApiService {
 
   connectionModels(id: number): Observable<ModelOption[]> {
     return this.http.get<ModelOption[]>(`${this.base}/ai/connections/${id}/models`);
+  }
+
+  copyConnectionCredential(id: number): Observable<{ apiKey: string }> {
+    return this.http.post<{ apiKey: string }>(
+      `${this.base}/ai/connections/${id}/credential/copy`,
+      {}
+    );
   }
 
   deleteConnection(id: number): Observable<void> {
@@ -127,6 +161,38 @@ export class ApiService {
     );
   }
 
+  processSpeakingAnswer(
+    classId: number,
+    exerciseId: number,
+    audio: Blob,
+    durationMs: number
+  ): Observable<{
+    exerciseId: number;
+    transcript: string;
+    durationMs: number | null;
+    savedAt: string;
+    provider: string;
+    ai: import('./models').AiEngineTrace;
+    switched: boolean;
+    pronunciationResult: import('./models').PronunciationResult | null;
+  }> {
+    return this.http.post<{
+      exerciseId: number;
+      transcript: string;
+      durationMs: number | null;
+      savedAt: string;
+      provider: string;
+      ai: import('./models').AiEngineTrace;
+      switched: boolean;
+      pronunciationResult: import('./models').PronunciationResult | null;
+    }>(`${this.base}/classes/${classId}/answers/${exerciseId}/transcribe`, audio, {
+      headers: {
+        'Content-Type': audio.type || 'audio/webm',
+        'X-Audio-Duration-Ms': String(durationMs)
+      }
+    });
+  }
+
   submitClass(classId: number, answers: Record<number, string>): Observable<ClassDetail> {
     return this.http.post<ClassDetail>(`${this.base}/classes/${classId}/submit`, { answers });
   }
@@ -152,6 +218,18 @@ export class ApiService {
   /** Público: verificación del certificado por código. */
   certificate(code: string): Observable<Certificate> {
     return this.http.get<Certificate>(`${this.base}/certificates/${encodeURIComponent(code)}`);
+  }
+
+  /** Señal de la respuesta en curso (T-034): una escucha o un intento de práctica. */
+  recordSignal(
+    classId: number,
+    exerciseId: number,
+    signal: { kind: 'listen'; slow: boolean } | { kind: 'practice'; score: number } | { kind: 'retake' }
+  ): Observable<{ exerciseId: number; signals: Exercise['signals'] }> {
+    return this.http.post<{ exerciseId: number; signals: Exercise['signals'] }>(
+      `${this.base}/classes/${classId}/exercises/${exerciseId}/signals`,
+      signal
+    );
   }
 
   /** "Necesito lección" (T-020): devuelve la lección y registra la ayuda si la clase está abierta. */
@@ -184,5 +262,129 @@ export class ApiService {
   // Plataforma (PLATFORM_OWNER)
   platformOverview(): Observable<PlatformOverview> {
     return this.http.get<PlatformOverview>(`${this.base}/platform/overview`);
+  }
+
+  // Servicios (T-004)
+  platformServices(): Observable<PlatformService[]> {
+    return this.http.get<PlatformService[]>(`${this.base}/platform/services`);
+  }
+
+  updatePlatformService(id: number, draft: PlatformServiceDraft): Observable<PlatformService> {
+    return this.http.put<PlatformService>(`${this.base}/platform/services/${id}`, draft);
+  }
+
+  platformAccounts(q: string): Observable<PlatformAccount[]> {
+    return this.http.get<PlatformAccount[]>(`${this.base}/platform/accounts`, {
+      params: q.trim() ? { q: q.trim() } : {}
+    });
+  }
+
+  grantBenefit(accountId: number, benefitId: number): Observable<PlatformAccount> {
+    return this.http.post<PlatformAccount>(`${this.base}/platform/accounts/${accountId}/benefit`, {
+      benefitId
+    });
+  }
+
+  revokeService(accountId: number): Observable<PlatformAccount> {
+    return this.http.delete<PlatformAccount>(`${this.base}/platform/accounts/${accountId}/service`);
+  }
+
+  devPurgePlatformAccount(accountId: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/platform/accounts/${accountId}/dev-purge`);
+  }
+
+  // Beneficios reutilizables (T-004)
+  platformBenefits(): Observable<PlatformBenefit[]> {
+    return this.http.get<PlatformBenefit[]>(`${this.base}/platform/benefits`);
+  }
+
+  createPlatformBenefit(draft: PlatformBenefitDraft): Observable<PlatformBenefit> {
+    return this.http.post<PlatformBenefit>(`${this.base}/platform/benefits`, draft);
+  }
+
+  updatePlatformBenefit(id: number, draft: PlatformBenefitDraft): Observable<PlatformBenefit> {
+    return this.http.put<PlatformBenefit>(`${this.base}/platform/benefits/${id}`, draft);
+  }
+
+  deletePlatformBenefit(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/platform/benefits/${id}`);
+  }
+
+  // Campañas (T-004 etapa 2)
+  platformCampaigns(): Observable<PlatformCampaign[]> {
+    return this.http.get<PlatformCampaign[]>(`${this.base}/platform/campaigns`);
+  }
+
+  createPlatformCampaign(draft: PlatformCampaignDraft): Observable<PlatformCampaign> {
+    return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns`, draft);
+  }
+
+  assistPlatformCampaign(description: string): Observable<CampaignAssistResult> {
+    return this.http.post<CampaignAssistResult>(`${this.base}/platform/campaigns/assist`, {
+      description
+    });
+  }
+
+  updatePlatformCampaign(id: number, draft: PlatformCampaignDraft): Observable<PlatformCampaign> {
+    return this.http.put<PlatformCampaign>(`${this.base}/platform/campaigns/${id}`, draft);
+  }
+
+  activatePlatformCampaign(id: number): Observable<PlatformCampaign> {
+    return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns/${id}/activate`, {});
+  }
+
+  pausePlatformCampaign(id: number): Observable<PlatformCampaign> {
+    return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns/${id}/pause`, {});
+  }
+
+  finishPlatformCampaign(id: number): Observable<PlatformCampaign> {
+    return this.http.post<PlatformCampaign>(`${this.base}/platform/campaigns/${id}/finish`, {});
+  }
+  deletePlatformCampaign(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/platform/campaigns/${id}`);
+  }
+
+  campaignNotices(): Observable<CampaignNotice[]> {
+    return this.http.get<CampaignNotice[]>(`${this.base}/campaign-notices`);
+  }
+
+  readCampaignNotice(grantId: number): Observable<void> {
+    return this.http.post<void>(`${this.base}/campaign-notices/${grantId}/read`, {});
+  }
+
+  // Invitaciones (T-004 etapa 3)
+  platformInvitations(): Observable<PlatformInvitation[]> {
+    return this.http.get<PlatformInvitation[]>(`${this.base}/platform/invitations`);
+  }
+
+  createPlatformInvitation(draft: PlatformInvitationDraft): Observable<PlatformInvitation> {
+    return this.http.post<PlatformInvitation>(`${this.base}/platform/invitations`, draft);
+  }
+
+  regeneratePlatformInvitation(id: number): Observable<PlatformInvitation> {
+    return this.http.post<PlatformInvitation>(
+      `${this.base}/platform/invitations/${id}/regenerate-token`,
+      {}
+    );
+  }
+
+  cancelPlatformInvitation(id: number): Observable<PlatformInvitation> {
+    return this.http.post<PlatformInvitation>(
+      `${this.base}/platform/invitations/${id}/cancel`,
+      {}
+    );
+  }
+
+  invitationPreview(token: string): Observable<InvitationPreview> {
+    return this.http.get<InvitationPreview>(
+      `${this.base}/invitations/${encodeURIComponent(token)}`
+    );
+  }
+
+  redeemInvitation(token: string): Observable<InvitationRedemption> {
+    return this.http.post<InvitationRedemption>(
+      `${this.base}/invitations/${encodeURIComponent(token)}/redeem`,
+      {}
+    );
   }
 }

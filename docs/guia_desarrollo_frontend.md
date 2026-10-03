@@ -10,7 +10,7 @@ Esta guía refleja el flujo probado en Windows con Visual Studio Code.
 
 Para el frontend se necesita:
 
-- Node.js;
+- Node.js **22.12 o superior** (o 20.19+ / 24+; lo exige Angular 21);
 - npm;
 - Git;
 - Visual Studio Code.
@@ -22,7 +22,10 @@ node --version
 npm --version
 ```
 
-El proyecto utiliza actualmente Angular 19.
+El proyecto utiliza actualmente **Angular 21** (actualizado desde 19 en T-002: Angular 19 dejó de
+recibir parches de seguridad). Builder: `@angular/build` (esbuild); `npm audit` en 0.
+
+Tras actualizar el repo, reinstalar dependencias en el frontend: `npm ci`.
 
 ---
 
@@ -312,7 +315,7 @@ Por lo tanto, la base inicial del frontend queda operativa con:
 
 - Node.js;
 - npm;
-- Angular 19;
+- Angular 21 (antes 19);
 - `npm start`;
 - hot reload / watch mode;
 - configuración local de Analytics desactivada;

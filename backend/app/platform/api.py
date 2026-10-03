@@ -15,6 +15,10 @@ from sqlalchemy import case, func, select
 from app.accounts.models import Account, PlatformRole
 from app.ai.models import AIConnection, AIConnectionOwnerType, AIUsageEvent, utcnow
 from app.ai.service import HEALTH_CHECK
+from app.benefits.models import Benefit
+from app.campaigns.models import Campaign
+from app.invitations.models import Invitation
+from app.subscriptions.models import Plan, Subscription, SubscriptionStatus
 from app.core.deps import CurrentAccount, DbSession
 from app.learning.models import ClassSession
 
@@ -120,6 +124,44 @@ def overview(_: PlatformOwner, db: DbSession) -> dict:
         )
     )
 
+    benefit_usage = []
+    benefits = db.scalars(
+        select(Benefit).where(Benefit.deleted_at.is_(None)).order_by(Benefit.id)
+    ).all()
+    for item in benefits:
+        benefit_usage.append({
+            "id": item.id,
+            "name": item.name,
+            "campaigns": int(db.scalar(select(func.count(Campaign.id)).where(Campaign.benefit_id == item.id)) or 0),
+            "invitations": int(db.scalar(select(func.count(Invitation.id)).where(Invitation.benefit_id == item.id)) or 0),
+        })
+
+    benefit_rows = db.execute(
+        select(
+            Account.email,
+            Benefit.name,
+            Plan.name,
+            Subscription.origin,
+            Subscription.expires_at,
+        )
+        .join(Subscription, Subscription.account_id == Account.id)
+        .join(Benefit, Benefit.id == Subscription.benefit_id)
+        .join(Plan, Plan.id == Subscription.plan_id)
+        .where(Subscription.status == SubscriptionStatus.ACTIVE)
+        .order_by(Account.email)
+        .limit(100)
+    ).all()
+    account_benefits = [
+        {
+            "email": row[0],
+            "benefitName": row[1],
+            "serviceName": row[2],
+            "origin": row[3].value,
+            "expiresAt": row[4],
+        }
+        for row in benefit_rows
+    ]
+
     return {
         "last24h": {
             "all": _counts(db, AIUsageEvent.created_at >= last_24h),
@@ -136,4 +178,6 @@ def overview(_: PlatformOwner, db: DbSession) -> dict:
         "daily": daily,
         "connections": per_connection,
         "topAccounts24h": [{"email": r[0], "requests": int(r[1])} for r in top_rows],
+        "benefitUsage": benefit_usage,
+        "accountBenefits": account_benefits,
     }

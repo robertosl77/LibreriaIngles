@@ -1,5 +1,7 @@
 """T-006: gestión de IA de plataforma, límites de consumo y registro de uso."""
 
+import pytest
+from app.ai.service import PLATFORM_LABEL
 from conftest import login
 
 API = "/api/v1"
@@ -14,6 +16,16 @@ def _platform_connection(client, owner_headers, **extra) -> dict:
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+@pytest.fixture
+def membership(monkeypatch):
+    """Simula T-004: una membresía que habilita la IA de la plataforma a cualquier alumno.
+
+    Desde T-003 los alumnos usan solo sus conexiones propias; estos tests cubren los límites
+    de consumo, que aplican cuando la plataforma sí está habilitada.
+    """
+    monkeypatch.setattr("app.ai.service.ai_sources", lambda db, account: (True, True))
 
 
 def _student(client, email: str) -> dict:
@@ -43,7 +55,7 @@ def test_limits_only_allowed_on_platform_connections(client) -> None:
     assert response.status_code == 422
 
 
-def test_per_account_limit_blocks_only_that_account(client) -> None:
+def test_per_account_limit_blocks_only_that_account(client, membership) -> None:
     owner = login(client, OWNER)
     connection = _platform_connection(client, owner, perAccountDailyLimit=1)
     assert connection["perAccountDailyLimit"] == 1
@@ -65,7 +77,7 @@ def test_per_account_limit_blocks_only_that_account(client) -> None:
     assert listed["usage24h"] == 2
 
 
-def test_total_limit_falls_back_to_next_connection(client) -> None:
+def test_total_limit_falls_back_to_next_connection(client, membership) -> None:
     owner = login(client, OWNER)
     _platform_connection(client, owner, dailyRequestLimit=1)
     client.post(
@@ -74,8 +86,12 @@ def test_total_limit_falls_back_to_next_connection(client) -> None:
         headers=owner,
     )
     student = _student(client, "alice@example.com")
-    assert client.post(f"{API}/classes", headers=student).json()["generatedBy"] == "Plataforma"
-    assert client.post(f"{API}/classes", headers=student).json()["generatedBy"] == "Respaldo"
+    for _ in range(2):
+        created = client.post(f"{API}/classes", headers=student).json()
+        assert created["generatedBy"] == PLATFORM_LABEL  # el alumno no ve qué conexión fue
+    # El dueño sí: la primera alcanzó su límite y la segunda clase salió por "Respaldo".
+    listed = client.get(f"{API}/ai/connections?scope=platform", headers=owner).json()
+    assert {c["name"]: c["usage24h"] for c in listed} == {"Plataforma": 1, "Respaldo": 1}
 
 
 def test_limit_can_be_changed_and_cleared(client) -> None:
@@ -97,7 +113,7 @@ def test_limit_can_be_changed_and_cleared(client) -> None:
     assert cleared["perAccountDailyLimit"] == 3
 
 
-def test_usage_is_recorded_and_reported(client) -> None:
+def test_usage_is_recorded_and_reported(client, membership) -> None:
     owner = login(client, OWNER)
     _platform_connection(client, owner)
     student = _student(client, "alice@example.com")

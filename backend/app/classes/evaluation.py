@@ -2,8 +2,10 @@
 
 persistir intento → normalizar →
   acceptedAnswers coincide  → RULE_MATCH
+  hablada, suena parecido   → correcto + PRONUNCIATION_ERROR (RULE_MATCH)
   commonErrors coincide     → COMMON_ERROR_MATCH
-  modo DETERMINISTIC        → incorrecto por regla (RULE_MATCH)
+  escrita, tipeo menor      → parcial + SPELLING_ERROR (RULE_MATCH, T-021)
+  modo DETERMINISTIC        → incorrecto por regla (RULE_MATCH); hablada → IA
   caché de IA               → AI
   evaluación con IA         → AI  (si no hay IA: queda pendiente)
 
@@ -19,21 +21,33 @@ from sqlalchemy.orm import Session
 
 from app.accounts.models import Account
 from app.ai.models import utcnow
-from app.ai.service import NoAIAvailable, run_json_task
+from app.ai.service import NoAIAvailable, connection_snapshot, run_json_task
 from app.classes.normalize import fill_blank_variants, normalize_answer
 from app.classes.prompts import EVALUATION_SYSTEM, evaluation_user_prompt
-from app.curriculum.service import find_skill
+from app.classes.spelling import SPELLING_SCORE, spelling_slips
+from app.classes.spoken import normalize_spoken, pronunciation_slips
+from app.curriculum.service import find_skill, get_level
 from app.learning.models import (
     AIEvaluationCache,
     Attempt,
+    ClassSession,
     EvaluationMode,
     EvaluationSource,
     Exercise,
 )
 
+CHOICE_TYPES = {"multiple_choice", "reading_multiple_choice"}
 STATUS_SCORE = {"correct": 100.0, "partially_correct": 50.0, "incorrect": 0.0}
 ERROR_TYPES = {"GRAMMAR_ERROR", "VOCABULARY_ERROR", "SPELLING_ERROR", "WORD_ORDER_ERROR", "PRONUNCIATION_ERROR"}
-SUGGESTION_TYPES = {"STYLE_SUGGESTION", "NATURALNESS_SUGGESTION", "SHORTER_ALTERNATIVE"}
+SUGGESTION_TYPES = {
+    "STYLE_SUGGESTION",
+    "NATURALNESS_SUGGESTION",
+    "SHORTER_ALTERNATIVE",
+    "MECHANICS_NOTE",  # mayúsculas / puntuación: se señala, no descuenta (T-043)
+}
+# Puntaje fino por concepto (T-043): la IA da 0-100 y se respeta dentro de la banda de su
+# estado, así un error chico no vale lo mismo que no saber el tema.
+STATUS_BANDS = {"correct": (85.0, 100.0), "partially_correct": (35.0, 84.0), "incorrect": (0.0, 34.0)}
 
 
 @dataclass
@@ -43,13 +57,35 @@ class Evaluation:
     score: float
 
 
+def _concept_score(concept: dict) -> float:
+    """Puntaje de un concepto: el fino de la IA (acotado a la banda de su estado) o el del estado."""
+    status = concept["status"]
+    value = concept.get("score")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        low, high = STATUS_BANDS[status]
+        return min(high, max(low, float(value)))
+    return STATUS_SCORE[status]
+
+
 def score_from_result(result: dict) -> float:
     concepts = [
         c for c in result.get("conceptResults") or [] if isinstance(c, dict) and c.get("status") in STATUS_SCORE
     ]
     if concepts:
-        return round(sum(STATUS_SCORE[c["status"]] for c in concepts) / len(concepts), 1)
+        return round(sum(_concept_score(c) for c in concepts) / len(concepts), 1)
     return STATUS_SCORE.get(result.get("result"), 0.0)
+
+
+def ai_score(exercise: Exercise, result: dict) -> float:
+    """Puntaje de una corrección de la IA. En ejercicios con respuesta cerrada, si el único
+    problema es ortografía, vale lo mismo que por regla (T-021): parcial, no 100 ni 0."""
+    score = score_from_result(result)
+    errors = result.get("errors") or []
+    closed = bool(exercise.answer_key.get("acceptedAnswers"))
+    if closed and errors and all(e.get("type") == "SPELLING_ERROR" for e in errors):
+        score = min(score, SPELLING_SCORE)
+        result["result"] = _result_label(score)
+    return score
 
 
 def _result_label(score: float) -> str:
@@ -60,11 +96,31 @@ def _result_label(score: float) -> str:
     return "partially_correct"
 
 
-def _accepted_normalized(exercise: Exercise) -> set[str]:
+def _accepted(exercise: Exercise) -> list[str]:
     accepted = list(exercise.answer_key.get("acceptedAnswers") or [])
     if exercise.exercise_type == "fill_blank":
         accepted += fill_blank_variants(exercise.prompt, accepted)
-    return {normalize_answer(a) for a in accepted if a}
+    return [a for a in accepted if a]
+
+
+def _accepted_normalized(exercise: Exercise, normalize=normalize_answer) -> set[str]:
+    return {normalize(a) for a in _accepted(exercise)}
+
+
+def _pronunciation_slip_result(exercise: Exercise, slips: list[tuple[str, str]]) -> dict:
+    """Dijo la respuesta correcta con una palabra mal pronunciada (think → sink)."""
+    result = _rule_correct(exercise)
+    result["errors"] = [
+        {
+            "type": "PRONUNCIATION_ERROR",
+            "fragment": said,
+            "correction": expected,
+            "explanation": f"Se entendió \"{said}\": cuidá la pronunciación de \"{expected}\".",
+        }
+        for said, expected in slips
+    ]
+    result["feedback"] = "Respuesta correcta; revisá la pronunciación de una palabra."
+    return result
 
 
 def _correct_answer(exercise: Exercise) -> str | None:
@@ -100,6 +156,24 @@ def _rule_incorrect(exercise: Exercise, answer: str) -> dict:
     }
 
 
+def _spelling_result(exercise: Exercise, slips: list[tuple[str, str]]) -> dict:
+    """Concepto correcto escrito con un error de tipeo menor (taxy → taxi): parcial, nunca 0 %."""
+    result = _rule_correct(exercise)
+    result["result"] = _result_label(SPELLING_SCORE)
+    result["errors"] = [
+        {
+            "type": "SPELLING_ERROR",
+            "fragment": typed,
+            "correction": expected,
+            "explanation": "Ortografía.",
+        }
+        for typed, expected in slips
+    ]
+    words = ", ".join(f"\"{expected}\"" for _, expected in slips)
+    result["feedback"] = f"La respuesta es correcta, pero revisá la ortografía: {words}."
+    return result
+
+
 def _common_error_result(exercise: Exercise, error: dict) -> dict:
     listed = {
         c.get("concept"): c.get("status")
@@ -116,7 +190,7 @@ def _common_error_result(exercise: Exercise, error: dict) -> dict:
         for c, s in listed.items()
         if c not in (exercise.expected_concepts or [])
     ]
-    return {
+    result = {
         "result": "incorrect",
         "conceptResults": concepts,
         "errors": [
@@ -131,14 +205,259 @@ def _common_error_result(exercise: Exercise, error: dict) -> dict:
         "feedback": error.get("feedback") or "Revisá la respuesta.",
         "suggestions": [],
     }
+    # La etiqueta sigue al puntaje: un error común con conceptos parciales es "Parcial".
+    result["result"] = _result_label(score_from_result(result))
+    return result
+
+
+def _is_mechanics(error: dict) -> bool:
+    """Solo mayúsculas o puntuación ("i" → "I", "game" → "game."): no es gramática."""
+    fragment, correction = error.get("fragment"), error.get("correction")
+    if not fragment or not correction:
+        return False
+    return fragment != correction and normalize_spoken(fragment) == normalize_spoken(correction)
+
+
+def _dedupe_errors(errors: list[dict]) -> list[dict]:
+    """El mismo error repetido ("like play", "like drink", "like read") se informa una vez."""
+    merged: dict[tuple, dict] = {}
+    for error in errors:
+        key = (error["type"], (error.get("explanation") or "").strip().lower() or error.get("correction"))
+        if key in merged:
+            first = merged[key]
+            fragments = [f for f in (first.get("fragment"), error.get("fragment")) if f]
+            if error.get("fragment") and error["fragment"] not in (first.get("fragment") or ""):
+                first["fragment"] = " · ".join(fragments)
+            first["occurrences"] = first.get("occurrences", 1) + 1
+            continue
+        merged[key] = dict(error)
+    return list(merged.values())
+
+
+ORTHOGRAPHY_SKILLS = {
+    "capitalization": "writing.orthography.capitalization",
+    "spelling": "writing.orthography.basic_spelling",
+    "punctuation": "writing.orthography.punctuation",
+    "apostrophes": "writing.orthography.apostrophes",
+}
+SECONDARY_MAX = 3
+
+
+def _secondary_skill_candidates(exercise: Exercise) -> list[dict]:
+    """Skills que la IA puede observar incidentalmente en una respuesta productiva."""
+    level = getattr(exercise, "level", None)
+    response_mode = getattr(exercise, "response_mode", None)
+    if not level or not response_mode or response_mode.value == "SELECT":
+        return []
+    curriculum = get_level(level)
+    if curriculum is None:
+        return []
+    areas = {"grammar", "vocabulary"}
+    if exercise.response_mode.value == "WRITE":
+        areas.add("writing")
+    candidates = []
+    for skill in curriculum.skills:
+        if skill.key == exercise.skill_key or skill.area_key not in areas:
+            continue
+        candidates.append(
+            {
+                "skillKey": skill.key,
+                "name": f"{skill.topic_name} · {skill.name}",
+                "objectives": list(skill.objectives),
+            }
+        )
+    return candidates
+
+
+def _sanitize_secondary(exercise: Exercise, data: dict) -> list[dict]:
+    allowed = {item["skillKey"] for item in _secondary_skill_candidates(exercise)}
+    result = []
+    seen = set()
+    for item in data.get("secondarySkillResults") or []:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("skillKey") or "")
+        status = item.get("status")
+        if key not in allowed or key in seen or status not in STATUS_SCORE:
+            continue
+        score = item.get("score")
+        if not isinstance(score, (int, float)) or isinstance(score, bool):
+            score = STATUS_SCORE[status]
+        low, high = STATUS_BANDS[status]
+        result.append(
+            {
+                "skillKey": key,
+                "status": status,
+                "score": round(min(high, max(low, float(score))), 1),
+                "reason": str(item.get("reason") or "")[:300],
+            }
+        )
+        seen.add(key)
+        if len(result) >= SECONDARY_MAX:
+            break
+    return result
+
+
+def _orthography_key(exercise: Exercise, suffix: str) -> str | None:
+    level = (exercise.level or "").lower()
+    if not level:
+        return None
+    key = f"{level}.{ORTHOGRAPHY_SKILLS[suffix]}"
+    return key if find_skill(key) else None
+
+
+def _merge_secondary(result: dict, item: dict) -> None:
+    current = {
+        row.get("skillKey"): row
+        for row in result.setdefault("secondarySkillResults", [])
+        if isinstance(row, dict) and row.get("skillKey")
+    }
+    current[item["skillKey"]] = item
+    result["secondarySkillResults"] = list(current.values())
+
+
+def _surface_normalize(value: str) -> str:
+    return " ".join(value.replace("’", "'").split())
+
+
+def _orthography_primary(exercise: Exercise, answer: str) -> Evaluation | None:
+    """Capitalización, puntuación y apóstrofes necesitan comparar la forma escrita, no solo significado."""
+    key = getattr(exercise, "skill_key", None) or ""
+    if ".writing.orthography." not in key or key.endswith(".basic_spelling"):
+        return None
+    accepted = _accepted(exercise)
+    if not accepted:
+        return None
+    surface = _surface_normalize(answer)
+    if surface in {_surface_normalize(item) for item in accepted}:
+        return Evaluation(EvaluationSource.RULE_MATCH, _rule_correct(exercise), 100.0)
+
+    # Si las palabras son correctas pero falla justo la convención ortográfica objetivo,
+    # conserva evidencia parcial en lugar de convertirlo en un error gramatical.
+    if any(normalize_spoken(answer) == normalize_spoken(item) for item in accepted):
+        result = {
+            "result": "partially_correct",
+            "conceptResults": [
+                {"concept": concept, "status": "partially_correct", "score": 60}
+                for concept in exercise.expected_concepts or ["orthography"]
+            ],
+            "errors": [],
+            "correctAnswer": accepted[0],
+            "feedback": "El contenido está bien, pero revisá la convención ortográfica que practica este ejercicio.",
+            "suggestions": [
+                {"type": "MECHANICS_NOTE", "text": "Revisá mayúsculas, puntuación o apóstrofes según la consigna."}
+            ],
+        }
+        return Evaluation(EvaluationSource.RULE_MATCH, result, 60.0)
+    return Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0)
+
+
+def _add_mechanics_evidence(exercise: Exercise, answer: str, result: dict, *, spoken: bool) -> dict:
+    """Capitalización/puntuación observables: evidencia curricular, sin tocar la nota principal."""
+    response_mode = getattr(exercise, "response_mode", None)
+    if spoken or not answer.strip() or not response_mode or response_mode.value != "WRITE":
+        return result
+    # Solo producción de oraciones; un fill_blank de una palabra no demuestra puntuación.
+    if exercise.exercise_type not in {"short_writing", "conversation"} and getattr(exercise, "area", None) != "writing":
+        return result
+
+    text = answer.strip()
+    words = text.split()
+    cap_key = _orthography_key(exercise, "capitalization")
+    if cap_key and cap_key != exercise.skill_key:
+        first_alpha = next((ch for ch in text if ch.isalpha()), "")
+        lowercase_i = any(token.strip(".,!?;:'\"()") == "i" for token in words)
+        ok = bool(first_alpha) and first_alpha.isupper() and not lowercase_i
+        _merge_secondary(
+            result,
+            {
+                "skillKey": cap_key,
+                "status": "correct" if ok else "partially_correct",
+                "score": 100.0 if ok else 60.0,
+                "reason": "Mayúsculas correctas." if ok else "Revisá mayúscula inicial, nombres propios y el pronombre I.",
+            },
+        )
+
+    punctuation_key = _orthography_key(exercise, "punctuation")
+    if punctuation_key and punctuation_key != exercise.skill_key and len(words) >= 2:
+        ok = text.endswith((".", "?", "!"))
+        _merge_secondary(
+            result,
+            {
+                "skillKey": punctuation_key,
+                "status": "correct" if ok else "partially_correct",
+                "score": 100.0 if ok else 60.0,
+                "reason": "Puntuación de cierre correcta." if ok else "Falta o no corresponde la puntuación de cierre.",
+            },
+        )
+
+    spelling_key = _orthography_key(exercise, "spelling")
+    if spelling_key and spelling_key != exercise.skill_key:
+        spelling_errors = [e for e in result.get("errors") or [] if e.get("type") == "SPELLING_ERROR"]
+        if spelling_errors:
+            _merge_secondary(
+                result,
+                {
+                    "skillKey": spelling_key,
+                    "status": "partially_correct",
+                    "score": 65.0,
+                    "reason": "La respuesta contiene un error ortográfico reconocible.",
+                },
+            )
+    return result
+
+
+def _conversation_context(db: Session, exercise: Exercise) -> list[dict]:
+    meta = (exercise.content or {}).get("conversation") or {}
+    group = meta.get("group")
+    if not group:
+        return []
+    siblings = list(
+        db.scalars(
+            select(Exercise)
+            .where(Exercise.class_session_id == exercise.class_session_id)
+            .order_by(Exercise.position)
+        ).all()
+    )
+    siblings = [
+        item for item in siblings
+        if ((item.content or {}).get("conversation") or {}).get("group") == group
+        and item.position <= exercise.position
+    ]
+    session = db.get(ClassSession, exercise.class_session_id)
+    attempt_number = session.current_attempt if session else 1
+    attempts = {
+        a.exercise_id: a
+        for a in db.scalars(
+            select(Attempt).where(
+                Attempt.exercise_id.in_([item.id for item in siblings]),
+                Attempt.attempt_number == attempt_number,
+            )
+        ).all()
+    } if siblings else {}
+    history = []
+    for item in siblings:
+        partner = (
+            (item.content or {}).get("stimulus")
+            if item.presentation_mode and item.presentation_mode.value == "LISTEN"
+            else item.prompt
+        )
+        row = {"partner": partner}
+        if item.id != exercise.id and item.id in attempts:
+            row["student"] = attempts[item.id].raw_answer
+        history.append(row)
+    return history
 
 
 def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
     concepts = []
     for item in data.get("conceptResults") or []:
         if isinstance(item, dict) and item.get("status") in STATUS_SCORE:
-            concepts.append({"concept": str(item.get("concept") or "concept"), "status": item["status"]})
-    errors = [
+            concept = {"concept": str(item.get("concept") or "concept"), "status": item["status"]}
+            if isinstance(item.get("score"), (int, float)) and not isinstance(item.get("score"), bool):
+                concept["score"] = item["score"]
+            concepts.append(concept)
+    raw_errors = [
         {
             "type": e.get("type") if e.get("type") in ERROR_TYPES else "GRAMMAR_ERROR",
             "fragment": e.get("fragment"),
@@ -148,6 +467,9 @@ def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
         for e in data.get("errors") or []
         if isinstance(e, dict)
     ]
+    # Mayúsculas y puntuación: una sola observación, sin descontar (T-043).
+    mechanics = [e for e in raw_errors if _is_mechanics(e)]
+    errors = _dedupe_errors([e for e in raw_errors if not _is_mechanics(e)])
     suggestions = [
         {
             "type": s.get("type") if s.get("type") in SUGGESTION_TYPES else "STYLE_SUGGESTION",
@@ -156,6 +478,14 @@ def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
         for s in data.get("suggestions") or []
         if isinstance(s, dict) and s.get("text")
     ]
+    if mechanics and not any(s["type"] == "MECHANICS_NOTE" for s in suggestions):
+        suggestions.append(
+            {
+                "type": "MECHANICS_NOTE",
+                "text": "Ojo con las mayúsculas y la puntuación: \"I\" va siempre en mayúscula y cada "
+                "oración empieza con mayúscula y termina con punto.",
+            }
+        )
     result = {
         "result": data.get("result") if data.get("result") in STATUS_SCORE else None,
         "conceptResults": concepts,
@@ -163,6 +493,7 @@ def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
         "correctAnswer": data.get("correctAnswer"),
         "feedback": str(data.get("feedback") or ""),
         "suggestions": suggestions,
+        "secondarySkillResults": _sanitize_secondary(exercise, data),
         "scoreSuggestedByAI": data.get("scoreSuggested"),
     }
     score = score_from_result(result)
@@ -170,7 +501,7 @@ def _sanitize_ai_result(exercise: Exercise, data: dict) -> dict:
     return result
 
 
-def _ai_payload(exercise: Exercise, answer: str) -> dict:
+def _ai_payload(db: Session, exercise: Exercise, answer: str) -> dict:
     skill = find_skill(exercise.skill_key or "")
     return {
         "level": exercise.level,
@@ -187,12 +518,14 @@ def _ai_payload(exercise: Exercise, answer: str) -> dict:
         "options": (exercise.content or {}).get("options"),
         "referenceAnswers": exercise.answer_key.get("acceptedAnswers") or [],
         "expectedConcepts": exercise.expected_concepts or [],
+        "secondarySkillCandidates": _secondary_skill_candidates(exercise),
+        "conversationContext": _conversation_context(db, exercise),
         "studentAnswer": answer,
     }
 
 
 def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: str) -> dict:
-    payload = _ai_payload(exercise, answer)
+    payload = _ai_payload(db, exercise, answer)
     result = run_json_task(
         db,
         account,
@@ -204,11 +537,20 @@ def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: 
                 "type": exercise.exercise_type,
                 "acceptedAnswers": payload["referenceAnswers"],
                 "expectedConcepts": payload["expectedConcepts"],
+                "secondarySkillCandidates": payload["secondarySkillCandidates"],
             },
             "answer": answer,
         },
     )
-    return _sanitize_ai_result(exercise, result.data)
+    sanitized = _sanitize_ai_result(exercise, result.data)
+    spoken = bool(
+        getattr(exercise, "response_mode", None)
+        and exercise.response_mode.value == "SPEAK"
+    )
+    sanitized = _add_mechanics_evidence(exercise, answer, sanitized, spoken=spoken)
+    # Se guarda con la corrección (y en caché) el motor que realmente produjo
+    # el resultado; no depende de la configuración actual de la cuenta.
+    return {**sanitized, "ai": connection_snapshot(result.connection)}
 
 
 def _cache_get(db: Session, exercise: Exercise, normalized: str) -> dict | None:
@@ -235,36 +577,75 @@ def _cache_put(db: Session, exercise: Exercise, normalized: str, result: dict) -
         pass
 
 
-def evaluate(db: Session, account: Account, exercise: Exercise, answer: str) -> Evaluation | None:
-    """Devuelve la evaluación, o None si hace falta IA y no hay ninguna disponible."""
-    normalized = normalize_answer(answer)
+def _finish(exercise: Exercise, answer: str, evaluation: Evaluation, *, spoken: bool) -> Evaluation:
+    evaluation.result = _add_mechanics_evidence(
+        exercise, answer, evaluation.result, spoken=spoken
+    )
+    return evaluation
+
+
+def evaluate(
+    db: Session, account: Account, exercise: Exercise, answer: str, *, spoken: bool = False
+) -> Evaluation | None:
+    """Devuelve la evaluación, o None si hace falta IA y no hay ninguna disponible.
+
+    Con respuesta hablada (`spoken`) se compara la transcripción sin puntuación, y una
+    palabra que suena parecida a la esperada es error de pronunciación, no de contenido.
+    """
+    normalize = normalize_spoken if spoken else normalize_answer
+    normalized = normalize(answer)
 
     if not normalized:
         result = _rule_incorrect(exercise, "")
-        return Evaluation(EvaluationSource.RULE_MATCH, result, 0.0)
+        return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, result, 0.0), spoken=spoken)
+
+    if not spoken:
+        orthography = _orthography_primary(exercise, answer)
+        if orthography is not None:
+            return _finish(exercise, answer, orthography, spoken=False)
 
     if exercise.evaluation_mode != EvaluationMode.AI:
-        if normalized in _accepted_normalized(exercise):
-            return Evaluation(EvaluationSource.RULE_MATCH, _rule_correct(exercise), 100.0)
+        if normalized in _accepted_normalized(exercise, normalize):
+            return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, _rule_correct(exercise), 100.0), spoken=spoken)
+        if spoken:
+            slips = pronunciation_slips(_accepted(exercise), answer)
+            if slips:
+                result = _pronunciation_slip_result(exercise, slips)
+                return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, result, score_from_result(result)), spoken=spoken)
         for error in exercise.answer_key.get("commonErrors") or []:
-            if normalize_answer(error.get("answer")) == normalized:
+            if normalize(error.get("answer")) == normalized:
                 result = _common_error_result(exercise, error)
-                return Evaluation(
-                    EvaluationSource.COMMON_ERROR_MATCH, result, score_from_result(result)
+                return _finish(
+                    exercise,
+                    answer,
+                    Evaluation(EvaluationSource.COMMON_ERROR_MATCH, result, score_from_result(result)),
+                    spoken=spoken,
                 )
-        if exercise.evaluation_mode == EvaluationMode.DETERMINISTIC:
-            return Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0)
+        if not spoken and exercise.exercise_type not in CHOICE_TYPES:
+            slips = spelling_slips(_accepted(exercise), answer)
+            if slips:
+                return _finish(
+                    exercise,
+                    answer,
+                    Evaluation(EvaluationSource.RULE_MATCH, _spelling_result(exercise, slips), SPELLING_SCORE),
+                    spoken=spoken,
+                )
+        # Una transcripción puede diferir por cosas del habla: decide la IA si la hay.
+        if exercise.evaluation_mode == EvaluationMode.DETERMINISTIC and not spoken:
+            return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0), spoken=spoken)
 
     cached = _cache_get(db, exercise, normalized)
     if cached is not None:
-        return Evaluation(EvaluationSource.AI, cached, score_from_result(cached))
+        return _finish(exercise, answer, Evaluation(EvaluationSource.AI, dict(cached), ai_score(exercise, cached)), spoken=spoken)
 
     try:
         result = evaluate_with_ai(db, account, exercise, answer)
     except NoAIAvailable:
+        if spoken and exercise.evaluation_mode == EvaluationMode.DETERMINISTIC:
+            return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0), spoken=spoken)
         return None
     _cache_put(db, exercise, normalized, result)
-    return Evaluation(EvaluationSource.AI, result, score_from_result(result))
+    return _finish(exercise, answer, Evaluation(EvaluationSource.AI, result, ai_score(exercise, result)), spoken=spoken)
 
 
 def apply_evaluation(attempt: Attempt, evaluation: Evaluation) -> None:

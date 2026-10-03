@@ -18,6 +18,22 @@ class AISource(str, Enum):
     HYBRID = "HYBRID"
 
 
+class ServiceLinkType(str, Enum):
+    """Vínculo (T-004): personal (sin empresa) o corporativo (vía una empresa)."""
+
+    PERSONAL = "PERSONAL"
+    CORPORATE = "CORPORATE"
+
+
+class SubscriptionOrigin(str, Enum):
+    """Cómo se otorgó el servicio (T-004)."""
+
+    MANUAL = "MANUAL"  # sr.macros desde su portal
+    CAMPAIGN = "CAMPAIGN"  # etapa 2
+    INVITATION = "INVITATION"  # etapa 3
+    PAYMENT = "PAYMENT"  # futuro
+
+
 class SubscriptionStatus(str, Enum):
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
@@ -26,6 +42,8 @@ class SubscriptionStatus(str, Enum):
 
 
 class Plan(Base):
+    """Servicio del catálogo (T-004): vínculo × fuente de IA + metadatos comerciales."""
+
     __tablename__ = "plans"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -38,15 +56,24 @@ class Plan(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
+    link_type: Mapped[ServiceLinkType] = mapped_column(
+        SqlEnum(ServiceLinkType, native_enum=False), default=ServiceLinkType.PERSONAL
+    )
+    description: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
 class Subscription(Base):
+    """Servicio otorgado a una cuenta (o empresa), con su vigencia."""
+
     __tablename__ = "subscriptions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.id"))
+    benefit_id: Mapped[int | None] = mapped_column(
+        ForeignKey("benefits.id"), nullable=True, index=True
+    )
     account_id: Mapped[int | None] = mapped_column(
-        ForeignKey("accounts.id"), nullable=True
+        ForeignKey("accounts.id"), nullable=True, index=True
     )
     organization_id: Mapped[int | None] = mapped_column(
         ForeignKey("organizations.id"), nullable=True
@@ -61,3 +88,13 @@ class Subscription(Base):
     ended_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    origin: Mapped[SubscriptionOrigin] = mapped_column(
+        SqlEnum(SubscriptionOrigin, native_enum=False), default=SubscriptionOrigin.MANUAL
+    )
+    granted_by_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(String(200), nullable=True)
