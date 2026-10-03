@@ -266,6 +266,36 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
                     warnings.append(
                         "No se indicó el período del promedio diario; se propusieron 30 días como ventana editable."
                     )
+            metric_operator = next(
+                (
+                    str(rule.get("operator") or "GTE").upper()
+                    for rule in rules
+                    if rule.get("field")
+                    in {
+                        "MIN_CLASSES_PER_ACTIVE_DAY",
+                        "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+                        "AVERAGE_CLASSES_PER_DAY",
+                    }
+                ),
+                None,
+            )
+            if metric_operator not in {"GTE", "LTE", "EQ"}:
+                metric_operator = (
+                    "LTE"
+                    if any(
+                        phrase in lower
+                        for phrase in (
+                            "como máximo",
+                            "como maximo",
+                            "máximo",
+                            "maximo",
+                            "menos de",
+                            "no más de",
+                            "no mas de",
+                        )
+                    )
+                    else "GTE"
+                )
             normalized["draft"]["rules"] = [
                 rule
                 for rule in rules
@@ -284,7 +314,7 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
             normalized["draft"]["rules"].append(
                 {
                     "field": "AVERAGE_CLASSES_PER_DAY",
-                    "operator": "GTE",
+                    "operator": metric_operator,
                     "value": expected,
                     "windowDays": window_days,
                 }
