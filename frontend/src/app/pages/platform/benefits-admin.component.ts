@@ -21,8 +21,8 @@ const SOURCE_SHORT: Record<AiSource, string> = {
 };
 
 const SERVICE_SHORT: Record<LinkType, string> = {
-  PERSONAL: 'Individual',
-  CORPORATE: 'Empresa'
+  PERSONAL: 'Personal',
+  CORPORATE: 'Corporativa'
 };
 
 function emptyDraft(source: AiSource = 'BYOK'): PlatformBenefitDraft {
@@ -66,7 +66,7 @@ function numberOrNull(value: unknown): number | null {
             <label class="field">
               Servicio
               <select class="input" name="bService" [(ngModel)]="draft.service" (ngModelChange)="ensureSource()">
-                <option value="PERSONAL">Individual</option>
+                <option value="PERSONAL">Personal</option>
               </select>
             </label>
 
