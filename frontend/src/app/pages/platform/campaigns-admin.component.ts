@@ -4,11 +4,15 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import {
+  CampaignAction,
+  CampaignAudiencePreview,
   CampaignNotification,
   CampaignRule,
+  CampaignRuleCapability,
   CampaignTrigger,
   PlatformCampaign,
   PlatformBenefit,
+  PlatformCampaignCapabilities,
   PlatformCampaignDraft
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
@@ -20,6 +24,8 @@ type NewCampaignMode = 'choose' | 'templates' | 'ai' | null;
 interface CampaignForm {
   name: string;
   benefitId: number | null;
+  action: CampaignAction;
+  actionConfig: Record<string, unknown>;
   trigger: CampaignTrigger;
   rules: CampaignRule[];
   priority: number;
@@ -42,6 +48,8 @@ function emptyForm(benefitId: number | null): CampaignForm {
   return {
     name: '',
     benefitId,
+    action: 'GRANT_BENEFIT',
+    actionConfig: {},
     trigger: 'FIRST_LOGIN',
     rules: defaultRules(),
     priority: 100,
