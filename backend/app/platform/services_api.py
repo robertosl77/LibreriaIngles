@@ -34,13 +34,13 @@ router = APIRouter(prefix="/platform", tags=["platform"])
 ACCOUNTS_PAGE = 50
 
 
-class ServiceIn(BaseModel):
-    # No aceptar campos antiguos silenciosamente: los límites de pedidos viven en AIConnection.
+class ServiceUpdateIn(BaseModel):
+    """Solo metadatos editables: vínculo y fuente son ejes fijos del modelo de negocio."""
+
+    # No aceptar campos antiguos ni intentos de cambiar los ejes fijos silenciosamente.
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=2, max_length=120)
-    source: AISource
-    linkType: ServiceLinkType = ServiceLinkType.PERSONAL
     description: str | None = Field(default=None, max_length=300)
     active: bool = True
 
@@ -67,13 +67,8 @@ def _service_out(db, plan: Plan) -> dict:
     }
 
 
-def _apply(plan: Plan, payload: ServiceIn) -> None:
-    if payload.linkType == ServiceLinkType.CORPORATE:
-        # El vínculo corporativo llega con las empresas (T-004 etapa 5 / T-005).
-        raise HTTPException(422, "Los servicios corporativos llegan con empresas.")
+def _apply(plan: Plan, payload: ServiceUpdateIn) -> None:
     plan.name = payload.name.strip()
-    plan.ai_source = payload.source
-    plan.link_type = payload.linkType
     plan.description = (payload.description or "").strip() or None
     plan.active = payload.active
 
@@ -86,19 +81,8 @@ def list_services(_: PlatformOwner, db: DbSession) -> list[dict]:
     return [_service_out(db, plan) for plan in plans]
 
 
-@router.post("/services", status_code=status.HTTP_201_CREATED)
-def create_service(payload: ServiceIn, _: PlatformOwner, db: DbSession) -> dict:
-    plan = Plan(code="", name="", ai_source=payload.source)
-    _apply(plan, payload)
-    db.add(plan)
-    db.flush()
-    plan.code = f"SERVICE_{plan.id}"
-    db.commit()
-    return _service_out(db, plan)
-
-
 @router.put("/services/{service_id}")
-def update_service(service_id: int, payload: ServiceIn, _: PlatformOwner, db: DbSession) -> dict:
+def update_service(service_id: int, payload: ServiceUpdateIn, _: PlatformOwner, db: DbSession) -> dict:
     plan = db.get(Plan, service_id)
     if plan is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Servicio inexistente.")
