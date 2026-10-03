@@ -32,11 +32,6 @@ function emptyDraft(): PlatformServiceDraft {
   };
 }
 
-function numberOrNull(value: unknown): number | null {
-  const n = Number(value);
-  return value === null || value === '' || !Number.isFinite(n) || n <= 0 ? null : Math.round(n);
-}
-
 /** Portal (T-004): catálogo de capacidades + cuentas. La vigencia vive en Beneficios. */
 @Component({
   selector: 'app-services-admin',
@@ -155,8 +150,9 @@ function numberOrNull(value: unknown): number | null {
                 </div>
 
                 <div class="service-cell">
-                  <span [class]="a.service.granted ? 'chip chip-ok' : 'chip'">{{ a.service.name }}</span>
                   @if (a.service.granted) {
+                    <span class="chip chip-ok">{{ a.service.benefitName ?? 'Beneficio sin identificar' }}</span>
+                    <span class="muted small">Servicio: {{ a.service.name }}</span>
                     <span class="small">
                       @if (a.service.expiresAt) {
                         vence {{ a.service.expiresAt | date: 'dd/MM/yyyy HH:mm' }}
@@ -164,6 +160,9 @@ function numberOrNull(value: unknown): number | null {
                         sin vencimiento
                       }
                     </span>
+                  } @else {
+                    <span class="chip">Sin beneficio</span>
+                    <span class="muted small">Servicio: {{ a.service.name }}</span>
                   }
                   @if (a.service.expired) {
                     <span class="chip chip-warn">Venció {{ a.service.expired.name }}</span>
@@ -174,7 +173,9 @@ function numberOrNull(value: unknown): number | null {
                   @if (a.isPlatformOwner) {
                     <span class="muted small">Usa propias + plataforma</span>
                   } @else {
-                    <button class="btn btn-sm" type="button" (click)="startGrant(a)">Otorgar beneficio</button>
+                    <button class="btn btn-sm" type="button" (click)="startGrant(a)">
+                      {{ a.service.granted ? 'Cambiar beneficio' : 'Otorgar beneficio' }}
+                    </button>
                     @if (a.service.granted) {
                       <button class="btn btn-sm btn-danger" type="button" (click)="revoke(a)"
                         [disabled]="busyId() === a.id">Quitar</button>
@@ -204,17 +205,13 @@ function numberOrNull(value: unknown): number | null {
                     Beneficio
                     <select class="input" name="gBenefit" [(ngModel)]="grantBenefitId">
                       @for (benefit of grantableBenefits(); track benefit.id) {
-                        <option [ngValue]="benefit.id">
-                          {{ benefit.name }} · {{ benefit.serviceName }}
-                          @if (benefit.durationDays) { · {{ benefit.durationDays }} días }
-                          @else { · sin vencimiento }
-                        </option>
+                        <option [ngValue]="benefit.id">{{ benefit.name }}</option>
                       }
                     </select>
                   </label>
                   <div class="grant-note muted small">
-                    Si la cuenta ya tiene el mismo servicio, se suma la duración. Si tiene otro
-                    servicio otorgado, no se reemplaza automáticamente.
+                    Al confirmar, este beneficio reemplaza el beneficio vigente de la cuenta.
+                    La asignación anterior queda conservada en el historial.
                   </div>
                   <div class="row grant-actions">
                     <button class="btn btn-primary btn-sm" type="submit"
@@ -420,19 +417,10 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
   }
 
   startGrant(account: PlatformAccount): void {
-    const currentService = this.services().find((service) => service.code === account.service.code);
-    const currentBenefit = currentService
-      ? this.grantableBenefits().find((benefit) => benefit.serviceId === currentService.id)
+    const currentBenefit = account.service.benefitId
+      ? this.grantableBenefits().find((benefit) => benefit.id === account.service.benefitId)
       : undefined;
-    const platformServiceIds = new Set(
-      this.services()
-        .filter((service) => service.active && service.source === 'PLATFORM')
-        .map((service) => service.id)
-    );
-    const platformBenefit = this.grantableBenefits().find((benefit) =>
-      platformServiceIds.has(benefit.serviceId)
-    );
-    this.grantBenefitId = (currentBenefit ?? platformBenefit ?? this.grantableBenefits()[0])?.id ?? null;
+    this.grantBenefitId = (currentBenefit ?? this.grantableBenefits()[0])?.id ?? null;
     this.grantingId.set(account.id);
   }
 
@@ -445,8 +433,11 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
       );
       this.replace(updated);
       this.grantingId.set(null);
-      this.toast.success(`${updated.email}: beneficio otorgado · ${updated.service.name}.`);
+      this.toast.success(
+        `${updated.email}: beneficio · ${updated.service.benefitName ?? 'actualizado'}.`
+      );
       await this.afterChange(account);
+      this.changed.emit();
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
@@ -455,14 +446,16 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
   }
 
   async revoke(account: PlatformAccount): Promise<void> {
-    if (!confirm(`¿Quitar "${account.service.name}" a ${account.email}? Vuelve a usar sus propias API keys.`)) {
+    const currentName = account.service.benefitName ?? account.service.name;
+    if (!confirm(`¿Quitar "${currentName}" a ${account.email}? Vuelve a usar sus propias API keys.`)) {
       return;
     }
     this.busyId.set(account.id);
     try {
       this.replace(await firstValueFrom(this.api.revokeService(account.id)));
-      this.toast.success('Servicio quitado.');
+      this.toast.success('Beneficio quitado.');
       await this.afterChange(account);
+      this.changed.emit();
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
