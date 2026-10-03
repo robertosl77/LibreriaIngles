@@ -5,11 +5,11 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService, errorMessage } from '../../core/api.service';
 import { PlatformOverview } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
-import { AccountsAdminComponent } from './accounts-admin.component';
+import { AccountsSummaryComponent } from './accounts-summary.component';
 
 @Component({
   selector: 'app-platform-overview',
-  imports: [DatePipe, AccountsAdminComponent],
+  imports: [DatePipe, AccountsSummaryComponent],
   template: `
     <section class="stack overview">
       <div class="overview-toolbar">
@@ -43,7 +43,7 @@ import { AccountsAdminComponent } from './accounts-admin.component';
           </div>
         </section>
 
-        <app-accounts-admin (changed)="load()" />
+        <app-accounts-summary />
 
         <section class="card">
           <div class="chart-head">
