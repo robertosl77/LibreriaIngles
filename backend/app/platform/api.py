@@ -18,7 +18,7 @@ from app.ai.service import HEALTH_CHECK
 from app.benefits.models import Benefit
 from app.campaigns.models import Campaign
 from app.invitations.models import Invitation
-from app.subscriptions.service import effective_service
+from app.subscriptions.models import Plan, Subscription, SubscriptionStatus
 from app.core.deps import CurrentAccount, DbSession
 from app.learning.models import ClassSession
 
