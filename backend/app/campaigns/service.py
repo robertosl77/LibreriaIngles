@@ -4,32 +4,205 @@ La campaña define CUÁNDO/A QUIÉN; el beneficio reusable define QUÉ servicio/
 T-059 agregará el scheduler para CampaignTrigger.SCHEDULED sin cambiar este contrato.
 """
 
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.accounts.models import Account, PlatformRole
+from app.accounts.models import Account, AccountStatus, AccountType, PlatformRole
 from app.benefits.models import Benefit
 from app.benefits.service import (
     BenefitApplication,
     apply_service_benefit,
     seed_benefits,
+    seed_fidelity_lab_benefits,
 )
 from app.campaigns.models import (
     Campaign,
+    CampaignAction,
     CampaignGrant,
     CampaignSeedMarker,
     CampaignNotification,
     CampaignStatus,
     CampaignTrigger,
 )
+from app.core.config import settings
+from app.learning.models import ClassSession, ClassSessionStatus, SessionKind
 from app.memberships.models import Membership, MembershipStatus
-from app.subscriptions.models import SubscriptionOrigin
+from app.study_profiles.models import (
+    AccountStudyProfile,
+    AccountStudyProfileStatus,
+    StudyProfile,
+    StudyProfileStatus,
+)
+from app.subscriptions.models import Subscription, SubscriptionOrigin, SubscriptionStatus
 from app.subscriptions.service import effective_service
 
 WELCOME_CODE = "WELCOME_PLATFORM"
 WELCOME_BENEFIT_CODE = "WELCOME_PLATFORM_3D"
+
+# Laboratorio visible solo en local/dev. Todos los casos nacen en DRAFT y son idempotentes.
+FIDELITY_LAB_CAMPAIGNS = (
+    {
+        "code": "LAB_FID_01_6M_AVG5",
+        "name": "LAB 01 · Permanencia 6 meses + promedio alto",
+        "benefit": "LAB_FID_6M_AVG5",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 180},
+            {"field": "AVERAGE_CLASSES_PER_DAY", "operator": "GTE", "value": 5, "windowDays": 30},
+        ],
+        "message": "Tu permanencia y constancia merecen un reconocimiento.",
+    },
+    {
+        "code": "LAB_FID_02_ANNIVERSARY",
+        "name": "LAB 02 · Aniversario de 1 año",
+        "benefit": "LAB_FID_1Y",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365},
+        ],
+        "message": "Gracias por acompañarnos durante todo un año.",
+    },
+    {
+        "code": "LAB_FID_03_DAILY_7",
+        "name": "LAB 03 · Constancia diaria 7 días",
+        "benefit": "LAB_FID_DAILY_7",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "MIN_CLASSES_PER_ACTIVE_DAY", "operator": "GTE", "value": 3, "windowDays": 7},
+            {"field": "ACTIVE_STUDY_DAYS", "operator": "GTE", "value": 7, "windowDays": 7},
+        ],
+        "message": "Siete días de constancia: seguí construyendo el hábito.",
+    },
+    {
+        "code": "LAB_FID_04_STREAK_14",
+        "name": "LAB 04 · Racha de estudio 14 días",
+        "benefit": "LAB_FID_STREAK_14",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "STUDY_STREAK_DAYS", "operator": "GTE", "value": 14},
+        ],
+        "message": "Tu racha de 14 días merece un premio.",
+    },
+    {
+        "code": "LAB_FID_05_ACTIVE_20",
+        "name": "LAB 05 · Alta presencia mensual",
+        "benefit": "LAB_FID_ACTIVE_20",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "ACTIVE_STUDY_DAYS", "operator": "GTE", "value": 20, "windowDays": 30},
+        ],
+        "message": "Tu presencia constante durante el mes se nota.",
+    },
+    {
+        "code": "LAB_FID_06_VOLUME_50",
+        "name": "LAB 06 · Volumen mensual de 50 clases",
+        "benefit": "LAB_FID_VOLUME_50",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "CLASSES_COMPLETED", "operator": "GTE", "value": 50, "windowDays": 30},
+        ],
+        "message": "Completaste un gran volumen de práctica este mes.",
+    },
+    {
+        "code": "LAB_FID_07_A1_INTENSE",
+        "name": "LAB 07 · Impulso A1 intensivo",
+        "benefit": "LAB_FID_A1_INTENSE",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "CURRENT_LEVEL", "operator": "EQ", "value": "A1"},
+            {"field": "CLASSES_COMPLETED", "operator": "GTE", "value": 30, "windowDays": 14},
+        ],
+        "message": "Tu intensidad de práctica en A1 merece un impulso extra.",
+    },
+    {
+        "code": "LAB_FID_08_WINBACK_30",
+        "name": "LAB 08 · Volvé después de 30 días",
+        "benefit": "LAB_FID_WINBACK_30",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+            {"field": "DAYS_SINCE_LAST_ACTIVITY", "operator": "GTE", "value": 30},
+        ],
+        "message": "Hace tiempo que no practicás. Te damos un impulso para volver.",
+    },
+    {
+        "code": "LAB_FID_09_WINBACK_90",
+        "name": "LAB 09 · Recuperación larga 90 días",
+        "benefit": "LAB_FID_WINBACK_90",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+            {"field": "DAYS_SINCE_LAST_ACTIVITY", "operator": "GTE", "value": 90},
+        ],
+        "message": "Queremos ayudarte a retomar después de una pausa larga.",
+    },
+    {
+        "code": "LAB_FID_10_EXPIRED_30",
+        "name": "LAB 10 · Regreso tras servicio vencido",
+        "benefit": "LAB_FID_EXPIRED_30",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+            {"field": "DAYS_SINCE_SERVICE_EXPIRED", "operator": "GTE", "value": 30},
+        ],
+        "message": "Tu servicio venció hace tiempo; tenemos una propuesta para volver.",
+    },
+    {
+        "code": "LAB_FID_11_NEVER_STARTED",
+        "name": "LAB 11 · Registrado pero nunca empezó",
+        "benefit": "LAB_FID_NEVER_STARTED",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "NEVER_STUDIED", "operator": "EQ", "value": True},
+        ],
+        "message": "Tu primera práctica todavía te está esperando.",
+    },
+    {
+        "code": "LAB_FID_12_LOW_ACTIVITY",
+        "name": "LAB 12 · Riesgo por baja actividad",
+        "benefit": "LAB_FID_LOW_ACTIVITY",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "CLASSES_COMPLETED", "operator": "LTE", "value": 3, "windowDays": 30},
+        ],
+        "message": "Vimos poca actividad reciente; te damos un incentivo para retomar.",
+    },
+    {
+        "code": "LAB_FID_13_BYOK_6M",
+        "name": "LAB 13 · Fidelidad usando propias keys",
+        "benefit": "LAB_FID_BYOK_6M",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "SERVICE_SOURCE", "operator": "EQ", "value": "BYOK"},
+            {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 180},
+        ],
+        "message": "Gracias por seguir aprendiendo con tus propias conexiones de IA.",
+    },
+    {
+        "code": "LAB_FID_14_HYBRID_ACTIVE",
+        "name": "LAB 14 · Fidelidad híbrida + actividad",
+        "benefit": "LAB_FID_HYBRID_ACTIVE",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "SERVICE_SOURCE", "operator": "EQ", "value": "HYBRID"},
+            {"field": "ACTIVE_STUDY_DAYS", "operator": "GTE", "value": 15, "windowDays": 30},
+        ],
+        "message": "Tu uso sostenido del servicio híbrido merece un reconocimiento.",
+    },
+    {
+        "code": "LAB_FID_15_COMPLAINT",
+        "name": "LAB 15 · Compensación manual post-reclamo · editar email",
+        "benefit": "LAB_FID_COMPLAINT",
+        "rules": [
+            {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+            {"field": "ACCOUNT_EMAIL", "operator": "EQ", "value": "reemplazar@ejemplo.invalid"},
+        ],
+        "message": "Compensación de cortesía luego de resolver tu reclamo.",
+    },
+)
 
 
 def utcnow() -> datetime:
@@ -43,43 +216,80 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 
 def seed_campaigns(db: Session) -> None:
-    """Crea una sola vez la campaña ejemplo de bienvenida como BORRADOR."""
+    """Crea seeds idempotentes: bienvenida siempre; laboratorio T-065 solo en local/dev."""
     marker = db.get(CampaignSeedMarker, WELCOME_CODE)
-    if marker is not None:
-        return
+    if marker is None:
+        existing = db.scalar(select(Campaign).where(Campaign.code == WELCOME_CODE))
+        if existing is not None:
+            db.add(CampaignSeedMarker(code=WELCOME_CODE))
+            db.flush()
+        else:
+            seed_benefits(db)
+            benefit = db.scalar(select(Benefit).where(Benefit.code == WELCOME_BENEFIT_CODE))
+            if benefit is not None:
+                db.add(CampaignSeedMarker(code=WELCOME_CODE))
+                db.add(
+                    Campaign(
+                        code=WELCOME_CODE,
+                        name="Bienvenida · 3 días de Plataforma",
+                        benefit_id=benefit.id,
+                        status=CampaignStatus.DRAFT,
+                        trigger=CampaignTrigger.FIRST_LOGIN,
+                        eligibility={
+                            "mode": "ALL",
+                            "rules": [
+                                {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+                                {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
+                            ],
+                        },
+                        priority=100,
+                        stackable=False,
+                        notification=CampaignNotification.IN_APP,
+                        message="Bienvenido: tenés 3 días para probar la IA de Librería Inglés.",
+                    )
+                )
+                db.flush()
 
-    existing = db.scalar(select(Campaign).where(Campaign.code == WELCOME_CODE))
-    if existing is not None:
-        db.add(CampaignSeedMarker(code=WELCOME_CODE))
-        db.flush()
-        return
+    if settings.app_env.lower() in {"local", "dev", "development"}:
+        _seed_fidelity_lab_campaigns(db)
 
-    seed_benefits(db)
-    benefit = db.scalar(select(Benefit).where(Benefit.code == WELCOME_BENEFIT_CODE))
-    if benefit is None:
-        return
 
-    db.add(CampaignSeedMarker(code=WELCOME_CODE))
-    db.add(
-        Campaign(
-            code=WELCOME_CODE,
-            name="Bienvenida · 3 días de Plataforma",
-            benefit_id=benefit.id,
-            status=CampaignStatus.DRAFT,
-            trigger=CampaignTrigger.FIRST_LOGIN,
-            eligibility={
-                "mode": "ALL",
-                "rules": [
-                    {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
-                    {"field": "HAS_GRANTED_SERVICE", "operator": "EQ", "value": False},
-                ],
-            },
-            priority=100,
-            stackable=False,
-            notification=CampaignNotification.IN_APP,
-            message="Bienvenido: tenés 3 días para probar la IA de Librería Inglés.",
+def _seed_fidelity_lab_campaigns(db: Session) -> None:
+    """Siembra 15 campañas DRAFT del laboratorio T-065 solo en bases locales/dev."""
+    benefits = seed_fidelity_lab_benefits(db)
+
+    for index, spec in enumerate(FIDELITY_LAB_CAMPAIGNS, start=1):
+        code = spec["code"]
+        marker = db.get(CampaignSeedMarker, code)
+        if marker is not None:
+            continue
+
+        existing = db.scalar(select(Campaign).where(Campaign.code == code))
+        if existing is not None:
+            db.add(CampaignSeedMarker(code=code))
+            continue
+
+        benefit = benefits.get(spec["benefit"])
+        if benefit is None:
+            continue
+
+        db.add(CampaignSeedMarker(code=code))
+        db.add(
+            Campaign(
+                code=code,
+                name=spec["name"],
+                benefit_id=benefit.id,
+                action=CampaignAction.GRANT_BENEFIT,
+                action_config={},
+                status=CampaignStatus.DRAFT,
+                trigger=CampaignTrigger.LOGIN,
+                eligibility={"mode": "ALL", "rules": spec["rules"]},
+                priority=200 + index,
+                stackable=False,
+                notification=CampaignNotification.IN_APP,
+                message=spec["message"],
+            )
         )
-    )
     db.flush()
 
 
@@ -129,50 +339,323 @@ def _compare_number(actual: int | float, operator: str, expected: int | float) -
     return False
 
 
-def _rule_matches(db: Session, account: Account, rule: dict, now: datetime) -> bool:
+def _days_since(value: datetime | None, now: datetime) -> int | None:
+    value = _as_utc(value)
+    if value is None:
+        return None
+    return max(0, int((now - value).total_seconds() // 86400))
+
+
+def _last_activity_at(db: Session, account: Account) -> datetime | None:
+    return db.scalar(
+        select(func.max(ClassSession.evaluated_at)).where(
+            ClassSession.account_id == account.id,
+            ClassSession.kind == SessionKind.CLASS,
+            ClassSession.status == ClassSessionStatus.COMPLETED,
+            ClassSession.evaluated_at.is_not(None),
+        )
+    )
+
+
+def _completed_activity_times(
+    db: Session,
+    account: Account,
+    *,
+    since: datetime | None = None,
+) -> list[datetime]:
+    query = select(ClassSession.evaluated_at).where(
+        ClassSession.account_id == account.id,
+        ClassSession.kind == SessionKind.CLASS,
+        ClassSession.status == ClassSessionStatus.COMPLETED,
+        ClassSession.evaluated_at.is_not(None),
+    )
+    if since is not None:
+        query = query.where(ClassSession.evaluated_at >= since)
+    values = db.scalars(query.order_by(ClassSession.evaluated_at.asc())).all()
+    return [value for value in (_as_utc(item) for item in values) if value is not None]
+
+
+def _activity_day_counts(
+    db: Session,
+    account: Account,
+    *,
+    now: datetime,
+    window_days: int,
+) -> Counter:
+    since = now - timedelta(days=window_days)
+    return Counter(value.date() for value in _completed_activity_times(db, account, since=since))
+
+
+def _study_streak_days(db: Session, account: Account, *, now: datetime) -> int:
+    days = sorted({value.date() for value in _completed_activity_times(db, account)}, reverse=True)
+    if not days:
+        return 0
+    today = now.date()
+    if days[0] < today - timedelta(days=1):
+        return 0
+
+    streak = 1
+    current = days[0]
+    for candidate in days[1:]:
+        if candidate == current - timedelta(days=1):
+            streak += 1
+            current = candidate
+        elif candidate < current - timedelta(days=1):
+            break
+    return streak
+
+
+def _activity_metric(
+    db: Session,
+    account: Account,
+    *,
+    field: str,
+    window_days: int | None,
+    now: datetime,
+) -> int | float | None:
+    if field == "STUDY_STREAK_DAYS":
+        return _study_streak_days(db, account, now=now)
+    if window_days is None:
+        return None
+
+    counts = _activity_day_counts(db, account, now=now, window_days=window_days)
+    if field == "CLASSES_COMPLETED":
+        return sum(counts.values())
+    if field == "ACTIVE_STUDY_DAYS":
+        return len(counts)
+    if field == "MIN_CLASSES_PER_ACTIVE_DAY":
+        return min(counts.values()) if counts else 0
+    if field == "AVERAGE_CLASSES_PER_ACTIVE_DAY":
+        return round(sum(counts.values()) / len(counts), 2) if counts else 0.0
+    if field == "AVERAGE_CLASSES_PER_DAY":
+        return round(sum(counts.values()) / window_days, 2) if window_days else None
+    return None
+
+
+def _last_expired_service_at(db: Session, account: Account) -> datetime | None:
+    # Fuerza el vencimiento perezoso antes de consultar el histórico.
+    effective_service(db, account)
+    rows = db.scalars(
+        select(Subscription)
+        .where(
+            Subscription.account_id == account.id,
+            Subscription.status == SubscriptionStatus.EXPIRED,
+        )
+        .order_by(Subscription.ended_at.desc(), Subscription.expires_at.desc(), Subscription.id.desc())
+    ).all()
+    if not rows:
+        return None
+    latest = rows[0]
+    return latest.ended_at or latest.expires_at
+
+
+def _current_level(db: Session, account: Account) -> str | None:
+    row = db.execute(
+        select(AccountStudyProfile, StudyProfile)
+        .join(StudyProfile, StudyProfile.id == AccountStudyProfile.study_profile_id)
+        .where(
+            AccountStudyProfile.account_id == account.id,
+            AccountStudyProfile.status == AccountStudyProfileStatus.ACTIVE,
+            StudyProfile.status == StudyProfileStatus.ACTIVE,
+        )
+        .order_by(AccountStudyProfile.linked_at.desc())
+    ).first()
+    if row is None:
+        return None
+    _, profile = row
+    return profile.operational_level or profile.selected_level or profile.estimated_level
+
+
+def rule_evaluation(
+    db: Session,
+    account: Account,
+    rule: dict,
+    *,
+    now: datetime | None = None,
+) -> dict:
+    """Evalúa una condición y devuelve evidencia explicable para preview/auditoría."""
+    now = now or utcnow()
     field = str(rule.get("field", "")).upper()
     operator = str(rule.get("operator", "EQ")).upper()
     expected = rule.get("value")
+    actual = None
 
     if field == "ACCOUNT_TYPE":
-        return operator == "EQ" and account.account_type.value == str(expected).upper()
-
-    service = None
-    if field in {"HAS_GRANTED_SERVICE", "SERVICE_SOURCE"}:
+        actual = account.account_type.value
+        matched = operator == "EQ" and actual == str(expected).upper()
+    elif field in {"HAS_GRANTED_SERVICE", "SERVICE_SOURCE"}:
         service = effective_service(db, account)
-
-    if field == "HAS_GRANTED_SERVICE":
-        return operator == "EQ" and service.granted == bool(expected)
-
-    if field == "SERVICE_SOURCE":
-        return operator == "EQ" and service.source.value == str(expected).upper()
-
-    if field == "EMAIL_DOMAIN":
-        domain = account.email.rsplit("@", 1)[-1].lower() if "@" in account.email else ""
-        return operator == "EQ" and domain == str(expected).strip().lower()
-
-    if field == "DAYS_SINCE_CREATED":
-        created = _as_utc(account.created_at) or now
-        days = max(0, int((now - created).total_seconds() // 86400))
+        if field == "HAS_GRANTED_SERVICE":
+            actual = service.granted
+            matched = operator == "EQ" and actual == bool(expected)
+        else:
+            actual = service.source.value
+            matched = operator == "EQ" and actual == str(expected).upper()
+    elif field == "ACCOUNT_EMAIL":
+        actual = account.email.lower()
+        matched = operator == "EQ" and actual == str(expected).strip().lower()
+    elif field == "EMAIL_DOMAIN":
+        actual = account.email.rsplit("@", 1)[-1].lower() if "@" in account.email else ""
+        matched = operator == "EQ" and actual == str(expected).strip().lower()
+    elif field == "DAYS_SINCE_CREATED":
+        actual = _days_since(account.created_at, now)
         try:
-            return _compare_number(days, operator, int(expected))
+            matched = actual is not None and _compare_number(actual, operator, int(expected))
         except (TypeError, ValueError):
-            return False
-
-    if field == "CREATED_AT":
+            matched = False
+    elif field == "CREATED_AT":
+        actual_dt = _as_utc(account.created_at)
+        actual = actual_dt.isoformat() if actual_dt else None
         try:
-            expected_dt = datetime.fromisoformat(str(expected).replace("Z", "+00:00"))
-            expected_dt = _as_utc(expected_dt)
-            actual = _as_utc(account.created_at) or now
-        except ValueError:
-            return False
-        if operator == "GTE":
-            return actual >= expected_dt
-        if operator == "LTE":
-            return actual <= expected_dt
-        return operator == "EQ" and actual == expected_dt
+            expected_dt = _as_utc(datetime.fromisoformat(str(expected).replace("Z", "+00:00")))
+            if operator == "GTE":
+                matched = actual_dt is not None and actual_dt >= expected_dt
+            elif operator == "LTE":
+                matched = actual_dt is not None and actual_dt <= expected_dt
+            else:
+                matched = actual_dt is not None and actual_dt == expected_dt
+        except (TypeError, ValueError):
+            matched = False
+    elif field == "DAYS_SINCE_LAST_ACTIVITY":
+        last_activity = _last_activity_at(db, account)
+        actual = _days_since(last_activity, now)
+        try:
+            matched = actual is not None and _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
+    elif field == "NEVER_STUDIED":
+        actual = _last_activity_at(db, account) is None
+        matched = operator == "EQ" and actual == bool(expected)
+    elif field == "DAYS_SINCE_SERVICE_EXPIRED":
+        actual = _days_since(_last_expired_service_at(db, account), now)
+        try:
+            matched = actual is not None and _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
+    elif field == "CURRENT_LEVEL":
+        actual = _current_level(db, account)
+        matched = operator == "EQ" and actual == str(expected).upper()
+    elif field in {
+        "CLASSES_COMPLETED",
+        "ACTIVE_STUDY_DAYS",
+        "MIN_CLASSES_PER_ACTIVE_DAY",
+        "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+        "AVERAGE_CLASSES_PER_DAY",
+        "STUDY_STREAK_DAYS",
+    }:
+        window_days = rule.get("windowDays")
+        try:
+            window_days = int(window_days) if window_days is not None else None
+        except (TypeError, ValueError):
+            window_days = None
+        actual = _activity_metric(
+            db,
+            account,
+            field=field,
+            window_days=window_days,
+            now=now,
+        )
+        try:
+            matched = actual is not None and _compare_number(actual, operator, float(expected))
+        except (TypeError, ValueError):
+            matched = False
+    else:
+        matched = False
 
-    return False
+    result = {
+        "field": field,
+        "operator": operator,
+        "expected": expected,
+        "actual": actual,
+        "matched": bool(matched),
+    }
+    if rule.get("windowDays") is not None:
+        result["windowDays"] = rule.get("windowDays")
+    return result
+
+
+def _rule_matches(db: Session, account: Account, rule: dict, now: datetime) -> bool:
+    return bool(rule_evaluation(db, account, rule, now=now)["matched"])
+
+
+def preview_audience(
+    db: Session,
+    *,
+    rules: list[dict],
+    trigger: CampaignTrigger,
+    campaign_id: int | None = None,
+    sample_limit: int = 10,
+) -> dict:
+    """Simula audiencia sin aplicar beneficio ni crear grants.
+
+    Para FIRST_LOGIN de una campaña nueva, solo son candidatos prospectivos quienes todavía
+    no hicieron su primer login. Para una campaña ya activada se respeta activated_at.
+    """
+    now = utcnow()
+    campaign = db.get(Campaign, campaign_id) if campaign_id else None
+    accounts = db.scalars(
+        select(Account)
+        .where(
+            Account.status == AccountStatus.ACTIVE,
+            Account.account_type == AccountType.PERSONAL,
+            Account.platform_role.is_(None),
+        )
+        .order_by(Account.id)
+    ).all()
+
+    rows: list[dict] = []
+    for account in accounts:
+        evaluations = [rule_evaluation(db, account, rule, now=now) for rule in rules]
+        conditions_match = all(item["matched"] for item in evaluations)
+
+        already_received = False
+        if campaign_id is not None:
+            already_received = db.scalar(
+                select(CampaignGrant.id).where(
+                    CampaignGrant.campaign_id == campaign_id,
+                    CampaignGrant.account_id == account.id,
+                )
+            ) is not None
+
+        if trigger == CampaignTrigger.FIRST_LOGIN:
+            if campaign is not None and campaign.activated_at is not None:
+                trigger_match = _first_login_matches(campaign, account)
+            else:
+                trigger_match = account.first_login_at is None
+        else:
+            # LOGIN y SCHEDULED dependen del evento/scheduler; el preview responde quién
+            # cumple las condiciones ahora.
+            trigger_match = True
+
+        eligible_now = conditions_match and trigger_match and not already_received
+        rows.append(
+            {
+                "accountId": account.id,
+                "email": account.email,
+                "displayName": account.display_name,
+                "eligible": eligible_now,
+                "alreadyReceived": already_received,
+                "triggerMatch": trigger_match,
+                "rules": evaluations,
+            }
+        )
+
+    eligible_rows = [row for row in rows if row["eligible"]]
+    excluded_rows = [row for row in rows if not row["eligible"]]
+    sample = (eligible_rows[:sample_limit] + excluded_rows[: max(0, sample_limit - len(eligible_rows[:sample_limit]))])[:sample_limit]
+    warnings: list[str] = []
+    if trigger == CampaignTrigger.SCHEDULED:
+        warnings.append("La audiencia se puede simular, pero SCHEDULED requiere el scheduler de T-059 para ejecutarse.")
+    if trigger == CampaignTrigger.FIRST_LOGIN and campaign is None:
+        warnings.append("Para una campaña nueva de primer login, el preview cuenta solo cuentas que aún no ingresaron por primera vez.")
+
+    return {
+        "candidateCount": len(rows),
+        "eligibleCount": len(eligible_rows),
+        "excludedCount": len(excluded_rows),
+        "sample": sample,
+        "warnings": warnings,
+    }
 
 
 def _available_for_account(
@@ -245,6 +728,10 @@ def apply_campaign(
         ) or 0
         if int(used) >= locked.max_recipients:
             return None
+
+    if locked.action != CampaignAction.GRANT_BENEFIT:
+        # T-065 modela acciones futuras, pero solo GRANT_BENEFIT está habilitada hoy.
+        return None
 
     application = _apply_benefit(db, locked, account)
     if application is None or not application.applied or application.subscription is None:

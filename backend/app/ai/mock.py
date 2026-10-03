@@ -7,6 +7,7 @@
 """
 
 import random
+import re
 
 from app.ai.models import AIConnectionStatus
 from app.ai.providers import ModelInfo, ProviderError
@@ -97,6 +98,7 @@ class MockProvider:
         lower = description.lower()
         benefits = task.get("benefits") or []
         benefit_id = benefits[0].get("id") if benefits else None
+        warnings = []
 
         trigger = "FIRST_LOGIN" if any(
             word in lower for word in ("bienvenida", "primer login", "primera vez", "nuevo usuario")
@@ -121,10 +123,169 @@ class MockProvider:
             phrase in lower
             for phrase in ("servicio pago", "servicio pagado", "membresía paga", "membresia paga")
         )
-        if ("año" in lower or "365" in lower) and not payment_tenure:
-            rules.append({"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365})
+        if not payment_tenure:
+            account_age_days = None
+            months_match = re.search(r"(\d+)\s+mes(?:es)?", lower)
+            days_since_register_match = re.search(
+                r"(\d+)\s+d[ií]as?[^.]{0,45}(?:registro|registrad|en la app|de antig[uü]edad)",
+                lower,
+            )
+            if "año" in lower or "365" in lower:
+                account_age_days = 365
+            elif months_match:
+                account_age_days = int(months_match.group(1)) * 30
+            elif days_since_register_match:
+                account_age_days = int(days_since_register_match.group(1))
+            if account_age_days is not None and any(
+                term in lower
+                for term in ("antigü", "antigu", "registro", "registrad", "en la app", "desde que creó", "desde que creo")
+            ):
+                rules.append(
+                    {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": account_age_days}
+                )
 
-        warnings = []
+        if "nunca" in lower and ("estudi" in lower or "clase" in lower):
+            rules.append({"field": "NEVER_STUDIED", "operator": "EQ", "value": True})
+        elif any(word in lower for word in ("inactiv", "sin estudiar", "no estudia", "no practica")):
+            days = 60
+            for candidate in (365, 180, 120, 90, 60, 30, 14, 7):
+                if str(candidate) in lower:
+                    days = candidate
+                    break
+            rules.append({"field": "DAYS_SINCE_LAST_ACTIVITY", "operator": "GTE", "value": days})
+
+        if any(word in lower for word in ("vencido", "venció", "vencio", "vencimiento")):
+            days = 30
+            for candidate in (365, 180, 120, 90, 60, 30, 14, 7):
+                if str(candidate) in lower:
+                    days = candidate
+                    break
+            rules.append({"field": "DAYS_SINCE_SERVICE_EXPIRED", "operator": "GTE", "value": days})
+
+        for level in ("A1", "A2", "B1", "B2", "C1", "C2"):
+            if level.lower() in lower:
+                rules.append({"field": "CURRENT_LEVEL", "operator": "EQ", "value": level})
+                break
+
+        window_match = re.search(
+            r"(?:últim(?:os|as)?|ultim(?:os|as)?|durante|por|en)\s+(?:los\s+)?(\d+)\s+d[ií]as",
+            lower,
+        )
+        window_days = int(window_match.group(1)) if window_match else None
+
+        classes_match = re.search(r"(\d+(?:[\.,]\d+)?)\s+clases?", lower)
+        daily_average = (
+            "promedio" in lower
+            and any(
+                phrase in lower
+                for phrase in ("clases diarias", "clase diaria", "por día", "por dia", "al día", "al dia")
+            )
+        )
+        strict_daily = (
+            not daily_average
+            and any(
+                phrase in lower
+                for phrase in (
+                    "todos los días",
+                    "todos los dias",
+                    "cada día",
+                    "cada dia",
+                    "clases diarias",
+                    "clase diaria",
+                )
+            )
+        )
+        low_bound = any(
+            phrase in lower
+            for phrase in ("como máximo", "como maximo", "máximo", "maximo", "menos de", "no más de", "no mas de")
+        )
+        metric_operator = "LTE" if low_bound else "GTE"
+
+        if classes_match:
+            raw_count = float(classes_match.group(1).replace(",", "."))
+            class_count = int(raw_count) if raw_count.is_integer() else raw_count
+            if daily_average:
+                metric_window = window_days or 30
+                rules.append(
+                    {
+                        "field": "AVERAGE_CLASSES_PER_DAY",
+                        "operator": metric_operator,
+                        "value": class_count,
+                        "windowDays": metric_window,
+                    }
+                )
+                if window_days is None:
+                    warnings.append(
+                        "No se indicó el período del promedio diario; "
+                        "se propusieron 30 días como ventana editable."
+                    )
+            elif strict_daily:
+                metric_window = window_days or 30
+                rules.append(
+                    {
+                        "field": "MIN_CLASSES_PER_ACTIVE_DAY",
+                        "operator": metric_operator,
+                        "value": class_count,
+                        "windowDays": metric_window,
+                    }
+                )
+                if metric_operator == "GTE":
+                    rules.append(
+                        {
+                            "field": "ACTIVE_STUDY_DAYS",
+                            "operator": "GTE",
+                            "value": metric_window,
+                            "windowDays": metric_window,
+                        }
+                    )
+                if window_days is None:
+                    warnings.append(
+                        "No se indicó durante cuántos días sostener la frecuencia diaria; "
+                        "se propusieron 30 días como ventana editable."
+                    )
+            elif window_days is not None:
+                rules.append(
+                    {
+                        "field": "CLASSES_COMPLETED",
+                        "operator": metric_operator,
+                        "value": class_count,
+                        "windowDays": window_days,
+                    }
+                )
+
+        active_days_match = re.search(r"(\d+)\s+d[ií]as?\s+(?:activos?|con actividad)", lower)
+        if active_days_match:
+            active_days = int(active_days_match.group(1))
+            metric_window = window_days or max(active_days, 30)
+            rules.append(
+                {
+                    "field": "ACTIVE_STUDY_DAYS",
+                    "operator": "GTE",
+                    "value": active_days,
+                    "windowDays": metric_window,
+                }
+            )
+
+        streak_match = re.search(r"racha(?:\s+de)?\s+(\d+)\s+d[ií]as", lower)
+        if streak_match:
+            rules.append(
+                {
+                    "field": "STUDY_STREAK_DAYS",
+                    "operator": "GTE",
+                    "value": int(streak_match.group(1)),
+                }
+            )
+        if any(term in lower for term in ("reclamo", "queja", "ticket de soporte")):
+            warnings.append(
+                "El motor actual no tiene datos de reclamos o soporte para segmentar esta campaña."
+            )
+            benefit_id = None
+        if any(term in lower for term in ("referid", "invitó a", "invito a", "invitaron a", "invitar a", "recomendó a", "recomendo a")):
+            warnings.append(
+                "El motor actual no registra referidos o invitaciones exitosas como métrica de campaña."
+            )
+            benefit_id = None
+
         if "%" in description or "descuento" in lower or "bonific" in lower:
             warnings.append(
                 "El motor actual de campañas no configura descuentos o precios; "

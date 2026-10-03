@@ -188,5 +188,104 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     maxRecipients: 100,
     notification: 'IN_APP',
     message: ''
+  },
+  {
+    id: 'win-back-inactive',
+    title: 'Volvé a estudiar',
+    description: 'Al volver a ingresar, detecta 60 días sin clases y sin servicio vigente.',
+    name: 'Volvé a estudiar',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: false },
+      { field: 'DAYS_SINCE_LAST_ACTIVITY', operator: 'GTE', value: 60 }
+    ],
+    priority: 60,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: '¡Qué bueno verte de nuevo! Tenemos un beneficio para ayudarte a retomar.'
+  },
+  {
+    id: 'expired-service',
+    title: 'Servicio vencido',
+    description: 'Al volver, segmenta cuentas cuyo último servicio venció hace al menos 30 días.',
+    name: 'Regreso después del vencimiento',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: false },
+      { field: 'DAYS_SINCE_SERVICE_EXPIRED', operator: 'GTE', value: 30 }
+    ],
+    priority: 70,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Tenemos una propuesta para que vuelvas a practicar inglés.'
+  },
+  {
+    id: 'never-studied',
+    title: 'Registrado pero nunca practicó',
+    description: 'Detecta cuentas que todavía no completaron ninguna clase.',
+    name: 'Empezá tu primera clase',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'NEVER_STUDIED', operator: 'EQ', value: true }
+    ],
+    priority: 80,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Tu primera práctica está lista cuando quieras empezar.'
+  },
+  {
+    id: 'weekly-consistency',
+    title: 'Constancia semanal',
+    description: 'Al menos 5 clases cada día durante los últimos 7 días.',
+    name: 'Premio por constancia semanal',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'MIN_CLASSES_PER_ACTIVE_DAY', operator: 'GTE', value: 5, windowDays: 7 },
+      { field: 'ACTIVE_STUDY_DAYS', operator: 'GTE', value: 7, windowDays: 7 }
+    ],
+    priority: 50,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Tu constancia merece un reconocimiento.'
+  },
+  {
+    id: 'monthly-active',
+    title: 'Alta actividad mensual',
+    description: 'Al menos 20 días con actividad dentro de los últimos 30 días.',
+    name: 'Fidelización · alta actividad mensual',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'ACTIVE_STUDY_DAYS', operator: 'GTE', value: 20, windowDays: 30 }
+    ],
+    priority: 55,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Gracias por mantener una práctica tan constante.'
+  },
+  {
+    id: 'study-streak',
+    title: 'Racha de estudio',
+    description: 'Usuarios con una racha actual de al menos 7 días consecutivos.',
+    name: 'Fidelización · racha de 7 días',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'STUDY_STREAK_DAYS', operator: 'GTE', value: 7 }
+    ],
+    priority: 55,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: '¡Siete días seguidos practicando! Seguí así.'
   }
 ];

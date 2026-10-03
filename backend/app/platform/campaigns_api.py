@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import json
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -12,34 +13,34 @@ from sqlalchemy import func, select
 from app.ai.service import NoAIAvailable, run_platform_json_task
 from app.benefits.models import Benefit
 from app.benefits.service import benefit_duration, seed_benefits
+from app.campaigns.capabilities import (
+    CampaignCapabilityError,
+    ai_capabilities_text,
+    available_action_values,
+    available_trigger_values,
+    capabilities_payload,
+    validate_rule,
+)
 from app.campaigns.models import (
     Campaign,
+    CampaignAction,
     CampaignGrant,
     CampaignNotification,
     CampaignStatus,
     CampaignTrigger,
 )
-from app.campaigns.service import seed_campaigns
+from app.campaigns.service import preview_audience, seed_campaigns
 from app.core.deps import DbSession
 from app.platform.api import PlatformOwner
-from app.subscriptions.models import AISource, Plan, ServiceLinkType
+from app.subscriptions.models import Plan, ServiceLinkType
 
 router = APIRouter(prefix="/platform/campaigns", tags=["platform"])
-
-SUPPORTED_RULES: dict[str, set[str]] = {
-    "ACCOUNT_TYPE": {"EQ"},
-    "HAS_GRANTED_SERVICE": {"EQ"},
-    "SERVICE_SOURCE": {"EQ"},
-    "EMAIL_DOMAIN": {"EQ"},
-    "DAYS_SINCE_CREATED": {"EQ", "GTE", "LTE"},
-    "CREATED_AT": {"EQ", "GTE", "LTE"},
-}
-
 
 class CampaignRuleIn(BaseModel):
     field: str = Field(min_length=2, max_length=60)
     operator: str = Field(default="EQ", min_length=2, max_length=12)
     value: Any
+    windowDays: int | None = Field(default=None, ge=1, le=3650)
 
 
 class CampaignAssistIn(BaseModel):
@@ -49,6 +50,8 @@ class CampaignAssistIn(BaseModel):
 class CampaignIn(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     benefitId: int
+    action: CampaignAction = CampaignAction.GRANT_BENEFIT
+    actionConfig: dict[str, Any] | None = None
     trigger: CampaignTrigger = CampaignTrigger.FIRST_LOGIN
     rules: list[CampaignRuleIn] = Field(default_factory=list, max_length=20)
     priority: int = Field(default=100, ge=1, le=10000)
@@ -63,6 +66,8 @@ class CampaignIn(BaseModel):
     def validate_window(self):
         if self.startsAt and self.endsAt and self.endsAt <= self.startsAt:
             raise ValueError("La fecha de fin debe ser posterior a la de inicio.")
+        if self.action.value not in available_action_values():
+            raise ValueError("La acción elegida todavía no está disponible.")
         return self
 
 
@@ -74,8 +79,8 @@ Devolvé SOLO JSON con esta forma:
   "draft": {
     "name": "nombre claro",
     "benefitId": 123 o null,
-    "trigger": "FIRST_LOGIN" o "LOGIN",
-    "rules": [{"field":"...", "operator":"...", "value":...}],
+    "trigger": "trigger disponible",
+    "rules": [{"field":"...", "operator":"...", "value":..., "windowDays": null o número}],
     "priority": 100,
     "stackable": false,
     "maxRecipients": null,
@@ -88,22 +93,26 @@ Devolvé SOLO JSON con esta forma:
   "summary": "resumen breve de lo interpretado"
 }
 
-Reglas soportadas:
-- ACCOUNT_TYPE: EQ PERSONAL o CORPORATE
-- HAS_GRANTED_SERVICE: EQ true/false
-- SERVICE_SOURCE: EQ BYOK/PLATFORM/HYBRID
-- EMAIL_DOMAIN: EQ dominio
-- DAYS_SINCE_CREATED: EQ/GTE/LTE número
-- CREATED_AT: EQ/GTE/LTE fecha ISO
+El motor actual ejecuta GRANT_BENEFIT sobre un beneficio existente. No inventes descuentos,
+precios, pagos, renovaciones ni otras acciones todavía no disponibles. Si una intención requiere
+una capacidad inexistente, explicalo en warnings y no la reemplaces por otra condición parecida.
 
-El motor actual SOLO otorga un beneficio existente. No administra precios, porcentajes de
-descuento, pagos, renovaciones ni antigüedad de una suscripción paga. DAYS_SINCE_CREATED significa
-exclusivamente días desde la creación de la cuenta: nunca lo uses como sustituto de antigüedad de
-pago/membresía. Si el pedido requiere algo no soportado, avisalo en warnings y no inventes campos.
-SCHEDULED todavía no está disponible: usá FIRST_LOGIN o LOGIN.
+Para métricas de estudio usá las capacidades del catálogo:
+- CLASSES_COMPLETED cuenta clases completadas dentro de windowDays.
+- ACTIVE_STUDY_DAYS cuenta días distintos con actividad dentro de windowDays.
+- MIN_CLASSES_PER_ACTIVE_DAY mide el mínimo de clases de cada día en que hubo actividad.
+- AVERAGE_CLASSES_PER_ACTIVE_DAY mide el promedio solo entre los días donde hubo actividad.
+- AVERAGE_CLASSES_PER_DAY mide el promedio real de toda la ventana: los días sin estudiar cuentan como cero.
+- STUDY_STREAK_DAYS mide la racha consecutiva actual y no usa windowDays.
+Si el usuario pide "promedio de N clases por día/diarias", usá AVERAGE_CLASSES_PER_DAY >= N.
+Si pide "N clases todos los días durante K días", combiná MIN_CLASSES_PER_ACTIVE_DAY >= N con
+ACTIVE_STUDY_DAYS >= K, ambas con windowDays=K. No confundas "promedio diario" con "mínimo todos
+los días": son criterios distintos. Si pide una frecuencia/promedio y no informa período, usá
+windowDays=30 y agregá una advertencia clara para que revise esa ventana.
+
 Elegí benefitId únicamente entre los beneficios provistos y solo si la intención lo deja claro;
-si no, devolvé null para que el usuario lo seleccione. El resultado es siempre un BORRADOR:
-nunca actives ni guardes una campaña."""
+si no, devolvé null. El resultado es siempre un BORRADOR: nunca actives ni guardes una campaña."""
+
 
 
 def _assist_datetime(value, warnings: list[str], label: str) -> str | None:
@@ -135,7 +144,7 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
         benefit_id = None
 
     trigger = str(raw.get("trigger") or "LOGIN").upper()
-    if trigger not in {"FIRST_LOGIN", "LOGIN"}:
+    if trigger not in available_trigger_values():
         warnings.append("El disparador propuesto no está disponible; se usó Cada login.")
         trigger = "LOGIN"
 
@@ -186,6 +195,8 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
         "draft": {
             "name": name,
             "benefitId": benefit_id,
+            "action": CampaignAction.GRANT_BENEFIT.value,
+            "actionConfig": {},
             "trigger": trigger,
             "rules": rules,
             "priority": priority,
@@ -210,10 +221,121 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
     mentions_discount = "%" in description or any(
         word in lower for word in ("descuento", "bonific", "rebaja", "precio")
     )
-    if mentions_discount and not any("descuento" in warning.lower() or "precio" in warning.lower() for warning in warnings):
-        warnings.append(
-            "El motor actual no administra descuentos, precios ni porcentajes; solo puede otorgar un beneficio existente."
-        )
+    if mentions_discount:
+        # Un descuento pedido como recompensa no se sustituye por un Benefit de servicio.
+        normalized["draft"]["benefitId"] = None
+        if not any("descuento" in warning.lower() or "precio" in warning.lower() for warning in warnings):
+            warnings.append(
+                "El motor actual no administra descuentos, precios ni porcentajes; "
+                "no se sustituyó el descuento por un beneficio de servicio."
+            )
+
+    # "Promedio de N clases diarias" debe incluir los días sin actividad en el denominador.
+    # Se corrige de forma determinística para no depender de una interpretación variable del LLM.
+    mentions_daily_average = (
+        "promedio" in lower
+        and "clase" in lower
+        and any(term in lower for term in ("diaria", "diario", "por día", "por dia", "al día", "al dia"))
+    )
+    if mentions_daily_average:
+        classes_match = re.search(r"(\d+(?:[\.,]\d+)?)\s+clases?", lower)
+        if classes_match:
+            expected = float(classes_match.group(1).replace(",", "."))
+            expected = int(expected) if expected.is_integer() else expected
+            window_days = next(
+                (
+                    int(rule["windowDays"])
+                    for rule in rules
+                    if rule.get("windowDays") is not None
+                    and rule.get("field") in {
+                        "MIN_CLASSES_PER_ACTIVE_DAY",
+                        "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+                        "AVERAGE_CLASSES_PER_DAY",
+                        "ACTIVE_STUDY_DAYS",
+                    }
+                ),
+                None,
+            )
+            if window_days is None:
+                window_match = re.search(
+                    r"(?:últim(?:os|as)?|ultim(?:os|as)?|durante|por|en)\s+(?:los\s+)?(\d+)\s+d[ií]as",
+                    lower,
+                )
+                window_days = int(window_match.group(1)) if window_match else 30
+                if window_match is None and not any("30 días" in warning for warning in warnings):
+                    warnings.append(
+                        "No se indicó el período del promedio diario; se propusieron 30 días como ventana editable."
+                    )
+            metric_operator = next(
+                (
+                    str(rule.get("operator") or "GTE").upper()
+                    for rule in rules
+                    if rule.get("field")
+                    in {
+                        "MIN_CLASSES_PER_ACTIVE_DAY",
+                        "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+                        "AVERAGE_CLASSES_PER_DAY",
+                    }
+                ),
+                None,
+            )
+            if metric_operator not in {"GTE", "LTE", "EQ"}:
+                metric_operator = (
+                    "LTE"
+                    if any(
+                        phrase in lower
+                        for phrase in (
+                            "como máximo",
+                            "como maximo",
+                            "máximo",
+                            "maximo",
+                            "menos de",
+                            "no más de",
+                            "no mas de",
+                        )
+                    )
+                    else "GTE"
+                )
+            normalized["draft"]["rules"] = [
+                rule
+                for rule in rules
+                if rule.get("field")
+                not in {
+                    "MIN_CLASSES_PER_ACTIVE_DAY",
+                    "AVERAGE_CLASSES_PER_ACTIVE_DAY",
+                    "AVERAGE_CLASSES_PER_DAY",
+                }
+                and not (
+                    rule.get("field") == "ACTIVE_STUDY_DAYS"
+                    and rule.get("windowDays") == window_days
+                    and rule.get("value") == window_days
+                )
+            ]
+            normalized["draft"]["rules"].append(
+                {
+                    "field": "AVERAGE_CLASSES_PER_DAY",
+                    "operator": metric_operator,
+                    "value": expected,
+                    "windowDays": window_days,
+                }
+            )
+            rules = normalized["draft"]["rules"]
+
+    unsupported_audience_terms = {
+        "reclamo": "El motor todavía no tiene datos de reclamos/soporte para segmentar esta campaña.",
+        "queja": "El motor todavía no tiene datos de reclamos/soporte para segmentar esta campaña.",
+        "ticket de soporte": "El motor todavía no tiene datos de reclamos/soporte para segmentar esta campaña.",
+        "referid": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+        "invitó a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+        "invito a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+        "invitaron a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+        "invitar a": "El motor todavía no registra referidos/invitaciones exitosas como métrica de campaña.",
+    }
+    for term, warning in unsupported_audience_terms.items():
+        if term in lower and not any(warning.lower() == item.lower() for item in warnings):
+            warnings.append(warning)
+            normalized["draft"]["benefitId"] = None
+            break
 
     mentions_payment_tenure = any(
         phrase in lower
@@ -260,40 +382,10 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 
 def _validate_rule(rule: CampaignRuleIn) -> dict:
-    field = rule.field.strip().upper()
-    operator = rule.operator.strip().upper()
-    if field not in SUPPORTED_RULES or operator not in SUPPORTED_RULES[field]:
-        raise HTTPException(422, f"Condición no soportada: {field} {operator}.")
-    value = rule.value
-    if field == "ACCOUNT_TYPE":
-        value = str(value).upper()
-        if value not in {"PERSONAL", "CORPORATE"}:
-            raise HTTPException(422, "Tipo de cuenta inválido.")
-    elif field == "HAS_GRANTED_SERVICE":
-        if not isinstance(value, bool):
-            raise HTTPException(422, "HAS_GRANTED_SERVICE requiere true/false.")
-    elif field == "SERVICE_SOURCE":
-        value = str(value).upper()
-        if value not in {source.value for source in AISource}:
-            raise HTTPException(422, "Fuente de IA inválida.")
-    elif field == "EMAIL_DOMAIN":
-        value = str(value).strip().lower().lstrip("@")
-        if not value or "." not in value:
-            raise HTTPException(422, "Dominio de email inválido.")
-    elif field == "DAYS_SINCE_CREATED":
-        try:
-            value = int(value)
-        except (TypeError, ValueError):
-            raise HTTPException(422, "Días desde registro debe ser un entero.")
-        if value < 0:
-            raise HTTPException(422, "Días desde registro no puede ser negativo.")
-    elif field == "CREATED_AT":
-        try:
-            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        except ValueError:
-            raise HTTPException(422, "Fecha de registro inválida.")
-        value = _as_utc(parsed).isoformat()
-    return {"field": field, "operator": operator, "value": value}
+    try:
+        return validate_rule(rule.field, rule.operator, rule.value, rule.windowDays)
+    except CampaignCapabilityError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 def _benefit(db: DbSession, benefit_id: int, *, require_active: bool = False) -> Benefit:
@@ -312,6 +404,8 @@ def _apply(campaign: Campaign, payload: CampaignIn, db: DbSession) -> None:
     _benefit(db, payload.benefitId)
     campaign.name = payload.name.strip()
     campaign.benefit_id = payload.benefitId
+    campaign.action = payload.action
+    campaign.action_config = payload.actionConfig or {}
     campaign.trigger = payload.trigger
     campaign.eligibility = {
         "mode": "ALL",
@@ -382,6 +476,8 @@ def _out(db: DbSession, campaign: Campaign) -> dict:
         "name": campaign.name,
         "benefitId": campaign.benefit_id,
         "benefitName": benefit.name if benefit else "Beneficio eliminado",
+        "action": campaign.action.value,
+        "actionConfig": campaign.action_config or {},
         "serviceId": plan.id if plan else None,
         "serviceName": plan.name if plan else "Servicio eliminado",
         "grantDays": benefit_duration(benefit, plan) if benefit and plan else None,
@@ -429,6 +525,22 @@ def list_campaigns(_: PlatformOwner, db: DbSession) -> list[dict]:
     return [_out(db, campaign) for campaign in campaigns]
 
 
+@router.get("/capabilities")
+def campaign_capabilities(_: PlatformOwner) -> dict:
+    """Fuente única para constructor, plantillas y asistencia IA."""
+    return capabilities_payload()
+
+
+@router.post("/preview")
+def preview_campaign_audience(payload: CampaignIn, _: PlatformOwner, db: DbSession) -> dict:
+    """Simula la audiencia del borrador sin guardar ni ejecutar acciones."""
+    _benefit(db, payload.benefitId)
+    rules = [_validate_rule(rule) for rule in payload.rules]
+    result = preview_audience(db, rules=rules, trigger=payload.trigger)
+    result["action"] = payload.action.value
+    return result
+
+
 @router.post("/assist")
 def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSession) -> dict:
     """Convierte lenguaje natural en un borrador; nunca persiste ni activa una campaña."""
@@ -458,6 +570,7 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
         "kind": "campaign_assist",
         "description": payload.description.strip(),
         "benefits": benefit_options,
+        "capabilities": capabilities_payload(),
     }
     user_prompt = (
         "Intención del usuario:\n"
@@ -469,7 +582,7 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
         result = run_platform_json_task(
             db,
             owner,
-            system=CAMPAIGN_ASSIST_SYSTEM,
+            system=CAMPAIGN_ASSIST_SYSTEM + "\n\n" + ai_capabilities_text(),
             user=user_prompt,
             task=task,
         )
@@ -491,6 +604,8 @@ def create_campaign(payload: CampaignIn, owner: PlatformOwner, db: DbSession) ->
         code=f"CAMPAIGN_{uuid4().hex.upper()}",
         name="",
         benefit_id=payload.benefitId,
+        action=payload.action,
+        action_config=payload.actionConfig or {},
         created_by_account_id=owner.id,
     )
     _apply(campaign, payload, db)

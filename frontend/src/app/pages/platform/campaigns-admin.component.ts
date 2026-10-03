@@ -4,11 +4,15 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import {
+  CampaignAction,
+  CampaignAudiencePreview,
   CampaignNotification,
   CampaignRule,
+  CampaignRuleCapability,
   CampaignTrigger,
   PlatformCampaign,
   PlatformBenefit,
+  PlatformCampaignCapabilities,
   PlatformCampaignDraft
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
@@ -20,6 +24,8 @@ type NewCampaignMode = 'choose' | 'templates' | 'ai' | null;
 interface CampaignForm {
   name: string;
   benefitId: number | null;
+  action: CampaignAction;
+  actionConfig: Record<string, unknown>;
   trigger: CampaignTrigger;
   rules: CampaignRule[];
   priority: number;
@@ -42,6 +48,8 @@ function emptyForm(benefitId: number | null): CampaignForm {
   return {
     name: '',
     benefitId,
+    action: 'GRANT_BENEFIT',
+    actionConfig: {},
     trigger: 'FIRST_LOGIN',
     rules: defaultRules(),
     priority: 100,
@@ -170,11 +178,29 @@ function isoDate(value: string): string | null {
             }
           </div>
         }
+        @if (capabilitiesError()) {
+          <div class="banner small draft-banner">
+            <strong>El constructor no puede cargar el catálogo del motor.</strong>
+            <div>{{ capabilitiesError() }}</div>
+          </div>
+        }
+        @if (capabilities()) {
         <form class="editor stack" (ngSubmit)="save()">
           <div class="grid">
             <label class="field">
               Nombre
               <input class="input" name="cName" [(ngModel)]="form.name" maxlength="120" required />
+            </label>
+            <label class="field">
+              Acción
+              <select class="input" name="cAction" [(ngModel)]="form.action">
+                @for (action of capabilities()?.actions ?? []; track action.key) {
+                  <option [value]="action.key" [disabled]="!action.available">
+                    {{ action.label }}{{ action.available ? '' : ' · próxima etapa' }}
+                  </option>
+                }
+              </select>
+              <span class="muted tiny">La acción es explícita. Hoy se ejecuta Otorgar beneficio; las demás quedan reservadas para etapas futuras.</span>
             </label>
             <label class="field">
               Beneficio que aplica
@@ -189,9 +215,11 @@ function isoDate(value: string): string | null {
             <label class="field">
               Cuándo se evalúa
               <select class="input" name="cTrigger" [(ngModel)]="form.trigger">
-                <option value="FIRST_LOGIN">Primer login</option>
-                <option value="LOGIN">Cada login</option>
-                <option value="SCHEDULED" disabled>Programada / batch (T-059)</option>
+                @for (trigger of capabilities()?.triggers ?? []; track trigger.key) {
+                  <option [value]="trigger.key" [disabled]="!trigger.available">
+                    {{ trigger.label }}{{ trigger.available ? '' : ' · T-059' }}
+                  </option>
+                }
               </select>
             </label>
             <label class="field">
@@ -226,71 +254,82 @@ function isoDate(value: string): string | null {
               <p class="muted small">Sin condiciones adicionales: alcanza con el disparador y la vigencia.</p>
             }
             @for (rule of form.rules; track $index; let i = $index) {
-              <div class="rule-row">
-                <select class="input" [name]="'rField' + i" [(ngModel)]="rule.field" (ngModelChange)="resetRule(rule)">
-                  <option value="ACCOUNT_TYPE">Tipo de cuenta</option>
-                  <option value="HAS_GRANTED_SERVICE">Tiene membresía otorgada</option>
-                  <option value="SERVICE_SOURCE">Fuente de IA actual</option>
-                  <option value="EMAIL_DOMAIN">Dominio de email</option>
-                  <option value="DAYS_SINCE_CREATED">Días desde registro</option>
-                  <option value="CREATED_AT">Fecha de registro</option>
-                </select>
+              @if (ruleCapability(rule.field); as capability) {
+                <div class="rule-row">
+                  <select class="input" [name]="'rField' + i" [(ngModel)]="rule.field" (ngModelChange)="resetRule(rule)">
+                    @for (availableRule of ruleCapabilities(); track availableRule.key) {
+                      <option [value]="availableRule.key">{{ availableRule.label }}</option>
+                    }
+                  </select>
 
-                @if (rule.field === 'DAYS_SINCE_CREATED') {
                   <select class="input op" [name]="'rOp' + i" [(ngModel)]="rule.operator">
-                    <option value="GTE">al menos</option>
-                    <option value="LTE">como máximo</option>
-                    <option value="EQ">exactamente</option>
+                    @for (operator of capability.operators; track operator) {
+                      <option [value]="operator">{{ operatorLabel(operator, capability.valueType) }}</option>
+                    }
                   </select>
-                  <input class="input value" type="number" min="0" [name]="'rValue' + i" [(ngModel)]="rule.value" />
-                } @else if (rule.field === 'CREATED_AT') {
-                  <select class="input op" [name]="'rOp' + i" [(ngModel)]="rule.operator">
-                    <option value="GTE">desde</option>
-                    <option value="LTE">hasta</option>
-                    <option value="EQ">exactamente</option>
-                  </select>
-                  <input class="input value" type="datetime-local" [name]="'rValue' + i" [(ngModel)]="rule.value" />
-                } @else {
-                  <span class="operator">es</span>
-                  @switch (rule.field) {
-                    @case ('ACCOUNT_TYPE') {
-                      <select class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value">
-                        <option value="PERSONAL">Personal</option>
-                        <option value="CORPORATE">Corporativa</option>
-                      </select>
+
+                  <div class="rule-value-stack">
+                    @switch (capability.valueType) {
+                      @case ('boolean') {
+                        <select class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value">
+                          <option [ngValue]="false">No</option>
+                          <option [ngValue]="true">Sí</option>
+                        </select>
+                      }
+                      @case ('enum') {
+                        <select class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value">
+                          @for (option of capability.options; track option.value) {
+                            <option [value]="option.value">{{ option.label }}</option>
+                          }
+                        </select>
+                      }
+                      @case ('integer') {
+                        <input class="input value" type="number" min="0" step="1" [name]="'rValue' + i" [(ngModel)]="rule.value" />
+                      }
+                      @case ('number') {
+                        <input class="input value" type="number" min="0" step="0.1" [name]="'rValue' + i" [(ngModel)]="rule.value" />
+                      }
+                      @case ('datetime') {
+                        <input class="input value" type="datetime-local" [name]="'rValue' + i" [(ngModel)]="rule.value" />
+                      }
+                      @default {
+                        <input class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value" />
+                      }
                     }
-                    @case ('HAS_GRANTED_SERVICE') {
-                      <select class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value">
-                        <option [ngValue]="false">No</option>
-                        <option [ngValue]="true">Sí</option>
-                      </select>
+                    @if (capability.requiresWindow) {
+                      <label class="window-field">
+                        en los últimos
+                        <input
+                          class="input window-input"
+                          type="number"
+                          [min]="capability.windowMinDays ?? 1"
+                          [max]="capability.windowMaxDays ?? 3650"
+                          step="1"
+                          [name]="'rWindow' + i"
+                          [(ngModel)]="rule.windowDays"
+                        />
+                        días
+                      </label>
                     }
-                    @case ('SERVICE_SOURCE') {
-                      <select class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value">
-                        <option value="BYOK">Propias keys</option>
-                        <option value="PLATFORM">Plataforma</option>
-                        <option value="HYBRID">Híbrido</option>
-                      </select>
-                    }
-                    @default {
-                      <input class="input value" [name]="'rValue' + i" [(ngModel)]="rule.value" placeholder="empresa.com" />
-                    }
-                  }
-                }
-                <button class="btn btn-sm btn-danger" type="button" (click)="removeRule(i)">Quitar</button>
-              </div>
+                  </div>
+                  <button class="btn btn-sm btn-danger" type="button" (click)="removeRule(i)">Quitar</button>
+                </div>
+                <div class="muted tiny rule-description">{{ capability.description }}</div>
+              }
             }
           </div>
 
           <div class="grid">
             <label class="field">
-              Notificación
+              Notificación / entrega
               <select class="input" name="cNotification" [(ngModel)]="form.notification">
-                <option value="NONE">Sin notificación</option>
-                <option value="IN_APP">En pantalla</option>
-                <option value="EMAIL">Email (queda pendiente hasta T-051)</option>
-                <option value="IN_APP_EMAIL">Pantalla + email (email pendiente hasta T-051)</option>
+                @for (delivery of capabilities()?.deliveries ?? []; track delivery.key) {
+                  <option [value]="delivery.key">{{ delivery.label }}</option>
+                }
               </select>
+              @if (form.notification === 'EMAIL' || form.notification === 'IN_APP_EMAIL') {
+                <span class="muted tiny">Se encola como pendiente; el envío real corresponde a T-051.</span>
+              }
             </label>
             <label class="field">
               Mensaje
@@ -304,13 +343,42 @@ function isoDate(value: string): string | null {
             Acumulable con otras campañas. Para sumar días, ambas deben permitir acumulación y otorgar la MISMA membresía; si son distintas, la segunda no se aplica.
           </label>
 
+          @if (audiencePreview(); as preview) {
+            <div class="preview-card">
+              <div class="row spread">
+                <strong>Previsualización de audiencia</strong>
+                <span class="chip">{{ preview.eligibleCount }} de {{ preview.candidateCount }} coinciden</span>
+              </div>
+              @for (warning of preview.warnings; track warning) {
+                <div class="warning tiny">{{ warning }}</div>
+              }
+              @if (preview.sample.length) {
+                <div class="preview-sample">
+                  @for (account of preview.sample; track account.accountId) {
+                    <div class="preview-account" [class.preview-excluded]="!account.eligible">
+                      <span><strong>{{ account.displayName || account.email }}</strong> · {{ account.email }}</span>
+                      <span [class]="account.eligible ? 'chip chip-ok' : 'chip'">
+                        {{ account.eligible ? 'Coincide' : 'No coincide' }}
+                      </span>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+
           <div class="row">
+            <button class="btn btn-sm" type="button" (click)="previewAudience()" [disabled]="previewLoading() || !canSave()">
+              @if (previewLoading()) { <span class="spinner"></span> }
+              Previsualizar audiencia
+            </button>
             <button class="btn btn-primary btn-sm" type="submit" [disabled]="saving() || !canSave()">
               @if (saving()) { <span class="spinner"></span> } Guardar
             </button>
             <button class="btn btn-sm" type="button" (click)="cancelForm()">Cancelar</button>
           </div>
         </form>
+        }
       }
 
       @if (loading()) {
@@ -329,7 +397,7 @@ function isoDate(value: string): string | null {
                   @if (campaign.stackable) { <span class="chip chip-ok">Acumulable</span> }
                 </div>
                 <div class="small">
-                  {{ triggerLabel(campaign.trigger) }} → <strong>{{ campaign.benefitName }}</strong>
+                  {{ triggerLabel(campaign.trigger) }} · {{ actionLabel(campaign.action) }} → <strong>{{ campaign.benefitName }}</strong>
                   · {{ campaign.recipients }} beneficiario(s)
                   @if (campaign.maxRecipients) { / {{ campaign.maxRecipients }} máx. }
                 </div>
@@ -398,8 +466,16 @@ function isoDate(value: string): string | null {
     .draft-banner { margin-bottom: 0.8rem; }
     .spread { justify-content: space-between; }
     .check-row { display: flex; gap: 0.5rem; align-items: flex-start; }
-    .rule-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(6rem, 0.7fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
+    .rule-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, 0.7fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
+    .rule-description { margin-top: -0.25rem; }
+    .rule-value-stack { display: flex; flex-direction: column; gap: 0.3rem; }
+    .window-field { display: flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.76rem; white-space: nowrap; }
+    .window-input { width: 5rem; padding-block: 0.25rem; }
     .operator { text-align: center; font-size: 0.86rem; color: var(--muted); }
+    .preview-card { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--surface); display: flex; flex-direction: column; gap: 0.55rem; }
+    .preview-sample { display: flex; flex-direction: column; gap: 0.3rem; }
+    .preview-account { display: flex; justify-content: space-between; gap: 0.6rem; align-items: center; font-size: 0.82rem; }
+    .preview-excluded { opacity: 0.62; }
     .campaign-list { display: flex; flex-direction: column; gap: 0.55rem; }
     .campaign { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; }
     .campaign-main { display: flex; flex-direction: column; gap: 0.3rem; }
@@ -422,6 +498,10 @@ export class CampaignsAdminComponent implements OnInit {
 
   readonly campaigns = signal<PlatformCampaign[]>([]);
   readonly benefits = signal<PlatformBenefit[]>([]);
+  readonly capabilities = signal<PlatformCampaignCapabilities | null>(null);
+  readonly capabilitiesError = signal('');
+  readonly audiencePreview = signal<CampaignAudiencePreview | null>(null);
+  readonly previewLoading = signal(false);
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly editingId = signal<number | null>(null);
@@ -453,6 +533,18 @@ export class CampaignsAdminComponent implements OnInit {
       this.benefits.set(benefits);
     } catch (err) {
       this.toast.error(errorMessage(err));
+    }
+
+    try {
+      this.capabilities.set(await firstValueFrom(this.api.platformCampaignCapabilities()));
+      this.capabilitiesError.set('');
+    } catch (err) {
+      this.capabilities.set(null);
+      const detail = errorMessage(err, 'error desconocido');
+      this.capabilitiesError.set(
+        'No se pudieron cargar las capacidades del motor. Verificá que estés usando esta misma rama, ' +
+        'reiniciá el backend y recargá la pantalla. Detalle: ' + detail
+      );
     } finally {
       this.loading.set(false);
     }
@@ -462,6 +554,7 @@ export class CampaignsAdminComponent implements OnInit {
     this.editingId.set(null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.audiencePreview.set(null);
     this.aiDescription = '';
     this.newMode.set('choose');
   }
@@ -470,6 +563,7 @@ export class CampaignsAdminComponent implements OnInit {
     this.form = emptyForm(this.activeBenefits()[0]?.id ?? null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.audiencePreview.set(null);
     this.newMode.set(null);
     this.editingId.set(0);
   }
@@ -478,6 +572,8 @@ export class CampaignsAdminComponent implements OnInit {
     this.form = {
       name: template.name,
       benefitId: null,
+      action: 'GRANT_BENEFIT',
+      actionConfig: {},
       trigger: template.trigger,
       rules: template.rules.map((rule) => ({ ...rule })),
       priority: template.priority,
@@ -503,6 +599,7 @@ export class CampaignsAdminComponent implements OnInit {
     this.editingId.set(null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.audiencePreview.set(null);
   }
 
   async generateWithAi(): Promise<void> {
@@ -515,14 +612,10 @@ export class CampaignsAdminComponent implements OnInit {
       this.form = {
         name: result.draft.name,
         benefitId: result.draft.benefitId,
+        action: result.draft.action ?? 'GRANT_BENEFIT',
+        actionConfig: result.draft.actionConfig ?? {},
         trigger: result.draft.trigger,
-        rules: result.draft.rules.map((rule) => ({
-          ...rule,
-          value:
-            rule.field === 'CREATED_AT' && typeof rule.value === 'string'
-              ? localDate(rule.value)
-              : rule.value
-        })),
+        rules: result.draft.rules.map((rule) => this.ruleForForm(rule)),
         priority: result.draft.priority,
         stackable: result.draft.stackable,
         maxRecipients: result.draft.maxRecipients,
@@ -546,14 +639,10 @@ export class CampaignsAdminComponent implements OnInit {
     this.form = {
       name: campaign.name,
       benefitId: campaign.benefitId,
+      action: campaign.action ?? 'GRANT_BENEFIT',
+      actionConfig: campaign.actionConfig ?? {},
       trigger: campaign.trigger,
-      rules: campaign.rules.map((rule) => ({
-        ...rule,
-        value:
-          rule.field === 'CREATED_AT' && typeof rule.value === 'string'
-            ? localDate(rule.value)
-            : rule.value
-      })),
+      rules: campaign.rules.map((rule) => this.ruleForForm(rule)),
       priority: campaign.priority,
       stackable: campaign.stackable,
       maxRecipients: campaign.maxRecipients,
@@ -565,47 +654,104 @@ export class CampaignsAdminComponent implements OnInit {
     this.newMode.set(null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.audiencePreview.set(null);
     this.editingId.set(campaign.id);
   }
 
   addRule(): void {
     this.form.rules.push({ field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' });
+    this.audiencePreview.set(null);
   }
 
   removeRule(index: number): void {
     this.form.rules.splice(index, 1);
+    this.audiencePreview.set(null);
+  }
+
+  ruleCapabilities(): CampaignRuleCapability[] {
+    return (this.capabilities()?.rules ?? []).filter((rule) => rule.available);
+  }
+
+  ruleCapability(field: string): CampaignRuleCapability | null {
+    return this.ruleCapabilities().find((rule) => rule.key === field) ?? null;
+  }
+
+  operatorLabel(operator: string, valueType: CampaignRuleCapability['valueType']): string {
+    if (valueType === 'datetime') {
+      return operator === 'GTE' ? 'desde' : operator === 'LTE' ? 'hasta' : 'exactamente';
+    }
+    return operator === 'GTE' ? 'al menos' : operator === 'LTE' ? 'como máximo' : 'es';
+  }
+
+  private ruleForForm(rule: CampaignRule): CampaignRule {
+    const capability = this.ruleCapability(rule.field);
+    return {
+      ...rule,
+      value:
+        capability?.valueType === 'datetime' && typeof rule.value === 'string'
+          ? localDate(rule.value)
+          : rule.value
+    };
+  }
+
+  private ruleForApi(rule: CampaignRule): CampaignRule {
+    const capability = this.ruleCapability(rule.field);
+    let value = rule.value;
+    if (capability?.valueType === 'integer' || capability?.valueType === 'number') {
+      value = Number(value);
+    } else if (capability?.valueType === 'datetime' && value) {
+      value = new Date(String(value)).toISOString();
+    }
+    return {
+      ...rule,
+      value,
+      windowDays: capability?.requiresWindow ? Number(rule.windowDays) : null
+    };
   }
 
   resetRule(rule: CampaignRule): void {
-    rule.operator = 'EQ';
-    if (rule.field === 'ACCOUNT_TYPE') rule.value = 'PERSONAL';
-    else if (rule.field === 'HAS_GRANTED_SERVICE') rule.value = false;
-    else if (rule.field === 'SERVICE_SOURCE') rule.value = 'BYOK';
-    else if (rule.field === 'DAYS_SINCE_CREATED') rule.value = 0;
-    else if (rule.field === 'CREATED_AT') rule.value = '';
-    else rule.value = '';
+    const capability = this.ruleCapability(rule.field);
+    rule.operator = capability?.operators[0] ?? 'EQ';
+    if (!capability) {
+      rule.value = '';
+      return;
+    }
+    if (capability.valueType === 'boolean') {
+      rule.value = false;
+    } else if (capability.valueType === 'integer' || capability.valueType === 'number') {
+      rule.value = 0;
+    } else if (capability.valueType === 'enum') {
+      rule.value = capability.options[0]?.value ?? '';
+    } else {
+      rule.value = '';
+    }
+    rule.windowDays = capability.requiresWindow ? 30 : null;
+    this.audiencePreview.set(null);
   }
 
   canSave(): boolean {
-    return !!this.form.name.trim() && !!this.form.benefitId && this.form.priority > 0;
+    return (
+      !!this.capabilities() &&
+      !!this.form.name.trim() &&
+      !!this.form.benefitId &&
+      this.form.action === 'GRANT_BENEFIT' &&
+      this.form.priority > 0 &&
+      this.form.rules.every((rule) => {
+        const capability = this.ruleCapability(rule.field);
+        return !capability?.requiresWindow || Number(rule.windowDays) > 0;
+      })
+    );
   }
 
-  async save(): Promise<void> {
-    const id = this.editingId();
-    if (id === null || !this.form.benefitId) return;
-    const draft: PlatformCampaignDraft = {
+  private buildDraft(): PlatformCampaignDraft | null {
+    if (!this.canSave() || !this.form.benefitId) return null;
+    return {
       name: this.form.name.trim(),
       benefitId: this.form.benefitId,
+      action: this.form.action,
+      actionConfig: this.form.actionConfig ?? {},
       trigger: this.form.trigger,
-      rules: this.form.rules.map((rule) => ({
-        ...rule,
-        value:
-          rule.field === 'DAYS_SINCE_CREATED'
-            ? Number(rule.value)
-            : rule.field === 'CREATED_AT' && rule.value
-              ? new Date(String(rule.value)).toISOString()
-              : rule.value
-      })),
+      rules: this.form.rules.map((rule) => this.ruleForApi(rule)),
       priority: Math.max(1, Math.round(Number(this.form.priority) || 100)),
       stackable: this.form.stackable,
       maxRecipients: numberOrNull(this.form.maxRecipients),
@@ -614,6 +760,25 @@ export class CampaignsAdminComponent implements OnInit {
       notification: this.form.notification,
       message: this.form.message.trim() || null
     };
+  }
+
+  async previewAudience(): Promise<void> {
+    const draft = this.buildDraft();
+    if (!draft) return;
+    this.previewLoading.set(true);
+    try {
+      this.audiencePreview.set(await firstValueFrom(this.api.previewPlatformCampaign(draft)));
+    } catch (err) {
+      this.toast.error(errorMessage(err, 'No se pudo previsualizar la audiencia.'));
+    } finally {
+      this.previewLoading.set(false);
+    }
+  }
+
+  async save(): Promise<void> {
+    const id = this.editingId();
+    const draft = this.buildDraft();
+    if (id === null || !draft) return;
     this.saving.set(true);
     try {
       await firstValueFrom(
@@ -667,6 +832,10 @@ export class CampaignsAdminComponent implements OnInit {
   }
   triggerLabel(trigger: CampaignTrigger): string {
     return trigger === 'FIRST_LOGIN' ? 'Primer login' : trigger === 'LOGIN' ? 'Cada login' : 'Programada';
+  }
+
+  actionLabel(action: CampaignAction): string {
+    return this.capabilities()?.actions.find((item) => item.key === action)?.label ?? action;
   }
 
   notificationLabel(notification: CampaignNotification): string {

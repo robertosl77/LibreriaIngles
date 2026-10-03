@@ -3119,7 +3119,7 @@ atributos.
 ## T-065 — Evolución del motor de campañas para fidelización y automatizaciones futuras
 
 **Prioridad:** P3 — Baja / futura  
-**Estado:** Para analizar / diseñar  
+**Estado:** Cerrada temporalmente · base implementada y validada · PR #42 · ChatGPT  
 **Relación:** T-004 (motor actual de campañas, beneficios e invitaciones), T-050 (fidelización),
 T-051 (emails), T-053 (métricas/consumo por cliente), T-059 (scheduler y campañas programadas)
 
@@ -3350,8 +3350,114 @@ Si este caso puede configurarse combinando capacidades genéricas, sin agregar c
 “recuperación” o “fidelización”, el diseño está correctamente generalizado.
 
 **Criterio final:** ampliar el vocabulario del motor, no multiplicar motores. T-004 permanece como la
-base actual; T-065 se aborda más adelante, coordinada con T-050, T-051 y T-059 cuando esas etapas
-entren en desarrollo.
+base del dominio de campañas; T-065 deja implementada una primera evolución reutilizable y queda
+cerrada temporalmente hasta que T-050, T-051, T-053 y/o T-059 necesiten ampliar nuevamente el motor.
+
+### Cierre temporal y evidencia — 2026-10-03
+
+T-065 se cierra **temporalmente**, no como arquitectura definitiva. La base fue implementada,
+probada funcionalmente y mergeada a `develop` mediante **PR #42**. Debe reabrirse cuando entren
+Fidelización, reclamos automatizados, scheduler/batch, email real, métricas de consumo o dominio
+comercial de descuentos/pagos.
+
+#### Qué quedó implementado
+
+- catálogo central de capacidades de campaña en backend, consumido por constructor e IA;
+- acción explícita de campaña; hoy `GRANT_BENEFIT` es la única acción ejecutable;
+- migración `0020_campaign_engine_action.py` para `action` y `action_config`;
+- preview de audiencia sin ejecutar acciones ni crear grants;
+- explicación de reglas por cuenta para facilitar revisión;
+- segmentación por:
+  - tipo de cuenta;
+  - servicio vigente;
+  - fuente de IA;
+  - email exacto y dominio;
+  - antigüedad de cuenta;
+  - fecha de registro;
+  - días desde última actividad;
+  - nunca estudió;
+  - días desde vencimiento de servicio;
+  - nivel actual;
+- métricas de estudio con ventana temporal:
+  - `CLASSES_COMPLETED`;
+  - `ACTIVE_STUDY_DAYS`;
+  - `MIN_CLASSES_PER_ACTIVE_DAY`;
+  - `AVERAGE_CLASSES_PER_ACTIVE_DAY`;
+  - `AVERAGE_CLASSES_PER_DAY`, contando los días sin actividad como cero;
+  - `STUDY_STREAK_DAYS`;
+- asistente IA ajustado para distinguir:
+  - promedio diario;
+  - promedio por día activo;
+  - mínimo todos los días;
+  - volumen total;
+  - días activos;
+  - racha;
+- guardas para no transformar conceptos inexistentes en aproximaciones falsas;
+- un pedido de descuento no se sustituye silenciosamente por un Benefit;
+- reclamos automáticos y referidos automáticos se reconocen como capacidades aún inexistentes;
+- constructor alimentado por el catálogo de backend, evitando duplicar campos/operadores;
+- plantillas de fidelización y recuperación;
+- seed local/dev idempotente con **15 campañas DRAFT reales** y beneficios de laboratorio;
+- ninguna campaña de laboratorio se activa automáticamente;
+- la compensación post-reclamo se puede probar manualmente mediante `ACCOUNT_EMAIL`, usando por
+  defecto `reemplazar@ejemplo.invalid` para impedir una aplicación accidental.
+
+#### Laboratorio de 15 campañas
+
+La evidencia detallada quedó en:
+
+`docs/t065_laboratorio_fidelizacion_15_campanas.md`
+
+Ese laboratorio cubre permanencia, aniversario, constancia diaria, rachas, presencia mensual,
+volumen, nivel, recuperación por inactividad, recuperación tras vencimiento, onboarding abandonado,
+riesgo de abandono, BYOK, híbrido, reclamos, referidos y descuentos.
+
+Además se validaron 15 intenciones mediante el asistente IA:
+
+- 12 casos soportados se convierten en campañas `DRAFT` reales en la base temporal de tests;
+- reclamos automáticos, referidos automáticos y descuentos porcentuales se mantienen como
+  limitaciones explícitas cuando no existe todavía el dominio que permitiría ejecutarlos;
+- en local/dev existen 15 campañas de laboratorio persistidas e idempotentes para revisión manual.
+
+#### Validación al cierre temporal
+
+Última validación completa de esta etapa:
+
+- **279 tests backend pasados**;
+- migraciones: OK;
+- frontend build: OK;
+- audit de dependencias runtime: OK;
+- seed local repetido: permanece en exactamente 15 campañas, sin duplicados.
+
+#### Límites conocidos / qué NO resolver dentro de esta etapa
+
+No considerar implementado todavía:
+
+- `SCHEDULED` / ejecución batch real: corresponde a **T-059**;
+- envío real de email: corresponde a **T-051**;
+- métricas de consumo/coste de IA por cliente: coordinar con **T-053**;
+- sección de producto Fidelización y sus flujos finales: **T-050**;
+- descuentos, precios, pagos, renovaciones o antigüedad de pago: requieren un dominio comercial real;
+- reclamos/tickets automáticos: requieren un dominio de soporte/reclamos;
+- referidos exitosos como métrica: requiere trazabilidad explícita de referidos;
+- borrado obligatorio de datos: debe seguir siendo un proceso independiente de Campaigns.
+
+#### Guía para retomar T-065
+
+Cuando alguno de los tickets relacionados necesite ampliar campañas:
+
+1. partir del catálogo de `backend/app/campaigns/capabilities.py`; no crear reglas paralelas;
+2. reutilizar `Campaign`, `eligible()`, preview y tracking existentes;
+3. agregar nuevas fuentes de datos como capacidades verificables, sin aproximaciones semánticas;
+4. mantener `Benefit` limitado a otorgamiento de servicio/duración;
+5. incorporar nuevas acciones reales solo cuando exista su dominio fuente;
+6. extender el laboratorio de 15 campañas con los nuevos casos antes de habilitarlos;
+7. revisar `docs/t065_laboratorio_fidelizacion_15_campanas.md` como punto de partida funcional.
+
+**Motivo del cierre temporal:** el motor actual ya permite validar y construir una base amplia de
+campañas de fidelización con datos existentes. Las siguientes mejoras dependen principalmente de
+dominios que todavía no existen o pertenecen a tickets posteriores; continuar ahora mezclaría
+alcances de T-050/T-051/T-053/T-059 dentro de T-065.
 
 # 3. Orden sugerido de trabajo
 

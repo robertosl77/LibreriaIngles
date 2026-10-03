@@ -33,6 +33,17 @@ class CampaignNotification(str, Enum):
     IN_APP_EMAIL = "IN_APP_EMAIL"
 
 
+class CampaignAction(str, Enum):
+    """Qué hace la campaña. T-065 explicita la acción sin duplicar motores."""
+
+    GRANT_BENEFIT = "GRANT_BENEFIT"
+    # Las siguientes quedan modeladas para evolución futura; capacidades.py decide disponibilidad.
+    SEND_NOTIFICATION = "SEND_NOTIFICATION"
+    GENERATE_REPORT = "GENERATE_REPORT"
+    CREATE_INVITATION = "CREATE_INVITATION"
+    APPLY_DISCOUNT = "APPLY_DISCOUNT"
+
+
 class CampaignSeedMarker(Base):
     """Marca que una campaña ejemplo ya fue creada una vez."""
 
@@ -62,6 +73,13 @@ class Campaign(Base):
         SqlEnum(CampaignTrigger, native_enum=False), default=CampaignTrigger.FIRST_LOGIN, index=True
     )
     eligibility: Mapped[dict] = mapped_column(JSON, default=lambda: {"mode": "ALL", "rules": []})
+    action: Mapped[CampaignAction] = mapped_column(
+        SqlEnum(CampaignAction, native_enum=False, length=40),
+        default=CampaignAction.GRANT_BENEFIT,
+        server_default=CampaignAction.GRANT_BENEFIT.value,
+    )
+    # Configuración reservada para futuras acciones; GRANT_BENEFIT sigue usando benefit_id.
+    action_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     priority: Mapped[int] = mapped_column(Integer, default=100, index=True)
     stackable: Mapped[bool] = mapped_column(Boolean, default=False)
     max_recipients: Mapped[int | None] = mapped_column(Integer, nullable=True)

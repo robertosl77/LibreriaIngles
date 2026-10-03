@@ -112,11 +112,18 @@ export interface PlatformBenefitDraft {
 export type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
 export type CampaignTrigger = 'FIRST_LOGIN' | 'LOGIN' | 'SCHEDULED';
 export type CampaignNotification = 'NONE' | 'IN_APP' | 'EMAIL' | 'IN_APP_EMAIL';
+export type CampaignAction =
+  | 'GRANT_BENEFIT'
+  | 'SEND_NOTIFICATION'
+  | 'GENERATE_REPORT'
+  | 'CREATE_INVITATION'
+  | 'APPLY_DISCOUNT';
 
 export interface CampaignRule {
   field: string;
   operator: string;
   value: string | number | boolean;
+  windowDays?: number | null;
 }
 
 export interface PlatformCampaign {
@@ -125,6 +132,8 @@ export interface PlatformCampaign {
   name: string;
   benefitId: number;
   benefitName: string;
+  action: CampaignAction;
+  actionConfig: Record<string, unknown>;
   serviceId: number | null;
   serviceName: string;
   grantDays: number | null;
@@ -147,6 +156,8 @@ export interface PlatformCampaign {
 export interface PlatformCampaignDraft {
   name: string;
   benefitId: number;
+  action: CampaignAction;
+  actionConfig: Record<string, unknown>;
   trigger: CampaignTrigger;
   rules: CampaignRule[];
   priority: number;
@@ -161,6 +172,8 @@ export interface PlatformCampaignDraft {
 export interface CampaignAssistDraft {
   name: string;
   benefitId: number | null;
+  action: CampaignAction;
+  actionConfig: Record<string, unknown>;
   trigger: CampaignTrigger;
   rules: CampaignRule[];
   priority: number;
@@ -176,6 +189,63 @@ export interface CampaignAssistResult {
   draft: CampaignAssistDraft;
   warnings: string[];
   summary: string;
+}
+
+
+export interface CampaignRuleCapability {
+  key: string;
+  label: string;
+  valueType: 'boolean' | 'integer' | 'number' | 'datetime' | 'enum' | 'string';
+  operators: string[];
+  description: string;
+  options: { value: string; label: string }[];
+  available: boolean;
+  requiresWindow: boolean;
+  windowMinDays: number | null;
+  windowMaxDays: number | null;
+}
+
+export interface CampaignChoiceCapability {
+  key: string;
+  label: string;
+  available: boolean;
+  description: string;
+  requiresBenefit?: boolean;
+}
+
+export interface PlatformCampaignCapabilities {
+  rules: CampaignRuleCapability[];
+  triggers: CampaignChoiceCapability[];
+  actions: CampaignChoiceCapability[];
+  deliveries: CampaignChoiceCapability[];
+}
+
+export interface CampaignAudienceRuleResult {
+  field: string;
+  operator: string;
+  expected: string | number | boolean;
+  actual: string | number | boolean | null;
+  matched: boolean;
+  windowDays?: number | null;
+}
+
+export interface CampaignAudienceSample {
+  accountId: number;
+  email: string;
+  displayName: string | null;
+  eligible: boolean;
+  alreadyReceived: boolean;
+  triggerMatch: boolean;
+  rules: CampaignAudienceRuleResult[];
+}
+
+export interface CampaignAudiencePreview {
+  candidateCount: number;
+  eligibleCount: number;
+  excludedCount: number;
+  sample: CampaignAudienceSample[];
+  warnings: string[];
+  action: CampaignAction;
 }
 
 export type InvitationRecipientMode = 'NAMED' | 'OPEN';
