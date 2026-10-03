@@ -94,25 +94,15 @@ def test_portal_is_only_for_platform_owner(client) -> None:
 
 def test_service_does_not_define_duration_and_manual_grant_uses_benefit(client) -> None:
     owner = login(client, OWNER)
-    created = client.post(
-        f"{API}/platform/services",
-        json={
-            "name": "Servicio sin vigencia",
-            "source": "PLATFORM",
-            "description": "La vigencia no pertenece al servicio.",
-            "active": True,
-        },
-        headers=owner,
-    )
-    assert created.status_code == 201, created.text
-    assert "durationDays" not in created.json()
+    service = _services(client, owner)["INDIVIDUAL_PLATFORM"]
+    assert "durationDays" not in service
 
     alice = _student(client, "benefit-only@example.com")
     benefit = client.post(
         f"{API}/platform/benefits",
         json={
             "name": "Plataforma 12 días",
-            "serviceId": created.json()["id"],
+            "serviceId": service["id"],
             "durationDays": 12,
             "active": True,
         },
@@ -131,7 +121,7 @@ def test_service_does_not_define_duration_and_manual_grant_uses_benefit(client) 
 
     legacy = client.post(
         f"{API}/platform/accounts/{_account_id(client, owner, 'benefit-only@example.com')}/service",
-        json={"serviceId": created.json()["id"], "days": 99},
+        json={"serviceId": service["id"], "days": 99},
         headers=owner,
     )
     assert legacy.status_code == 405
@@ -180,23 +170,18 @@ def test_hybrid_uses_own_first_then_platform(client) -> None:
 
 def test_service_has_no_request_limit_field(client) -> None:
     owner = login(client, OWNER)
-    created = client.post(
-        f"{API}/platform/services",
-        json={"name": "Sin límites de consumo", "source": "PLATFORM"},
-        headers=owner,
-    )
-    assert created.status_code == 201, created.text
-    assert "dailyRequestLimit" not in created.json()
+    service = _services(client, owner)["INDIVIDUAL_PLATFORM"]
 
     listed = client.get(f"{API}/platform/services", headers=owner)
     assert listed.status_code == 200
     assert all("dailyRequestLimit" not in row for row in listed.json())
 
-    legacy = client.post(
-        f"{API}/platform/services",
+    legacy = client.put(
+        f"{API}/platform/services/{service['id']}",
         json={
-            "name": "No debe aceptar límite",
-            "source": "PLATFORM",
+            "name": service["name"],
+            "description": service["description"],
+            "active": service["active"],
             "dailyRequestLimit": 25,
         },
         headers=owner,
@@ -229,14 +214,42 @@ def test_granted_days_expire_back_to_own_keys(client) -> None:
     assert _new_class(client, alice)["generatedBy"] == "Mía"
 
 
-def test_corporate_services_wait_for_companies(client) -> None:
+def test_service_axes_are_fixed_and_new_combinations_require_code(client) -> None:
     owner = login(client, OWNER)
-    response = client.post(
+    service = _services(client, owner)["INDIVIDUAL_PLATFORM"]
+
+    # No se crean nuevas filas/columnas/combinaciones desde el portal.
+    assert client.post(
         f"{API}/platform/services",
         json={"name": "Empresa", "source": "BYOK", "linkType": "CORPORATE"},
         headers=owner,
+    ).status_code == 405
+
+    # Tampoco se puede transformar una combinación existente cambiando sus ejes.
+    changed_axis = client.put(
+        f"{API}/platform/services/{service['id']}",
+        json={
+            "name": service["name"],
+            "description": service["description"],
+            "active": service["active"],
+            "source": "HYBRID",
+        },
+        headers=owner,
     )
-    assert response.status_code == 422
+    assert changed_axis.status_code == 422
+
+    updated = client.put(
+        f"{API}/platform/services/{service['id']}",
+        json={
+            "name": "Individual · Plataforma",
+            "description": "Metadatos editables; combinación fija.",
+            "active": True,
+        },
+        headers=owner,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["source"] == "PLATFORM"
+    assert updated.json()["linkType"] == "PERSONAL"
 
 
 def test_platform_connection_details_are_hidden_from_students(client) -> None:
