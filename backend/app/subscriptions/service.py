@@ -3,7 +3,7 @@
 Modelo (docs/tareas_pendientes_v0_1.md, T-004):
 - VÍNCULO: personal (sin empresa) o corporativo (vía una empresa). Se deduce, no se elige.
 - FUENTE DE IA: BYOK (propias keys) | PLATAFORMA (keys de sr.macros) | HÍBRIDO (propias primero).
-- SERVICIO = vínculo + fuente + capacidades/límites. No define vigencia.
+- SERVICIO = vínculo + fuente + metadatos. No define vigencia ni límites de consumo.
 - BENEFICIO = servicio + duración. Es la única capa que define por cuánto tiempo se otorga.
   Lo aplica sr.macros manualmente, una campaña, una invitación o un pago futuro.
 
@@ -158,6 +158,11 @@ def effective_service(db: Session, account: Account) -> EffectiveService:
     ).first()
     if row is not None:
         subscription, plan = row
+        benefit_name = None
+        if subscription.benefit_id is not None:
+            from app.benefits.models import Benefit
+            benefit = db.get(Benefit, subscription.benefit_id)
+            benefit_name = benefit.name if benefit is not None else None
         return EffectiveService(
             name=plan.name,
             source=plan.ai_source,
@@ -167,6 +172,8 @@ def effective_service(db: Session, account: Account) -> EffectiveService:
             subscription_id=subscription.id,
             expires_at=_as_utc(subscription.expires_at),
             origin=subscription.origin,
+            benefit_id=subscription.benefit_id,
+            benefit_name=benefit_name,
         )
 
     expired = db.execute(
