@@ -158,6 +158,26 @@ export interface PlatformCampaignDraft {
   message: string | null;
 }
 
+export interface CampaignAssistDraft {
+  name: string;
+  benefitId: number | null;
+  trigger: CampaignTrigger;
+  rules: CampaignRule[];
+  priority: number;
+  stackable: boolean;
+  maxRecipients: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  notification: CampaignNotification;
+  message: string | null;
+}
+
+export interface CampaignAssistResult {
+  draft: CampaignAssistDraft;
+  warnings: string[];
+  summary: string;
+}
+
 export type InvitationRecipientMode = 'NAMED' | 'OPEN';
 export type InvitationStatus = 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'EXHAUSTED';
 
