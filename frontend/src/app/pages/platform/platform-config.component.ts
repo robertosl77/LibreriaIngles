@@ -1,7 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
+import { AiSourcesInfoComponent } from './ai-sources-info.component';
 import { BenefitsAdminComponent } from './benefits-admin.component';
 import { CampaignsAdminComponent } from './campaigns-admin.component';
 import { InvitationsAdminComponent } from './invitations-admin.component';
@@ -12,6 +13,7 @@ import { ServicesAdminComponent } from './services-admin.component';
   imports: [
     ConnectionsManagerComponent,
     CollapseCardComponent,
+    AiSourcesInfoComponent,
     ServicesAdminComponent,
     BenefitsAdminComponent,
     CampaignsAdminComponent,
@@ -23,15 +25,20 @@ import { ServicesAdminComponent } from './services-admin.component';
         <div>
           <h2>Configuración</h2>
           <p class="muted small">
-            Cómo está configurada la plataforma: servicios, beneficios, cuentas, campañas,
+            Cómo está configurada la plataforma: fuentes, servicios, beneficios, cuentas, campañas,
             invitaciones y conexiones.
           </p>
         </div>
       </div>
 
-      <app-services-admin />
+      <app-ai-sources-info />
 
-      <app-benefits-admin />
+      <app-services-admin
+        [refreshVersion]="benefitRefreshVersion()"
+        (changed)="configurationChanged()"
+      />
+
+      <app-benefits-admin (changed)="benefitChanged()" />
 
       <app-campaigns-admin />
 
@@ -54,4 +61,14 @@ import { ServicesAdminComponent } from './services-admin.component';
     .subhead p { margin-top: 0.25rem; }
   `
 })
-export class PlatformConfigComponent {}
+export class PlatformConfigComponent {
+  readonly benefitRefreshVersion = signal(0);
+
+  benefitChanged(): void {
+    this.benefitRefreshVersion.update((value) => value + 1);
+  }
+
+  configurationChanged(): void {
+    // Punto único para futuros refrescos cruzados entre componentes de Configuración.
+  }
+}
