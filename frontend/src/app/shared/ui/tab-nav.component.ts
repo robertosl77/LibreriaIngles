@@ -28,7 +28,11 @@ export interface TabNavItem {
       gap: 0.2rem;
       border-bottom: 1px solid var(--border);
       overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
     }
+
+    .tab-nav::-webkit-scrollbar { display: none; }
 
     .tab-nav a {
       padding: 0.55rem 0.85rem 0.65rem;
