@@ -294,3 +294,36 @@ def test_benefit_cannot_be_deleted_while_invitation_is_redeemable(client) -> Non
     )
     assert listed["activeInvitations"] == 0
     assert listed["canDelete"] is True
+
+
+def test_cancelling_invitation_stops_future_claims_but_keeps_redeemed_benefit(client) -> None:
+    owner, services = _setup(client)
+    benefit = _benefit(
+        client,
+        owner,
+        services["INDIVIDUAL_PLATFORM"]["id"],
+        name="Invitación 14 días",
+        days=14,
+    )
+    invitation = _invite(client, owner, benefit["id"], maxRedemptions=2)
+
+    first = _login_with_invite(client, "redeemed-before-cancel@example.com", invitation["token"])
+    before = client.get(f"{API}/me", headers=first).json()["service"]
+    assert before["origin"] == "INVITATION"
+    assert before["benefitName"] == "Invitación 14 días"
+    assert before["expiresAt"] is not None
+
+    cancelled = client.post(
+        f"{API}/platform/invitations/{invitation['id']}/cancel",
+        headers=owner,
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["status"] == "CANCELLED"
+
+    after = client.get(f"{API}/me", headers=first).json()["service"]
+    assert after["origin"] == "INVITATION"
+    assert after["benefitName"] == "Invitación 14 días"
+    assert after["expiresAt"] == before["expiresAt"]
+
+    second = _login_with_invite(client, "after-cancel@example.com", invitation["token"])
+    assert client.get(f"{API}/me", headers=second).json()["service"]["origin"] is None
