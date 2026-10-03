@@ -3,7 +3,7 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
 from app.benefits.models import Benefit, utcnow
@@ -13,24 +13,58 @@ from app.core.deps import DbSession
 from app.invitations.models import Invitation, InvitationStatus
 from app.invitations.service import refresh_status
 from app.platform.api import PlatformOwner
-from app.subscriptions.models import Plan, ServiceLinkType, Subscription, SubscriptionStatus
+from app.subscriptions.models import AISource, Plan, ServiceLinkType, Subscription, SubscriptionStatus
 
 router = APIRouter(prefix="/platform/benefits", tags=["platform"])
 
 
 class BenefitIn(BaseModel):
     name: str = Field(min_length=2, max_length=120)
-    serviceId: int
+    service: ServiceLinkType | None = None
+    source: AISource | None = None
+    # Compatibilidad temporal con consumidores anteriores; la UI nueva no lo usa.
+    serviceId: int | None = None
     durationDays: int | None = Field(default=None, ge=1, le=3650)
     active: bool = True
 
+    @model_validator(mode="after")
+    def validate_axes(self):
+        has_axes = self.service is not None or self.source is not None
+        if has_axes and (self.service is None or self.source is None):
+            raise ValueError("Servicio y fuente deben seleccionarse juntos.")
+        if not has_axes and self.serviceId is None:
+            raise ValueError("Debe seleccionarse servicio y fuente.")
+        return self
 
-def _plan(db: DbSession, plan_id: int) -> Plan:
-    plan = db.get(Plan, plan_id)
+
+SERVICE_LABELS = {
+    ServiceLinkType.PERSONAL: "Individual",
+    ServiceLinkType.CORPORATE: "Empresa",
+}
+
+
+def _plan(db: DbSession, payload: BenefitIn) -> Plan:
+    if payload.service is not None and payload.source is not None:
+        if payload.service != ServiceLinkType.PERSONAL:
+            raise HTTPException(422, "Los beneficios corporativos llegan con la etapa de empresas.")
+        plan = db.scalar(
+            select(Plan).where(
+                Plan.link_type == payload.service,
+                Plan.ai_source == payload.source,
+            )
+        )
+    else:
+        plan = db.get(Plan, payload.serviceId) if payload.serviceId else None
+
     if plan is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servicio inexistente.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Combinación de servicio y fuente inexistente.")
     if plan.link_type != ServiceLinkType.PERSONAL:
         raise HTTPException(422, "Los beneficios corporativos llegan con la etapa de empresas.")
+    if payload.active and not plan.active:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "La combinación de servicio y fuente está deshabilitada.",
+        )
     return plan
 
 
@@ -83,7 +117,12 @@ def _out(db: DbSession, benefit: Benefit) -> dict:
         "code": benefit.code,
         "name": benefit.name,
         "serviceId": benefit.plan_id,
-        "serviceName": plan.name if plan else "Servicio eliminado",
+        "combinationId": benefit.plan_id,
+        "service": plan.link_type.value if plan else None,
+        "serviceName": SERVICE_LABELS.get(plan.link_type, plan.link_type.value) if plan else "Servicio eliminado",
+        "source": plan.ai_source.value if plan else None,
+        "combinationName": plan.name if plan else "Combinación eliminada",
+        "combinationActive": bool(plan.active) if plan else False,
         "durationDays": benefit.duration_days,
         "conflictPolicy": benefit.conflict_policy.value,
         "active": benefit.active,
@@ -95,9 +134,9 @@ def _out(db: DbSession, benefit: Benefit) -> dict:
 
 
 def _apply(benefit: Benefit, payload: BenefitIn, db: DbSession) -> None:
-    _plan(db, payload.serviceId)
+    plan = _plan(db, payload)
     benefit.name = payload.name.strip()
-    benefit.plan_id = payload.serviceId
+    benefit.plan_id = plan.id
     benefit.duration_days = payload.durationDays
     benefit.active = payload.active
 
@@ -116,10 +155,11 @@ def list_benefits(_: PlatformOwner, db: DbSession) -> list[dict]:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_benefit(payload: BenefitIn, owner: PlatformOwner, db: DbSession) -> dict:
+    plan = _plan(db, payload)
     benefit = Benefit(
         code=f"BENEFIT_{uuid4().hex.upper()}",
         name="",
-        plan_id=payload.serviceId,
+        plan_id=plan.id,
         created_by_account_id=owner.id,
     )
     _apply(benefit, payload, db)
