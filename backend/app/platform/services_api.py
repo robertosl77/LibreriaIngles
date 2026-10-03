@@ -172,6 +172,7 @@ def grant_benefit(
         benefit is None
         or benefit.organization_id is not None
         or not benefit.active
+        or benefit.deleted_at is not None
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Beneficio inexistente o inactivo.")
 
