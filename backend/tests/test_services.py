@@ -214,7 +214,7 @@ def test_granted_days_expire_back_to_own_keys(client) -> None:
     assert _new_class(client, alice)["generatedBy"] == "Mía"
 
 
-def test_service_axes_are_fixed_and_new_combinations_require_code(client) -> None:
+def test_service_axes_are_fixed_and_only_combination_state_is_configurable(client) -> None:
     owner = login(client, OWNER)
     service = _services(client, owner)["INDIVIDUAL_PLATFORM"]
 
@@ -228,23 +228,14 @@ def test_service_axes_are_fixed_and_new_combinations_require_code(client) -> Non
     # Tampoco se puede transformar una combinación existente cambiando sus ejes.
     changed_axis = client.put(
         f"{API}/platform/services/{service['id']}",
-        json={
-            "name": service["name"],
-            "description": service["description"],
-            "active": service["active"],
-            "source": "HYBRID",
-        },
+        json={"active": service["active"], "source": "HYBRID"},
         headers=owner,
     )
     assert changed_axis.status_code == 422
 
     updated = client.put(
         f"{API}/platform/services/{service['id']}",
-        json={
-            "name": "Individual · Plataforma",
-            "description": "Metadatos editables; combinación fija.",
-            "active": True,
-        },
+        json={"active": True},
         headers=owner,
     )
     assert updated.status_code == 200, updated.text
@@ -504,3 +495,68 @@ def test_benefit_cannot_be_deleted_with_current_beneficiary(client) -> None:
     assert listed["activeBeneficiaries"] == 0
     assert listed["canDelete"] is True
     assert client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner).status_code == 204
+
+
+def test_combination_cannot_be_disabled_while_active_benefit_or_account_uses_it(client) -> None:
+    owner = login(client, OWNER)
+    service = _services(client, owner)["INDIVIDUAL_PLATFORM"]
+
+    benefit = client.post(
+        f"{API}/platform/benefits",
+        headers=owner,
+        json={
+            "name": "Combinación protegida",
+            "service": "PERSONAL",
+            "source": "PLATFORM",
+            "durationDays": 30,
+            "active": True,
+        },
+    )
+    assert benefit.status_code == 201, benefit.text
+
+    blocked_by_benefit = client.put(
+        f"{API}/platform/services/{service['id']}",
+        headers=owner,
+        json={"active": False},
+    )
+    assert blocked_by_benefit.status_code == 409
+    assert "beneficio" in blocked_by_benefit.json()["detail"]
+
+    _student(client, "combo-protected@example.com")
+    account_id = _account_id(client, owner, "combo-protected@example.com")
+    assert client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        headers=owner,
+        json={"benefitId": benefit.json()["id"]},
+    ).status_code == 200
+
+    # El beneficio puede quedar inactivo para futuros usos, pero la cuenta vigente sigue protegiendo la combinación.
+    inactive = client.put(
+        f"{API}/platform/benefits/{benefit.json()['id']}",
+        headers=owner,
+        json={
+            "name": "Combinación protegida",
+            "service": "PERSONAL",
+            "source": "PLATFORM",
+            "durationDays": 30,
+            "active": False,
+        },
+    )
+    assert inactive.status_code == 200, inactive.text
+
+    blocked_by_account = client.put(
+        f"{API}/platform/services/{service['id']}",
+        headers=owner,
+        json={"active": False},
+    )
+    assert blocked_by_account.status_code == 409
+    assert "cuenta" in blocked_by_account.json()["detail"]
+
+    assert client.delete(f"{API}/platform/accounts/{account_id}/service", headers=owner).status_code == 200
+    disabled = client.put(
+        f"{API}/platform/services/{service['id']}",
+        headers=owner,
+        json={"active": False},
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["active"] is False
