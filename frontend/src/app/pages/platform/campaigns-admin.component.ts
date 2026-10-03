@@ -540,11 +540,10 @@ export class CampaignsAdminComponent implements OnInit {
       this.capabilitiesError.set('');
     } catch (err) {
       this.capabilities.set(null);
+      const detail = errorMessage(err, 'error desconocido');
       this.capabilitiesError.set(
-        errorMessage(
-          err,
-          'No se pudieron cargar las capacidades del motor. Reiniciá el backend y volvé a cargar esta pantalla.'
-        )
+        'No se pudieron cargar las capacidades del motor. Verificá que estés usando esta misma rama, ' +
+        'reiniciá el backend y recargá la pantalla. Detalle: ' + detail
       );
     } finally {
       this.loading.set(false);
