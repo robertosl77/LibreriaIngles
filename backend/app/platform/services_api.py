@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 
-from app.accounts.models import Account, PlatformRole
+from app.accounts.models import Account, AccountStatus, AccountType, PlatformRole
 from app.accounts.purge import purge_account_completely
 from app.ai.models import AIConnection, AIConnectionOwnerType, utcnow
 from app.ai.service import LIMIT_WINDOW, platform_requests
@@ -59,6 +59,28 @@ def _combination_blockers(db: DbSession, plan: Plan) -> dict[str, int]:
             (Subscription.expires_at.is_(None) | (Subscription.expires_at > now)),
         )
     ) or 0
+
+    # Sin un beneficio/suscripción vigente, una cuenta personal usa Individual × BYOK
+    # como combinación efectiva por defecto. Esas cuentas también protegen la combinación.
+    if plan.link_type == ServiceLinkType.PERSONAL and plan.ai_source == AISource.BYOK:
+        has_active_subscription = (
+            select(Subscription.id)
+            .where(
+                Subscription.account_id == Account.id,
+                Subscription.status == SubscriptionStatus.ACTIVE,
+                (Subscription.expires_at.is_(None) | (Subscription.expires_at > now)),
+            )
+            .exists()
+        )
+        default_byok_accounts = db.scalar(
+            select(func.count(Account.id)).where(
+                Account.account_type == AccountType.PERSONAL,
+                Account.status == AccountStatus.ACTIVE,
+                Account.platform_role.is_(None),
+                ~has_active_subscription,
+            )
+        ) or 0
+        active_accounts += int(default_byok_accounts)
     active_benefits = db.scalar(
         select(func.count(Benefit.id)).where(
             Benefit.plan_id == plan.id,
