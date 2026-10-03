@@ -16,8 +16,11 @@ from app.ai.models import AIConnection, AIConnectionOwnerType, utcnow
 from app.ai.service import LIMIT_WINDOW, platform_requests
 from app.benefits.models import Benefit
 from app.benefits.service import apply_service_benefit
+from app.campaigns.models import Campaign, CampaignStatus
 from app.core.config import settings
 from app.core.deps import DbSession
+from app.invitations.models import Invitation, InvitationStatus
+from app.invitations.service import refresh_status
 from app.platform.api import PlatformOwner
 from app.subscriptions.models import (
     AISource,
@@ -35,26 +38,65 @@ ACCOUNTS_PAGE = 50
 
 
 class ServiceUpdateIn(BaseModel):
-    """Solo metadatos editables: vínculo y fuente son ejes fijos del modelo de negocio."""
+    """Estado de una combinación fija Servicio × Fuente."""
 
-    # No aceptar campos antiguos ni intentos de cambiar los ejes fijos silenciosamente.
+    # No aceptar intentos de cambiar servicio/fuente ni campos antiguos silenciosamente.
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(min_length=2, max_length=120)
-    description: str | None = Field(default=None, max_length=300)
-    active: bool = True
+    active: bool
 
 
 class GrantBenefitIn(BaseModel):
     benefitId: int
 
 
-def _service_out(db, plan: Plan) -> dict:
-    holders = db.scalar(
+def _combination_blockers(db: DbSession, plan: Plan) -> dict[str, int]:
+    now = utcnow()
+    active_accounts = db.scalar(
         select(func.count(Subscription.id)).where(
-            Subscription.plan_id == plan.id, Subscription.status == SubscriptionStatus.ACTIVE
+            Subscription.plan_id == plan.id,
+            Subscription.status == SubscriptionStatus.ACTIVE,
+            (Subscription.expires_at.is_(None) | (Subscription.expires_at > now)),
         )
+    ) or 0
+    active_benefits = db.scalar(
+        select(func.count(Benefit.id)).where(
+            Benefit.plan_id == plan.id,
+            Benefit.active.is_(True),
+            Benefit.deleted_at.is_(None),
+        )
+    ) or 0
+    active_campaigns = db.scalar(
+        select(func.count(Campaign.id))
+        .join(Benefit, Benefit.id == Campaign.benefit_id)
+        .where(
+            Benefit.plan_id == plan.id,
+            Campaign.deleted_at.is_(None),
+            Campaign.status.in_([CampaignStatus.ACTIVE, CampaignStatus.PAUSED]),
+        )
+    ) or 0
+
+    invitations = db.scalars(
+        select(Invitation)
+        .join(Benefit, Benefit.id == Invitation.benefit_id)
+        .where(Benefit.plan_id == plan.id)
+    ).all()
+    for invitation in invitations:
+        refresh_status(db, invitation, now=now)
+    active_invitations = sum(
+        1 for invitation in invitations if invitation.status == InvitationStatus.ACTIVE
     )
+
+    return {
+        "activeAccounts": int(active_accounts),
+        "activeBenefits": int(active_benefits),
+        "activeCampaigns": int(active_campaigns),
+        "activeInvitations": int(active_invitations),
+    }
+
+
+def _service_out(db: DbSession, plan: Plan) -> dict:
+    blockers = _combination_blockers(db, plan)
     return {
         "id": plan.id,
         "code": plan.code,
@@ -63,13 +105,28 @@ def _service_out(db, plan: Plan) -> dict:
         "linkType": plan.link_type.value,
         "description": plan.description,
         "active": plan.active,
-        "activeAccounts": int(holders or 0),
+        **blockers,
+        "canDisable": not any(blockers.values()),
     }
 
 
-def _apply(plan: Plan, payload: ServiceUpdateIn) -> None:
-    plan.name = payload.name.strip()
-    plan.description = (payload.description or "").strip() or None
+def _apply(plan: Plan, payload: ServiceUpdateIn, db: DbSession) -> None:
+    if plan.active and not payload.active:
+        blockers = _combination_blockers(db, plan)
+        if any(blockers.values()):
+            parts = []
+            if blockers["activeAccounts"]:
+                parts.append(f'{blockers["activeAccounts"]} cuenta(s) vigente(s)')
+            if blockers["activeBenefits"]:
+                parts.append(f'{blockers["activeBenefits"]} beneficio(s) activo(s)')
+            if blockers["activeCampaigns"]:
+                parts.append(f'{blockers["activeCampaigns"]} campaña(s) activa(s)/pausada(s)')
+            if blockers["activeInvitations"]:
+                parts.append(f'{blockers["activeInvitations"]} invitación(es) vigente(s)')
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "No se puede deshabilitar la combinación mientras tenga " + ", ".join(parts) + ".",
+            )
     plan.active = payload.active
 
 
@@ -78,7 +135,9 @@ def list_services(_: PlatformOwner, db: DbSession) -> list[dict]:
     seed_services(db)
     db.commit()
     plans = db.scalars(select(Plan).order_by(Plan.id)).all()
-    return [_service_out(db, plan) for plan in plans]
+    rows = [_service_out(db, plan) for plan in plans]
+    db.commit()
+    return rows
 
 
 @router.put("/services/{service_id}")
@@ -86,7 +145,7 @@ def update_service(service_id: int, payload: ServiceUpdateIn, _: PlatformOwner, 
     plan = db.get(Plan, service_id)
     if plan is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Servicio inexistente.")
-    _apply(plan, payload)
+    _apply(plan, payload, db)
     db.commit()
     return _service_out(db, plan)
 
