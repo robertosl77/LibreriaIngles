@@ -65,7 +65,7 @@ export class PlatformComponent implements OnDestroy {
 
   private descriptionFor(url: string): string {
     return url.includes('/configuracion')
-      ? 'Configuración de fuentes, servicios, beneficios, cuentas, campañas, invitaciones y conexiones.'
-      : 'Información general, estadísticas y estado actual de la plataforma.';
+      ? 'Configuración de fuentes, servicios, combinaciones, beneficios, campañas, invitaciones y conexiones.'
+      : 'Información general, estadísticas, cuentas y estado actual de la plataforma.';
   }
 }
