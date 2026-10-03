@@ -577,3 +577,38 @@ def test_campaign_assist_is_owner_only(client) -> None:
         json={"description": "Crear una campaña de bienvenida para usuarios nuevos."},
     )
     assert response.status_code == 403
+
+
+def test_campaign_assist_warns_instead_of_faking_paid_tenure_or_discount(client) -> None:
+    owner, _ = _owner_and_services(client)
+    platform = client.post(
+        f"{API}/ai/connections",
+        headers=owner,
+        json={
+            "provider": "MOCK",
+            "name": "Asistente plataforma",
+            "model": "mock",
+            "priority": 1,
+            "scope": "platform",
+        },
+    )
+    assert platform.status_code == 201, platform.text
+
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={
+            "description": (
+                "Para quienes llegan a un año de servicio pago, bonificar por tres meses "
+                "un 20% cuando vuelvan a ingresar."
+            )
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert not any(
+        rule["field"] == "DAYS_SINCE_CREATED" for rule in body["draft"]["rules"]
+    )
+    joined = " ".join(body["warnings"]).lower()
+    assert "descuento" in joined or "porcentaje" in joined
+    assert "suscripción" in joined or "pago" in joined
