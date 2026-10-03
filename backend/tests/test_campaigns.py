@@ -399,3 +399,53 @@ def test_deleted_seed_welcome_without_recipients_is_not_recreated(client) -> Non
     assert client.post(f"{API}/platform/campaigns/{welcome['id']}/finish", headers=owner).status_code == 200
     assert client.delete(f"{API}/platform/campaigns/{welcome['id']}", headers=owner).status_code == 204
     assert all(row["code"] != "WELCOME_PLATFORM" for row in _campaigns(client, owner))
+
+
+def test_benefit_cannot_be_deleted_while_campaign_is_active_or_paused(client) -> None:
+    owner, services = _owner_and_services(client)
+    service_id = services["INDIVIDUAL_PLATFORM"]["id"]
+    benefit = _benefit(client, owner, service_id, name="Beneficio campaña vigente", days=15)
+    campaign = client.post(
+        f"{API}/platform/campaigns",
+        headers=owner,
+        json={
+            "name": "Campaña vigente",
+            "benefitId": benefit["id"],
+            "trigger": "FIRST_LOGIN",
+            "rules": [],
+            "priority": 10,
+            "stackable": False,
+            "notification": "NONE",
+        },
+    ).json()
+
+    assert client.post(
+        f"{API}/platform/campaigns/{campaign['id']}/activate", headers=owner
+    ).status_code == 200
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeCampaigns"] == 1
+    assert listed["canDelete"] is False
+    assert client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner).status_code == 409
+
+    assert client.post(
+        f"{API}/platform/campaigns/{campaign['id']}/pause", headers=owner
+    ).status_code == 200
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeCampaigns"] == 1
+    assert listed["canDelete"] is False
+
+    assert client.post(
+        f"{API}/platform/campaigns/{campaign['id']}/finish", headers=owner
+    ).status_code == 200
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeCampaigns"] == 0
+    assert listed["canDelete"] is True
