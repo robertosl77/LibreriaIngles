@@ -173,17 +173,9 @@ function emptyDraft(): PlatformServiceDraft {
                   @if (a.isPlatformOwner) {
                     <span class="muted small">Usa propias + plataforma</span>
                   } @else {
-                    <button class="btn btn-sm" type="button" (click)="startGrant(a)">
-                      {{ a.service.granted ? 'Cambiar beneficio' : 'Otorgar beneficio' }}
+                    <button class="btn btn-sm" type="button" (click)="toggleManage(a)">
+                      {{ grantingId() === a.id ? 'Cerrar' : 'Administrar' }}
                     </button>
-                    @if (a.service.granted) {
-                      <button class="btn btn-sm btn-danger" type="button" (click)="revoke(a)"
-                        [disabled]="busyId() === a.id">Quitar</button>
-                    }
-                    @if (a.devPurgeAllowed) {
-                      <button class="btn btn-sm btn-danger" type="button" (click)="purge(a)"
-                        [disabled]="busyId() === a.id">Eliminar cuenta (DEV)</button>
-                    }
                   }
                 </div>
               </div>
@@ -200,27 +192,39 @@ function emptyDraft(): PlatformServiceDraft {
               </div>
 
               @if (grantingId() === a.id) {
-                <form class="grant" (ngSubmit)="grant(a)">
-                  <label class="field benefit-field">
-                    Beneficio
-                    <select class="input" name="gBenefit" [(ngModel)]="grantBenefitId">
-                      @for (benefit of grantableBenefits(); track benefit.id) {
-                        <option [ngValue]="benefit.id">{{ benefit.name }}</option>
-                      }
-                    </select>
-                  </label>
-                  <div class="grant-note muted small">
-                    Al confirmar, este beneficio reemplaza el beneficio vigente de la cuenta.
-                    La asignación anterior queda conservada en el historial.
+                <div class="account-admin">
+                  <div class="admin-benefit">
+                    <label class="field benefit-field">
+                      Beneficio
+                      <select class="input" name="gBenefit{{ a.id }}" [(ngModel)]="grantBenefitId">
+                        @for (benefit of grantableBenefits(); track benefit.id) {
+                          <option [ngValue]="benefit.id">{{ benefit.name }}</option>
+                        }
+                      </select>
+                    </label>
+                    <p class="muted small">
+                      Cambiar reemplaza el beneficio vigente. La asignación anterior queda en el historial.
+                    </p>
                   </div>
-                  <div class="row grant-actions">
-                    <button class="btn btn-primary btn-sm" type="submit"
+
+                  <div class="admin-actions">
+                    <button class="btn btn-primary btn-sm" type="button" (click)="grant(a)"
                       [disabled]="busyId() === a.id || !grantBenefitId">
-                      @if (busyId() === a.id) { <span class="spinner"></span> } Confirmar
+                      @if (busyId() === a.id) { <span class="spinner"></span> }
+                      {{ a.service.granted ? 'Cambiar beneficio' : 'Otorgar beneficio' }}
                     </button>
-                    <button class="btn btn-sm" type="button" (click)="grantingId.set(null)">Cancelar</button>
+                    <button class="btn btn-sm btn-danger" type="button" (click)="revoke(a)"
+                      [disabled]="busyId() === a.id || !a.service.granted">
+                      Quitar beneficio
+                    </button>
+                    @if (a.devPurgeAllowed) {
+                      <button class="btn btn-sm btn-danger" type="button" (click)="purge(a)"
+                        [disabled]="busyId() === a.id">
+                        Eliminar cuenta (DEV)
+                      </button>
+                    }
                   </div>
-                </form>
+                </div>
               }
             </article>
           }
@@ -239,7 +243,7 @@ function emptyDraft(): PlatformServiceDraft {
     }
     .section-head h2, .section-head p { margin: 0; }
     .section-head p { margin-top: 0.3rem; }
-    .edit, .grant {
+    .edit, .account-admin {
       padding: 0.8rem;
       border: 1px solid var(--border);
       border-radius: 0.6rem;
@@ -292,15 +296,21 @@ function emptyDraft(): PlatformServiceDraft {
       color: var(--muted);
       font-size: 0.82rem;
     }
-    .grant {
+    .account-admin {
       display: grid;
-      grid-template-columns: minmax(18rem, 1fr) minmax(16rem, 1fr) auto;
-      gap: 0.8rem;
+      grid-template-columns: minmax(18rem, 1fr) auto;
+      gap: 1rem;
       align-items: end;
       margin-top: 0.7rem;
     }
-    .grant-note { align-self: center; }
-    .grant-actions { justify-content: flex-end; flex-wrap: nowrap; }
+    .admin-benefit p { margin: 0.35rem 0 0; }
+    .admin-actions {
+      display: flex;
+      gap: 0.45rem;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      align-items: center;
+    }
 
     @media (max-width: 980px) {
       .account-line {
@@ -308,8 +318,8 @@ function emptyDraft(): PlatformServiceDraft {
         gap: 0.45rem;
       }
       .account-actions { justify-content: flex-start; flex-wrap: wrap; }
-      .grant { grid-template-columns: 1fr; }
-      .grant-actions { justify-content: flex-start; }
+      .account-admin { grid-template-columns: 1fr; }
+      .admin-actions { justify-content: flex-start; }
     }
   `
 })
@@ -416,7 +426,11 @@ export class ServicesAdminComponent implements OnInit, OnChanges {
     }
   }
 
-  startGrant(account: PlatformAccount): void {
+  toggleManage(account: PlatformAccount): void {
+    if (this.grantingId() === account.id) {
+      this.grantingId.set(null);
+      return;
+    }
     const currentBenefit = account.service.benefitId
       ? this.grantableBenefits().find((benefit) => benefit.id === account.service.benefitId)
       : undefined;
