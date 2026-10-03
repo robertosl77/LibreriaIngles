@@ -68,9 +68,7 @@ function isoDate(value: string): string | null {
               Beneficio
               <select class="input" name="iBenefit" [(ngModel)]="form.benefitId" required>
                 @for (benefit of activeBenefits(); track benefit.id) {
-                  <option [ngValue]="benefit.id">
-                    {{ benefit.name }} · {{ benefit.combinationName }}
-                  </option>
+                  <option [ngValue]="benefit.id">{{ benefit.name }}</option>
                 }
               </select>
             </label>
@@ -139,8 +137,7 @@ function isoDate(value: string): string | null {
                   <span class="chip">{{ invite.recipientMode === 'NAMED' ? 'Nominada' : 'Abierta' }}</span>
                 </div>
                 <div class="small">
-                  <strong>{{ invite.benefitName }}</strong> · {{ invite.serviceName }}
-                  @if (invite.durationDays) { · {{ invite.durationDays }} días }
+                  <strong>{{ invite.benefitName }}</strong>
                 </div>
                 @if (invite.recipientMode === 'NAMED') {
                   <div class="small">
