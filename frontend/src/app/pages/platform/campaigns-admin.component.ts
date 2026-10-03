@@ -371,7 +371,31 @@ function isoDate(value: string): string | null {
   styles: `
     :host { display: contents; }
     .collapse-actions { display: flex; justify-content: flex-end; margin-bottom: 0.8rem; }
-    .editor, .rules { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
+    .creator, .editor, .rules { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
+    .creator { margin-bottom: 0.8rem; }
+    .creator-head { align-items: flex-start; }
+    .creation-options, .template-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.65rem;
+    }
+    .choice-card, .template-card {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      text-align: left;
+      padding: 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+    }
+    .choice-card:hover, .template-card:hover { background: var(--bg); }
+    .choice-card span, .template-card span { color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
+    .ai-description { min-height: 6.5rem; resize: vertical; }
+    .draft-banner { margin-bottom: 0.8rem; }
     .spread { justify-content: space-between; }
     .check-row { display: flex; gap: 0.5rem; align-items: flex-start; }
     .rule-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(6rem, 0.7fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
@@ -384,6 +408,7 @@ function isoDate(value: string): string | null {
     .dim .campaign-main { opacity: 0.65; }
     .tiny { font-size: 0.76rem; }
     @media (max-width: 760px) {
+      .creation-options, .template-grid { grid-template-columns: 1fr; }
       .rule-row { grid-template-columns: 1fr; }
       .operator { text-align: left; }
       .campaign { flex-direction: column; }
