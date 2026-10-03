@@ -9,6 +9,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
         type="button"
         [class.btn-primary]="value"
         [attr.aria-pressed]="value"
+        [disabled]="disabled"
         (click)="set(true)">
         Activo
       </button>
@@ -17,6 +18,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
         type="button"
         [class.selected-off]="!value"
         [attr.aria-pressed]="!value"
+        [disabled]="disabled"
         (click)="set(false)">
         Inactivo
       </button>
@@ -42,6 +44,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 })
 export class ActiveToggleComponent {
   @Input() value = true;
+  @Input() disabled = false;
   @Output() readonly valueChange = new EventEmitter<boolean>();
 
   set(next: boolean): void {
