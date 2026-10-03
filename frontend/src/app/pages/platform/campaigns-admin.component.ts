@@ -430,6 +430,9 @@ export class CampaignsAdminComponent implements OnInit {
 
   readonly campaigns = signal<PlatformCampaign[]>([]);
   readonly benefits = signal<PlatformBenefit[]>([]);
+  readonly capabilities = signal<PlatformCampaignCapabilities | null>(null);
+  readonly audiencePreview = signal<CampaignAudiencePreview | null>(null);
+  readonly previewLoading = signal(false);
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly editingId = signal<number | null>(null);
@@ -453,12 +456,14 @@ export class CampaignsAdminComponent implements OnInit {
   async load(): Promise<void> {
     this.loading.set(true);
     try {
-      const [campaigns, benefits] = await Promise.all([
+      const [campaigns, benefits, capabilities] = await Promise.all([
         firstValueFrom(this.api.platformCampaigns()),
-        firstValueFrom(this.api.platformBenefits())
+        firstValueFrom(this.api.platformBenefits()),
+        firstValueFrom(this.api.platformCampaignCapabilities())
       ]);
       this.campaigns.set(campaigns);
       this.benefits.set(benefits);
+      this.capabilities.set(capabilities);
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
@@ -470,6 +475,8 @@ export class CampaignsAdminComponent implements OnInit {
     this.editingId.set(null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.audiencePreview.set(null);
+    this.audiencePreview.set(null);
     this.aiDescription = '';
     this.newMode.set('choose');
   }
@@ -478,6 +485,7 @@ export class CampaignsAdminComponent implements OnInit {
     this.form = emptyForm(this.activeBenefits()[0]?.id ?? null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.audiencePreview.set(null);
     this.newMode.set(null);
     this.editingId.set(0);
   }
@@ -486,6 +494,8 @@ export class CampaignsAdminComponent implements OnInit {
     this.form = {
       name: template.name,
       benefitId: null,
+      action: 'GRANT_BENEFIT',
+      actionConfig: {},
       trigger: template.trigger,
       rules: template.rules.map((rule) => ({ ...rule })),
       priority: template.priority,
@@ -523,6 +533,8 @@ export class CampaignsAdminComponent implements OnInit {
       this.form = {
         name: result.draft.name,
         benefitId: result.draft.benefitId,
+        action: result.draft.action ?? 'GRANT_BENEFIT',
+        actionConfig: result.draft.actionConfig ?? {},
         trigger: result.draft.trigger,
         rules: result.draft.rules.map((rule) => ({
           ...rule,
@@ -554,6 +566,8 @@ export class CampaignsAdminComponent implements OnInit {
     this.form = {
       name: campaign.name,
       benefitId: campaign.benefitId,
+      action: campaign.action ?? 'GRANT_BENEFIT',
+      actionConfig: campaign.actionConfig ?? {},
       trigger: campaign.trigger,
       rules: campaign.rules.map((rule) => ({
         ...rule,
