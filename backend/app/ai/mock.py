@@ -117,14 +117,22 @@ class MockProvider:
         if source:
             rules.append({"field": "SERVICE_SOURCE", "operator": "EQ", "value": source})
 
-        if "año" in lower or "365" in lower:
+        payment_tenure = any(
+            phrase in lower
+            for phrase in ("servicio pago", "servicio pagado", "membresía paga", "membresia paga")
+        )
+        if ("año" in lower or "365" in lower) and not payment_tenure:
             rules.append({"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365})
 
         warnings = []
-        if "%" in description or "descuento" in lower:
+        if "%" in description or "descuento" in lower or "bonific" in lower:
             warnings.append(
                 "El motor actual de campañas no configura descuentos o precios; "
                 "solo puede otorgar un beneficio existente."
+            )
+        if payment_tenure:
+            warnings.append(
+                "El motor actual no tiene una condición por antigüedad de una suscripción paga."
             )
 
         return {
