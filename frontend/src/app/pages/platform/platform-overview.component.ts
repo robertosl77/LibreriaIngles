@@ -5,10 +5,11 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService, errorMessage } from '../../core/api.service';
 import { PlatformOverview } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { AccountsAdminComponent } from './accounts-admin.component';
 
 @Component({
   selector: 'app-platform-overview',
-  imports: [DatePipe],
+  imports: [DatePipe, AccountsAdminComponent],
   template: `
     <section class="stack overview">
       <div class="overview-toolbar">
@@ -41,6 +42,8 @@ import { ToastService } from '../../core/toast.service';
             <p class="muted small">incluye las que fallaron</p>
           </div>
         </section>
+
+        <app-accounts-admin (changed)="load()" />
 
         <section class="card">
           <div class="chart-head">
@@ -154,48 +157,7 @@ import { ToastService } from '../../core/toast.service';
           }
         </section>
 
-        <section class="card">
-          <div class="chart-head">
-            <div>
-              <h2>Beneficios vigentes por cuenta</h2>
-              <p class="muted small">Resultado efectivo del motor de otorgamientos.</p>
-            </div>
-          </div>
-          @if (d.accountBenefits.length === 0) {
-            <p class="muted">No hay beneficios vigentes.</p>
-          } @else {
-            <div class="table-wrap">
-              <table class="account-benefits">
-                <thead>
-                  <tr>
-                    <th>Cuenta</th>
-                    <th>Beneficio</th>
-                    <th>Servicio</th>
-                    <th>Origen</th>
-                    <th>Vence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of d.accountBenefits; track row.email) {
-                    <tr>
-                      <td>{{ row.email }}</td>
-                      <td><strong>{{ row.benefitName }}</strong></td>
-                      <td>{{ row.serviceName }}</td>
-                      <td>{{ originLabel(row.origin) }}</td>
-                      <td>
-                        @if (row.expiresAt) {
-                          {{ row.expiresAt | date: 'dd/MM/yyyy HH:mm' }}
-                        } @else {
-                          sin vencimiento
-                        }
-                      </td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          }
-        </section>
+
       } @else if (loading()) {
         <p class="muted"><span class="spinner"></span></p>
       }
