@@ -1,0 +1,390 @@
+import { DatePipe } from '@angular/common';
+import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
+
+import { ApiService, errorMessage } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
+import { AiSource, PlatformAccount, PlatformBenefit } from '../../core/models';
+import { ToastService } from '../../core/toast.service';
+import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
+
+const SOURCE_SHORT: Record<AiSource, string> = {
+  BYOK: 'Propias keys',
+  PLATFORM: 'Plataforma',
+  HYBRID: 'Híbrido'
+};
+
+@Component({
+  selector: 'app-accounts-admin',
+  imports: [DatePipe, FormsModule, CollapseCardComponent],
+  template: `
+    <app-collapse-card
+      title="Cuentas"
+      description="Resumen de cuentas por combinación y administración puntual de beneficios."
+    >
+      <div class="combination-summary">
+        @for (group of combinationGroups(); track group.source) {
+          <article class="combo-card">
+            <div class="combo-head">
+              <div>
+                <strong>Individual</strong>
+                <div class="muted small">{{ sourceShort[group.source] }}</div>
+              </div>
+              <span class="chip">{{ group.accounts.length }}</span>
+            </div>
+            @if (group.accounts.length) {
+              <div class="account-preview muted tiny">
+                @for (account of group.accounts.slice(0, 4); track account.id; let last = $last) {
+                  {{ account.email }}{{ last ? '' : ' · ' }}
+                }
+                @if (group.accounts.length > 4) {
+                  · +{{ group.accounts.length - 4 }}
+                }
+              </div>
+            } @else {
+              <div class="muted tiny">Sin cuentas cargadas en esta combinación.</div>
+            }
+          </article>
+        }
+      </div>
+
+      <form class="row search-row" (ngSubmit)="loadAccounts()">
+        <input class="input search" name="q" [(ngModel)]="query" placeholder="Buscar por email o nombre" />
+        <button class="btn btn-sm" type="submit" [disabled]="loadingAccounts()">Buscar</button>
+      </form>
+
+      @if (loadingAccounts()) {
+        <p class="muted"><span class="spinner"></span></p>
+      } @else if (accounts().length === 0) {
+        <p class="muted">Sin cuentas para esa búsqueda.</p>
+      } @else {
+        <div class="accounts">
+          @for (a of accounts(); track a.id) {
+            <article class="account-card">
+              <div class="account-line">
+                <div class="identity">
+                  <strong>{{ a.email }}</strong>
+                  @if (a.isPlatformOwner) { <span class="chip">Dueño</span> }
+                </div>
+
+                <div class="service-cell">
+                  @if (a.service.granted) {
+                    <span class="chip chip-ok">{{ a.service.benefitName ?? 'Beneficio sin identificar' }}</span>
+                    <span class="muted small">
+                      {{ a.service.linkType === 'PERSONAL' ? 'Individual' : 'Empresa' }}
+                      · {{ sourceShort[a.service.source] }}
+                    </span>
+                    <span class="small">
+                      @if (a.service.expiresAt) {
+                        vence {{ a.service.expiresAt | date: 'dd/MM/yyyy HH:mm' }}
+                      } @else {
+                        sin vencimiento
+                      }
+                    </span>
+                  } @else {
+                    <span class="chip">Sin beneficio</span>
+                    <span class="muted small">Individual · {{ sourceShort[a.service.source] }}</span>
+                  }
+                  @if (a.service.expired) {
+                    <span class="chip chip-warn">Venció {{ a.service.expired.name }}</span>
+                  }
+                </div>
+
+                <div class="account-actions">
+                  @if (a.isPlatformOwner) {
+                    <span class="muted small">Usa propias + plataforma</span>
+                  } @else {
+                    <button class="btn btn-sm" type="button" (click)="toggleManage(a)">
+                      {{ grantingId() === a.id ? 'Cerrar' : 'Administrar' }}
+                    </button>
+                  }
+                </div>
+              </div>
+
+              <div class="account-meta">
+                Primera sesión:
+                @if (a.firstLoginAt) {
+                  {{ a.firstLoginAt | date: 'dd/MM/yyyy HH:mm:ss' }}
+                } @else {
+                  nunca ingresó
+                }
+                · {{ a.ownConnections }} conexión(es) propia(s)
+                · {{ a.platformRequests24h }} pedidos a la plataforma en 24 h
+              </div>
+
+              @if (grantingId() === a.id) {
+                <div class="account-admin">
+                  <div class="admin-benefit">
+                    <label class="field benefit-field">
+                      Beneficio
+                      <select class="input" name="gBenefit{{ a.id }}" [(ngModel)]="grantBenefitId">
+                        @for (benefit of grantableBenefits(); track benefit.id) {
+                          <option [ngValue]="benefit.id">
+                            {{ benefit.name }} · {{ benefit.serviceName }} · {{ sourceShort[benefit.source] }}
+                          </option>
+                        }
+                      </select>
+                    </label>
+                    <p class="muted small">
+                      Cambiar reemplaza el beneficio vigente. La asignación anterior queda en el historial.
+                    </p>
+                  </div>
+
+                  <div class="admin-actions">
+                    <button class="btn btn-primary btn-sm" type="button" (click)="grant(a)"
+                      [disabled]="busyId() === a.id || !grantBenefitId">
+                      @if (busyId() === a.id) { <span class="spinner"></span> }
+                      {{ a.service.granted ? 'Cambiar beneficio' : 'Otorgar beneficio' }}
+                    </button>
+                    <button class="btn btn-sm btn-danger" type="button" (click)="revoke(a)"
+                      [disabled]="busyId() === a.id || !a.service.granted">
+                      Quitar beneficio
+                    </button>
+                    @if (a.devPurgeAllowed) {
+                      <button class="btn btn-sm btn-danger" type="button" (click)="purge(a)"
+                        [disabled]="busyId() === a.id">
+                        Eliminar cuenta (DEV)
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </article>
+          }
+        </div>
+      }
+    </app-collapse-card>
+  `,
+  styles: `
+    :host { display: contents; }
+
+    .combination-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 0.9rem;
+    }
+
+    .combo-card {
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      background: var(--bg);
+    }
+
+    .combo-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+
+    .account-preview { margin-top: 0.55rem; line-height: 1.4; }
+    .tiny { font-size: 0.76rem; }
+
+    .search-row { align-items: center; }
+    .search { max-width: 22rem; }
+    .accounts { display: flex; flex-direction: column; }
+
+    .account-card {
+      padding: 0.8rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .account-card:first-child { padding-top: 0.2rem; }
+
+    .account-line {
+      display: grid;
+      grid-template-columns: minmax(13rem, 1.25fr) minmax(17rem, 1.2fr) auto;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .identity, .service-cell, .account-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .account-actions {
+      justify-content: flex-end;
+      flex-wrap: nowrap;
+    }
+
+    .account-meta {
+      margin-top: 0.35rem;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .account-admin {
+      display: grid;
+      grid-template-columns: minmax(18rem, 1fr) auto;
+      gap: 1rem;
+      align-items: end;
+      margin-top: 0.7rem;
+      padding: 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      background: var(--bg);
+    }
+
+    .admin-benefit p { margin: 0.35rem 0 0; }
+    .admin-actions {
+      display: flex;
+      gap: 0.45rem;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    @media (max-width: 980px) {
+      .combination-summary { grid-template-columns: 1fr; }
+      .account-line { grid-template-columns: 1fr; gap: 0.45rem; }
+      .account-actions { justify-content: flex-start; flex-wrap: wrap; }
+      .account-admin { grid-template-columns: 1fr; }
+      .admin-actions { justify-content: flex-start; }
+    }
+  `
+})
+export class AccountsAdminComponent implements OnInit {
+  private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
+  private readonly toast = inject(ToastService);
+
+  readonly changed = output<void>();
+  readonly sourceShort = SOURCE_SHORT;
+  readonly benefits = signal<PlatformBenefit[]>([]);
+  readonly accounts = signal<PlatformAccount[]>([]);
+  readonly loadingAccounts = signal(true);
+  readonly busyId = signal<number | null>(null);
+  readonly grantingId = signal<number | null>(null);
+
+  readonly grantableBenefits = computed(() =>
+    this.benefits().filter((benefit) => benefit.active && benefit.combinationActive)
+  );
+
+  readonly combinationGroups = computed(() => {
+    const regular = this.accounts().filter((account) => !account.isPlatformOwner);
+    return (['BYOK', 'PLATFORM', 'HYBRID'] as AiSource[]).map((source) => ({
+      source,
+      accounts: regular.filter(
+        (account) => account.service.linkType === 'PERSONAL' && account.service.source === source
+      )
+    }));
+  });
+
+  query = '';
+  grantBenefitId: number | null = null;
+
+  async ngOnInit(): Promise<void> {
+    await Promise.all([this.loadBenefits(), this.loadAccounts()]);
+  }
+
+  async loadBenefits(): Promise<void> {
+    try {
+      this.benefits.set(await firstValueFrom(this.api.platformBenefits()));
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    }
+  }
+
+  async loadAccounts(): Promise<void> {
+    this.loadingAccounts.set(true);
+    try {
+      this.accounts.set(await firstValueFrom(this.api.platformAccounts(this.query)));
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    } finally {
+      this.loadingAccounts.set(false);
+    }
+  }
+
+  toggleManage(account: PlatformAccount): void {
+    if (this.grantingId() === account.id) {
+      this.grantingId.set(null);
+      return;
+    }
+    const currentBenefit = account.service.benefitId
+      ? this.grantableBenefits().find((benefit) => benefit.id === account.service.benefitId)
+      : undefined;
+    this.grantBenefitId = (currentBenefit ?? this.grantableBenefits()[0])?.id ?? null;
+    this.grantingId.set(account.id);
+  }
+
+  async grant(account: PlatformAccount): Promise<void> {
+    if (!this.grantBenefitId) return;
+    this.busyId.set(account.id);
+    try {
+      const updated = await firstValueFrom(
+        this.api.grantBenefit(account.id, this.grantBenefitId)
+      );
+      this.replace(updated);
+      this.grantingId.set(null);
+      this.toast.success(
+        `${updated.email}: beneficio · ${updated.service.benefitName ?? 'actualizado'}.`
+      );
+      await this.afterChange(account);
+      this.changed.emit();
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    } finally {
+      this.busyId.set(null);
+    }
+  }
+
+  async revoke(account: PlatformAccount): Promise<void> {
+    const currentName = account.service.benefitName ?? account.service.name;
+    if (!confirm(`¿Quitar "${currentName}" a ${account.email}? Vuelve a usar sus propias API keys.`)) {
+      return;
+    }
+    this.busyId.set(account.id);
+    try {
+      this.replace(await firstValueFrom(this.api.revokeService(account.id)));
+      this.toast.success('Beneficio quitado.');
+      await this.afterChange(account);
+      this.changed.emit();
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    } finally {
+      this.busyId.set(null);
+    }
+  }
+
+  async purge(account: PlatformAccount): Promise<void> {
+    const confirmed = confirm(
+      'DEV: ¿Eliminar completamente ' + account.email + '?\n\n' +
+      'Se borrarán cuenta, perfil, clases, progreso, intentos, IA, campañas recibidas y servicios. ' +
+      'Esta acción no se puede deshacer.'
+    );
+    if (!confirmed) return;
+
+    this.busyId.set(account.id);
+    try {
+      await firstValueFrom(this.api.devPurgePlatformAccount(account.id));
+      this.accounts.update((list) => list.filter((item) => item.id !== account.id));
+      this.toast.success(account.email + ' fue eliminada completamente.');
+      this.changed.emit();
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    } finally {
+      this.busyId.set(null);
+    }
+  }
+
+  private replace(updated: PlatformAccount): void {
+    this.accounts.update((list) => list.map((account) =>
+      account.id === updated.id ? updated : account
+    ));
+  }
+
+  private async afterChange(account: PlatformAccount): Promise<void> {
+    await this.loadBenefits();
+    if (account.id === this.auth.me()?.account.id) {
+      await this.auth.refreshMe();
+    }
+  }
+}
