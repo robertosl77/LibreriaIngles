@@ -55,9 +55,13 @@ export interface PlatformService {
   description: string | null;
   active: boolean;
   activeAccounts: number;
+  activeBenefits: number;
+  activeCampaigns: number;
+  activeInvitations: number;
+  canDisable: boolean;
 }
 
-export type PlatformServiceDraft = Pick<PlatformService, 'name' | 'description' | 'active'>;
+export type PlatformServiceDraft = Pick<PlatformService, 'active'>;
 
 export interface PlatformAccount {
   id: number;
@@ -76,8 +80,14 @@ export interface PlatformBenefit {
   id: number;
   code: string;
   name: string;
+  /** Id interno de la combinación Servicio × Fuente. */
   serviceId: number;
+  combinationId: number;
+  service: LinkType;
   serviceName: string;
+  source: AiSource;
+  combinationName: string;
+  combinationActive: boolean;
   durationDays: number | null;
   conflictPolicy: 'EXTEND_SAME_SERVICE';
   active: boolean;
@@ -91,7 +101,8 @@ export interface PlatformBenefit {
 
 export interface PlatformBenefitDraft {
   name: string;
-  serviceId: number;
+  service: LinkType;
+  source: AiSource;
   durationDays: number | null;
   active: boolean;
 }
