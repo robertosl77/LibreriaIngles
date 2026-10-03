@@ -38,9 +38,20 @@ def _account_id(client, owner, email: str) -> int:
 
 
 def _grant(client, owner, email: str, service_id: int, days: int | None = None) -> dict:
+    benefit_response = client.post(
+        f"{API}/platform/benefits",
+        json={
+            "name": f"Manual test {email} {service_id} {days}",
+            "serviceId": service_id,
+            "durationDays": days,
+            "active": True,
+        },
+        headers=owner,
+    )
+    assert benefit_response.status_code == 201, benefit_response.text
     response = client.post(
-        f"{API}/platform/accounts/{_account_id(client, owner, email)}/service",
-        json={"serviceId": service_id, "days": days},
+        f"{API}/platform/accounts/{_account_id(client, owner, email)}/benefit",
+        json={"benefitId": benefit_response.json()["id"]},
         headers=owner,
     )
     assert response.status_code == 200, response.text
@@ -79,6 +90,41 @@ def test_portal_is_only_for_platform_owner(client) -> None:
         "INDIVIDUAL_PLATFORM",
         "INDIVIDUAL_HYBRID",
     }
+
+
+def test_service_does_not_define_duration_and_manual_grant_uses_benefit(client) -> None:
+    owner = login(client, OWNER)
+    service = _services(client, owner)["INDIVIDUAL_PLATFORM"]
+    assert "durationDays" not in service
+
+    alice = _student(client, "benefit-only@example.com")
+    benefit = client.post(
+        f"{API}/platform/benefits",
+        json={
+            "name": "Plataforma 12 días",
+            "serviceId": service["id"],
+            "durationDays": 12,
+            "active": True,
+        },
+        headers=owner,
+    )
+    assert benefit.status_code == 201, benefit.text
+
+    granted = client.post(
+        f"{API}/platform/accounts/{_account_id(client, owner, 'benefit-only@example.com')}/benefit",
+        json={"benefitId": benefit.json()["id"]},
+        headers=owner,
+    )
+    assert granted.status_code == 200, granted.text
+    assert granted.json()["service"]["origin"] == "MANUAL"
+    assert granted.json()["service"]["expiresAt"] is not None
+
+    legacy = client.post(
+        f"{API}/platform/accounts/{_account_id(client, owner, 'benefit-only@example.com')}/service",
+        json={"serviceId": service["id"], "days": 99},
+        headers=owner,
+    )
+    assert legacy.status_code == 405
 
 
 def test_source_decides_which_keys_are_used(client) -> None:
@@ -122,23 +168,25 @@ def test_hybrid_uses_own_first_then_platform(client) -> None:
     assert _new_class(client, alice)["generatedBy"] == PLATFORM_LABEL
 
 
-def test_service_daily_cap_limits_platform_usage(client) -> None:
+def test_service_has_no_request_limit_field(client) -> None:
     owner = login(client, OWNER)
-    _connection(client, owner, "Plataforma", platform=True)
-    created = client.post(
-        f"{API}/platform/services",
-        json={"name": "Prueba 1 por día", "source": "PLATFORM", "dailyRequestLimit": 1},
+    service = _services(client, owner)["INDIVIDUAL_PLATFORM"]
+
+    listed = client.get(f"{API}/platform/services", headers=owner)
+    assert listed.status_code == 200
+    assert all("dailyRequestLimit" not in row for row in listed.json())
+
+    legacy = client.put(
+        f"{API}/platform/services/{service['id']}",
+        json={
+            "name": service["name"],
+            "description": service["description"],
+            "active": service["active"],
+            "dailyRequestLimit": 25,
+        },
         headers=owner,
     )
-    assert created.status_code == 201, created.text
-    alice = _student(client)
-    _grant(client, owner, "alice@example.com", created.json()["id"])
-    assert _new_class(client, alice)["status"] == "READY"
-    second = _new_class(client, alice)
-    assert second["status"] == "GENERATION_FAILED"
-    assert "tope" in second["generationError"]
-    me = client.get(f"{API}/me", headers=alice).json()["service"]
-    assert me["dailyRequestLimit"] == 1 and me["platformRequests24h"] == 1
+    assert legacy.status_code == 422
 
 
 def test_granted_days_expire_back_to_own_keys(client) -> None:
@@ -166,14 +214,33 @@ def test_granted_days_expire_back_to_own_keys(client) -> None:
     assert _new_class(client, alice)["generatedBy"] == "Mía"
 
 
-def test_corporate_services_wait_for_companies(client) -> None:
+def test_service_axes_are_fixed_and_only_combination_state_is_configurable(client) -> None:
     owner = login(client, OWNER)
-    response = client.post(
+    service = _services(client, owner)["INDIVIDUAL_PLATFORM"]
+
+    # No se crean nuevas filas/columnas/combinaciones desde el portal.
+    assert client.post(
         f"{API}/platform/services",
         json={"name": "Empresa", "source": "BYOK", "linkType": "CORPORATE"},
         headers=owner,
+    ).status_code == 405
+
+    # Tampoco se puede transformar una combinación existente cambiando sus ejes.
+    changed_axis = client.put(
+        f"{API}/platform/services/{service['id']}",
+        json={"active": service["active"], "source": "HYBRID"},
+        headers=owner,
     )
-    assert response.status_code == 422
+    assert changed_axis.status_code == 422
+
+    updated = client.put(
+        f"{API}/platform/services/{service['id']}",
+        json={"active": True},
+        headers=owner,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["source"] == "PLATFORM"
+    assert updated.json()["linkType"] == "PERSONAL"
 
 
 def test_platform_connection_details_are_hidden_from_students(client) -> None:
@@ -283,3 +350,231 @@ def test_dev_account_purge_flag_is_disabled_in_qa_and_production() -> None:
     assert Settings(app_env="test").dev_account_purge_allowed is True
     assert Settings(app_env="qa").dev_account_purge_allowed is False
     assert Settings(app_env="production").dev_account_purge_allowed is False
+
+
+def test_manual_benefit_can_be_replaced_and_remains_traceable(client) -> None:
+    from app.db import SessionLocal
+    from app.subscriptions.models import Subscription, SubscriptionStatus
+
+    owner = login(client, OWNER)
+    _student(client, "neptuno@example.com")
+    services = _services(client, owner)
+    service_id = services["INDIVIDUAL_PLATFORM"]["id"]
+    account_id = _account_id(client, owner, "neptuno@example.com")
+
+    first = client.post(
+        f"{API}/platform/benefits",
+        json={"name": "Bienvenida prueba", "serviceId": service_id, "durationDays": 3, "active": True},
+        headers=owner,
+    ).json()
+    second = client.post(
+        f"{API}/platform/benefits",
+        json={"name": "Invitación amigo", "serviceId": service_id, "durationDays": 10, "active": True},
+        headers=owner,
+    ).json()
+
+    granted = client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        json={"benefitId": first["id"]},
+        headers=owner,
+    )
+    assert granted.status_code == 200, granted.text
+    assert granted.json()["service"]["benefitId"] == first["id"]
+    assert granted.json()["service"]["benefitName"] == "Bienvenida prueba"
+
+    replaced = client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        json={"benefitId": second["id"]},
+        headers=owner,
+    )
+    assert replaced.status_code == 200, replaced.text
+    assert replaced.json()["service"]["benefitId"] == second["id"]
+    assert replaced.json()["service"]["benefitName"] == "Invitación amigo"
+
+    with SessionLocal() as db:
+        rows = db.scalars(
+            select(Subscription)
+            .where(Subscription.account_id == account_id)
+            .order_by(Subscription.id)
+        ).all()
+        assert [row.benefit_id for row in rows[-2:]] == [first["id"], second["id"]]
+        assert rows[-2].status == SubscriptionStatus.CANCELLED
+        assert rows[-1].status == SubscriptionStatus.ACTIVE
+
+    overview = client.get(f"{API}/platform/overview", headers=owner).json()
+    row = next(item for item in overview["accountBenefits"] if item["email"] == "neptuno@example.com")
+    assert row["benefitName"] == "Invitación amigo"
+    assert row["serviceName"] == "Individual · Plataforma"
+    assert row["origin"] == "MANUAL"
+
+
+def test_benefit_delete_is_logical_and_keeps_historical_reference(client) -> None:
+    from app.db import SessionLocal
+    from app.subscriptions.models import Subscription
+
+    owner = login(client, OWNER)
+    _student(client, "logical-delete@example.com")
+    service_id = _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"]
+    account_id = _account_id(client, owner, "logical-delete@example.com")
+
+    benefit = client.post(
+        f"{API}/platform/benefits",
+        json={"name": "Temporal trazable", "serviceId": service_id, "durationDays": 7, "active": True},
+        headers=owner,
+    ).json()
+    assert client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        json={"benefitId": benefit["id"]},
+        headers=owner,
+    ).status_code == 200
+
+    # Mientras haya un beneficiario vigente, la baja lógica está protegida.
+    assert client.delete(
+        f"{API}/platform/benefits/{benefit['id']}", headers=owner
+    ).status_code == 409
+
+    # Al quitar el beneficio de la cuenta, la referencia pasa a ser histórica y ya no bloquea.
+    assert client.delete(f"{API}/platform/accounts/{account_id}/service", headers=owner).status_code == 200
+    deleted = client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner)
+    assert deleted.status_code == 204
+    assert benefit["id"] not in {
+        item["id"] for item in client.get(f"{API}/platform/benefits", headers=owner).json()
+    }
+
+    with SessionLocal() as db:
+        historical = db.scalar(
+            select(Subscription)
+            .where(
+                Subscription.account_id == account_id,
+                Subscription.benefit_id == benefit["id"],
+            )
+            .order_by(Subscription.id.desc())
+        )
+        assert historical is not None
+        assert historical.benefit_id == benefit["id"]
+
+
+def test_benefit_cannot_be_deleted_with_current_beneficiary(client) -> None:
+    owner = login(client, OWNER)
+    _student(client, "protected-benefit@example.com")
+    service_id = _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"]
+    account_id = _account_id(client, owner, "protected-benefit@example.com")
+
+    benefit = client.post(
+        f"{API}/platform/benefits",
+        json={
+            "name": "Promesa 30 días",
+            "serviceId": service_id,
+            "durationDays": 30,
+            "active": True,
+        },
+        headers=owner,
+    ).json()
+    assert client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        json={"benefitId": benefit["id"]},
+        headers=owner,
+    ).status_code == 200
+
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeBeneficiaries"] == 1
+    assert listed["canDelete"] is False
+
+    blocked = client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner)
+    assert blocked.status_code == 409
+    assert "beneficiario" in blocked.json()["detail"]
+
+    assert client.delete(f"{API}/platform/accounts/{account_id}/service", headers=owner).status_code == 200
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeBeneficiaries"] == 0
+    assert listed["canDelete"] is True
+    assert client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner).status_code == 204
+
+
+def test_combination_cannot_be_disabled_while_active_benefit_or_account_uses_it(client) -> None:
+    owner = login(client, OWNER)
+    service = _services(client, owner)["INDIVIDUAL_HYBRID"]
+
+    benefit = client.post(
+        f"{API}/platform/benefits",
+        headers=owner,
+        json={
+            "name": "Combinación protegida",
+            "service": "PERSONAL",
+            "source": "HYBRID",
+            "durationDays": 30,
+            "active": True,
+        },
+    )
+    assert benefit.status_code == 201, benefit.text
+
+    blocked_by_benefit = client.put(
+        f"{API}/platform/services/{service['id']}",
+        headers=owner,
+        json={"active": False},
+    )
+    assert blocked_by_benefit.status_code == 409
+    assert "beneficio" in blocked_by_benefit.json()["detail"]
+
+    _student(client, "combo-protected@example.com")
+    account_id = _account_id(client, owner, "combo-protected@example.com")
+    assert client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        headers=owner,
+        json={"benefitId": benefit.json()["id"]},
+    ).status_code == 200
+
+    # El beneficio puede quedar inactivo para futuros usos, pero la cuenta vigente sigue protegiendo la combinación.
+    inactive = client.put(
+        f"{API}/platform/benefits/{benefit.json()['id']}",
+        headers=owner,
+        json={
+            "name": "Combinación protegida",
+            "service": "PERSONAL",
+            "source": "HYBRID",
+            "durationDays": 30,
+            "active": False,
+        },
+    )
+    assert inactive.status_code == 200, inactive.text
+
+    blocked_by_account = client.put(
+        f"{API}/platform/services/{service['id']}",
+        headers=owner,
+        json={"active": False},
+    )
+    assert blocked_by_account.status_code == 409
+    assert "cuenta" in blocked_by_account.json()["detail"]
+
+    assert client.delete(f"{API}/platform/accounts/{account_id}/service", headers=owner).status_code == 200
+    disabled = client.put(
+        f"{API}/platform/services/{service['id']}",
+        headers=owner,
+        json={"active": False},
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["active"] is False
+
+
+def test_default_personal_account_protects_individual_byok_combination(client) -> None:
+    owner = login(client, OWNER)
+    byok = _services(client, owner)["INDIVIDUAL_BYOK"]
+    _student(client, "default-byok@example.com")
+
+    listed = _services(client, owner)["INDIVIDUAL_BYOK"]
+    assert listed["activeAccounts"] >= 1
+    assert listed["canDisable"] is False
+
+    blocked = client.put(
+        f"{API}/platform/services/{byok['id']}",
+        headers=owner,
+        json={"active": False},
+    )
+    assert blocked.status_code == 409
+    assert "cuenta" in blocked.json()["detail"]

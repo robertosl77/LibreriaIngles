@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
@@ -8,17 +8,17 @@ import {
   CampaignRule,
   CampaignTrigger,
   PlatformCampaign,
-  PlatformCampaignDraft,
-  PlatformService
+  PlatformBenefit,
+  PlatformCampaignDraft
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 
 interface CampaignForm {
   name: string;
-  serviceId: number | null;
+  benefitId: number | null;
   trigger: CampaignTrigger;
   rules: CampaignRule[];
-  grantDays: number | null;
   priority: number;
   stackable: boolean;
   maxRecipients: number | null;
@@ -35,13 +35,12 @@ function defaultRules(): CampaignRule[] {
   ];
 }
 
-function emptyForm(serviceId: number | null): CampaignForm {
+function emptyForm(benefitId: number | null): CampaignForm {
   return {
     name: '',
-    serviceId,
+    benefitId,
     trigger: 'FIRST_LOGIN',
     rules: defaultRules(),
-    grantDays: 3,
     priority: 100,
     stackable: false,
     maxRecipients: null,
@@ -70,21 +69,17 @@ function isoDate(value: string): string | null {
 
 @Component({
   selector: 'app-campaigns-admin',
-  imports: [FormsModule],
+  imports: [FormsModule, CollapseCardComponent],
   template: `
-    <section class="card stack">
-      <div class="section-head">
-        <div>
-          <h2>Campañas</h2>
-          <p class="muted small">
-            Regla = cuándo evaluar + condiciones + beneficio + notificación + límites. Una persona
-            recibe cada campaña una sola vez.
-          </p>
-        </div>
-        @if (editingId() === null) {
+    <app-collapse-card
+      title="Campañas"
+      description="Cuándo evaluar + condiciones + beneficio + notificación + límites. Cada persona recibe cada campaña una sola vez."
+    >
+      @if (editingId() === null) {
+        <div class="collapse-actions">
           <button class="btn btn-sm" type="button" (click)="startNew()">Nueva campaña</button>
-        }
-      </div>
+        </div>
+      }
 
       @if (editingId() !== null) {
         <form class="editor stack" (ngSubmit)="save()">
@@ -94,12 +89,13 @@ function isoDate(value: string): string | null {
               <input class="input" name="cName" [(ngModel)]="form.name" maxlength="120" required />
             </label>
             <label class="field">
-              Servicio que otorga
-              <select class="input" name="cService" [(ngModel)]="form.serviceId" required>
-                @for (service of grantableServices(); track service.id) {
-                  <option [ngValue]="service.id">{{ service.name }}</option>
+              Beneficio que aplica
+              <select class="input" name="cBenefit" [(ngModel)]="form.benefitId" required>
+                @for (benefit of activeBenefits(); track benefit.id) {
+                  <option [ngValue]="benefit.id">{{ benefit.name }}</option>
                 }
               </select>
+              <span class="muted tiny">La composición del beneficio se consulta y edita en Beneficios.</span>
             </label>
             <label class="field">
               Cuándo se evalúa
@@ -108,11 +104,6 @@ function isoDate(value: string): string | null {
                 <option value="LOGIN">Cada login</option>
                 <option value="SCHEDULED" disabled>Programada / batch (T-059)</option>
               </select>
-            </label>
-            <label class="field">
-              Días que otorga
-              <input class="input" type="number" min="1" name="cDays" [(ngModel)]="form.grantDays"
-                placeholder="duración del servicio" />
             </label>
             <label class="field">
               Prioridad
@@ -149,7 +140,7 @@ function isoDate(value: string): string | null {
               <div class="rule-row">
                 <select class="input" [name]="'rField' + i" [(ngModel)]="rule.field" (ngModelChange)="resetRule(rule)">
                   <option value="ACCOUNT_TYPE">Tipo de cuenta</option>
-                  <option value="HAS_GRANTED_SERVICE">Tiene servicio otorgado</option>
+                  <option value="HAS_GRANTED_SERVICE">Tiene membresía otorgada</option>
                   <option value="SERVICE_SOURCE">Fuente de IA actual</option>
                   <option value="EMAIL_DOMAIN">Dominio de email</option>
                   <option value="DAYS_SINCE_CREATED">Días desde registro</option>
@@ -221,7 +212,7 @@ function isoDate(value: string): string | null {
 
           <label class="check-row small">
             <input type="checkbox" name="cStack" [(ngModel)]="form.stackable" />
-            Acumulable con otras campañas. Para sumar días, ambas deben permitir acumulación y otorgar el MISMO servicio; si son servicios distintos, la segunda no se aplica.
+            Acumulable con otras campañas. Para sumar días, ambas deben permitir acumulación y otorgar la MISMA membresía; si son distintas, la segunda no se aplica.
           </label>
 
           <div class="row">
@@ -249,8 +240,7 @@ function isoDate(value: string): string | null {
                   @if (campaign.stackable) { <span class="chip chip-ok">Acumulable</span> }
                 </div>
                 <div class="small">
-                  {{ triggerLabel(campaign.trigger) }} → <strong>{{ campaign.serviceName }}</strong>
-                  · {{ campaign.grantDays ? campaign.grantDays + ' días' : 'duración del servicio' }}
+                  {{ triggerLabel(campaign.trigger) }} → <strong>{{ campaign.benefitName }}</strong>
                   · {{ campaign.recipients }} beneficiario(s)
                   @if (campaign.maxRecipients) { / {{ campaign.maxRecipients }} máx. }
                 </div>
@@ -287,13 +277,11 @@ function isoDate(value: string): string | null {
           }
         </div>
       }
-    </section>
+    </app-collapse-card>
   `,
   styles: `
     :host { display: contents; }
-    .section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
-    .section-head h2, .section-head p { margin: 0; }
-    .section-head p { margin-top: 0.3rem; }
+    .collapse-actions { display: flex; justify-content: flex-end; margin-bottom: 0.8rem; }
     .editor, .rules { padding: 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--bg); }
     .spread { justify-content: space-between; }
     .check-row { display: flex; gap: 0.5rem; align-items: flex-start; }
@@ -304,7 +292,7 @@ function isoDate(value: string): string | null {
     .campaign-main { display: flex; flex-direction: column; gap: 0.3rem; }
     .actions { flex: none; flex-wrap: wrap; justify-content: flex-end; }
     .warning { color: var(--warn); }
-    .dim { opacity: 0.65; }
+    .dim .campaign-main { opacity: 0.65; }
     .tiny { font-size: 0.76rem; }
     @media (max-width: 760px) {
       .rule-row { grid-template-columns: 1fr; }
@@ -319,13 +307,13 @@ export class CampaignsAdminComponent implements OnInit {
   private readonly toast = inject(ToastService);
 
   readonly campaigns = signal<PlatformCampaign[]>([]);
-  readonly services = signal<PlatformService[]>([]);
+  readonly benefits = signal<PlatformBenefit[]>([]);
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly editingId = signal<number | null>(null);
-  readonly grantableServices = computed(() =>
-    this.services().filter((service) => service.active && service.linkType === 'PERSONAL')
-  );
+  activeBenefits(): PlatformBenefit[] {
+    return this.benefits().filter((benefit) => benefit.active);
+  }
 
   form: CampaignForm = emptyForm(null);
 
@@ -336,12 +324,12 @@ export class CampaignsAdminComponent implements OnInit {
   async load(): Promise<void> {
     this.loading.set(true);
     try {
-      const [campaigns, services] = await Promise.all([
+      const [campaigns, benefits] = await Promise.all([
         firstValueFrom(this.api.platformCampaigns()),
-        firstValueFrom(this.api.platformServices())
+        firstValueFrom(this.api.platformBenefits())
       ]);
       this.campaigns.set(campaigns);
-      this.services.set(services);
+      this.benefits.set(benefits);
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
@@ -350,14 +338,14 @@ export class CampaignsAdminComponent implements OnInit {
   }
 
   startNew(): void {
-    this.form = emptyForm(this.grantableServices()[0]?.id ?? null);
+    this.form = emptyForm(this.activeBenefits()[0]?.id ?? null);
     this.editingId.set(0);
   }
 
   startEdit(campaign: PlatformCampaign): void {
     this.form = {
       name: campaign.name,
-      serviceId: campaign.serviceId,
+      benefitId: campaign.benefitId,
       trigger: campaign.trigger,
       rules: campaign.rules.map((rule) => ({
         ...rule,
@@ -366,7 +354,6 @@ export class CampaignsAdminComponent implements OnInit {
             ? localDate(rule.value)
             : rule.value
       })),
-      grantDays: campaign.grantDays,
       priority: campaign.priority,
       stackable: campaign.stackable,
       maxRecipients: campaign.maxRecipients,
@@ -397,15 +384,15 @@ export class CampaignsAdminComponent implements OnInit {
   }
 
   canSave(): boolean {
-    return !!this.form.name.trim() && !!this.form.serviceId && this.form.priority > 0;
+    return !!this.form.name.trim() && !!this.form.benefitId && this.form.priority > 0;
   }
 
   async save(): Promise<void> {
     const id = this.editingId();
-    if (id === null || !this.form.serviceId) return;
+    if (id === null || !this.form.benefitId) return;
     const draft: PlatformCampaignDraft = {
       name: this.form.name.trim(),
-      serviceId: this.form.serviceId,
+      benefitId: this.form.benefitId,
       trigger: this.form.trigger,
       rules: this.form.rules.map((rule) => ({
         ...rule,
@@ -416,7 +403,6 @@ export class CampaignsAdminComponent implements OnInit {
               ? new Date(String(rule.value)).toISOString()
               : rule.value
       })),
-      grantDays: numberOrNull(this.form.grantDays),
       priority: Math.max(1, Math.round(Number(this.form.priority) || 100)),
       stackable: this.form.stackable,
       maxRecipients: numberOrNull(this.form.maxRecipients),

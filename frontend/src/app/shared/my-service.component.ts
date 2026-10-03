@@ -13,7 +13,7 @@ export const SOURCE_LABELS: Record<AiSource, string> = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** "Tu servicio" (T-004): qué IA usás, hasta cuándo y cuánto te queda de hoy. */
+/** "Tu servicio" (T-004): qué IA usás y hasta cuándo. Los límites viven en las conexiones. */
 @Component({
   selector: 'app-my-service',
   imports: [DatePipe, RouterLink],
@@ -52,14 +52,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
               Primero se usan tus conexiones; si fallan, la IA de Librería Inglés.
             }
           </p>
-          @if (usedPercent() !== null) {
-            <div class="usage">
-              <div class="bar" role="progressbar" [attr.aria-valuenow]="usedPercent()" aria-valuemin="0" aria-valuemax="100">
-                <span [style.width.%]="usedPercent()"></span>
-              </div>
-              <span class="small muted">Uso de hoy: {{ usedPercent() }}%</span>
-            </div>
-          }
         </section>
       }
     }
@@ -70,8 +62,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
     .head h2 { margin: 0.1rem 0 0; }
     .head p { margin: 0; }
     .detail { margin: 0; }
-    .usage { display: flex; align-items: center; gap: 0.8rem; }
-    .usage .bar { flex: 1; max-width: 18rem; }
   `
 })
 export class MyServiceComponent {
@@ -85,13 +75,6 @@ export class MyServiceComponent {
   readonly sourceLabel = computed(() => {
     const s = this.service();
     return s ? SOURCE_LABELS[s.source] : '';
-  });
-  readonly usedPercent = computed(() => {
-    const s = this.service();
-    if (!s?.dailyRequestLimit || s.platformRequests24h === undefined) {
-      return null;
-    }
-    return Math.min(100, Math.round((s.platformRequests24h / s.dailyRequestLimit) * 100));
   });
   readonly daysLeftLabel = computed(() => {
     const expires = this.service()?.expiresAt;

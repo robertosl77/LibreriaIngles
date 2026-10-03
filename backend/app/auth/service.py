@@ -94,6 +94,7 @@ def login_personal(
     google_subject: str | None,
     display_name: str | None,
     auth_method: AuthMethod,
+    invitation_token: str | None = None,
 ) -> Account:
     """Busca o crea la cuenta personal y garantiza su perfil de estudio."""
     email = email.strip().lower()
@@ -138,6 +139,23 @@ def login_personal(
 
     # Los datos esenciales del login deben quedar fuera del savepoint de campañas.
     db.flush()
+
+    # Si el login llegó desde una invitación, se intenta canjear ANTES de campañas.
+    # Así una invitación válida gana frente a la bienvenida; si el token/email no corresponde,
+    # el login sigue normalmente y las campañas pueden aplicar como a cualquier persona.
+    if invitation_token:
+        from app.invitations.service import InvitationClaimError, redeem_invitation
+
+        try:
+            with db.begin_nested():
+                redeem_invitation(db, invitation_token, account)
+        except InvitationClaimError:
+            pass
+        except Exception:
+            logger.exception(
+                "Falló el motor de invitaciones durante login para account_id=%s",
+                account.id,
+            )
 
     # Una campaña es un beneficio accesorio: nunca puede impedir el ingreso.
     from app.campaigns.service import evaluate_login_campaigns

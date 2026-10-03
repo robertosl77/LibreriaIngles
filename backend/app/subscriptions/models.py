@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,7 +42,7 @@ class SubscriptionStatus(str, Enum):
 
 
 class Plan(Base):
-    """Servicio del catálogo (T-004): vínculo × fuente de IA (+ duración, tope, costo futuro)."""
+    """Servicio del catálogo (T-004): vínculo × fuente de IA + metadatos comerciales."""
 
     __tablename__ = "plans"
 
@@ -59,9 +59,6 @@ class Plan(Base):
     link_type: Mapped[ServiceLinkType] = mapped_column(
         SqlEnum(ServiceLinkType, native_enum=False), default=ServiceLinkType.PERSONAL
     )
-    duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Tope provisorio de pedidos a la IA de la plataforma por día (hasta tener tokens, T-049).
-    daily_request_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     description: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
@@ -72,6 +69,9 @@ class Subscription(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.id"))
+    benefit_id: Mapped[int | None] = mapped_column(
+        ForeignKey("benefits.id"), nullable=True, index=True
+    )
     account_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts.id"), nullable=True, index=True
     )

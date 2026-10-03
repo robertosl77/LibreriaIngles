@@ -3,8 +3,9 @@
 Modelo (docs/tareas_pendientes_v0_1.md, T-004):
 - VÍNCULO: personal (sin empresa) o corporativo (vía una empresa). Se deduce, no se elige.
 - FUENTE DE IA: BYOK (propias keys) | PLATAFORMA (keys de sr.macros) | HÍBRIDO (propias primero).
-- SERVICIO = vínculo + fuente (+ duración, tope, costo futuro). Lo otorga sr.macros (etapa 1),
-  una campaña (etapa 2), una invitación (etapa 3) o un pago (futuro).
+- SERVICIO = vínculo + fuente + metadatos. No define vigencia ni límites de consumo.
+- BENEFICIO = servicio + duración. Es la única capa que define por cuánto tiempo se otorga.
+  Lo aplica sr.macros manualmente, una campaña, una invitación o un pago futuro.
 
 Sin servicio otorgado vigente, la cuenta es "Individual · propias keys" (personal + BYOK): sigue
 usando sus propias API keys, como hasta ahora. Cuando vence un servicio otorgado, vuelve a eso.
@@ -88,7 +89,8 @@ class EffectiveService:
     subscription_id: int | None = None
     expires_at: datetime | None = None
     origin: SubscriptionOrigin | None = None
-    daily_request_limit: int | None = None
+    benefit_id: int | None = None
+    benefit_name: str | None = None
     # Último servicio otorgado que venció hace poco (para avisar).
     expired_name: str | None = None
     expired_at: datetime | None = None
@@ -105,8 +107,9 @@ class EffectiveService:
             "linkType": self.link_type.value,
             "granted": self.granted,
             "origin": self.origin.value if self.origin else None,
+            "benefitId": self.benefit_id,
+            "benefitName": self.benefit_name,
             "expiresAt": self.expires_at,
-            "dailyRequestLimit": self.daily_request_limit,
             "ownKeys": OWN_KEYS_ROLE[self.source],
             "expired": (
                 {"name": self.expired_name, "at": self.expired_at} if self.expired_name else None
@@ -155,6 +158,11 @@ def effective_service(db: Session, account: Account) -> EffectiveService:
     ).first()
     if row is not None:
         subscription, plan = row
+        benefit_name = None
+        if subscription.benefit_id is not None:
+            from app.benefits.models import Benefit
+            benefit = db.get(Benefit, subscription.benefit_id)
+            benefit_name = benefit.name if benefit is not None else None
         return EffectiveService(
             name=plan.name,
             source=plan.ai_source,
@@ -164,7 +172,8 @@ def effective_service(db: Session, account: Account) -> EffectiveService:
             subscription_id=subscription.id,
             expires_at=_as_utc(subscription.expires_at),
             origin=subscription.origin,
-            daily_request_limit=plan.daily_request_limit,
+            benefit_id=subscription.benefit_id,
+            benefit_name=benefit_name,
         )
 
     expired = db.execute(
@@ -199,18 +208,19 @@ def grant_service(
     granted_by: Account | None,
     days: int | None = None,
     origin: SubscriptionOrigin = SubscriptionOrigin.MANUAL,
+    benefit_id: int | None = None,
     note: str | None = None,
 ) -> Subscription:
     """Otorga un servicio a la cuenta. Reemplaza al que tuviera vigente."""
     revoke_service(db, account)
     now = utcnow()
-    duration = days if days is not None else plan.duration_days
     subscription = Subscription(
         plan_id=plan.id,
+        benefit_id=benefit_id,
         account_id=account.id,
         status=SubscriptionStatus.ACTIVE,
         started_at=now,
-        expires_at=now + timedelta(days=duration) if duration else None,
+        expires_at=now + timedelta(days=days) if days else None,
         origin=origin,
         granted_by_account_id=granted_by.id if granted_by else None,
         note=note,

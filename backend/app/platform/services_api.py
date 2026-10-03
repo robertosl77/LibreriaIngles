@@ -1,88 +1,154 @@
-"""Portal del PLATFORM_OWNER: catálogo de servicios y asignación a cuentas (T-004, etapa 1).
+"""PLATFORM_OWNER: catálogo de servicios y asignación manual de beneficios (T-004).
 
-sr.macros define servicios (vínculo × fuente de IA, duración y tope) y se los otorga a mano a
-una cuenta, por N días o sin vencimiento. Campañas (etapa 2) e invitaciones (etapa 3) usarán
-el mismo `grant_service`.
+Un Servicio define vínculo × fuente de IA y metadatos comerciales. Los límites de consumo de la
+IA de plataforma pertenecen exclusivamente a cada conexión de IA. La duración vive únicamente en
+Benefit. Los otorgamientos manuales, campañas e invitaciones aplican un Benefit y terminan en
+`grant_service`.
 """
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, or_, select
 
-from app.accounts.models import Account, PlatformRole
+from app.accounts.models import Account, AccountStatus, AccountType, PlatformRole
 from app.accounts.purge import purge_account_completely
 from app.ai.models import AIConnection, AIConnectionOwnerType, utcnow
 from app.ai.service import LIMIT_WINDOW, platform_requests
+from app.benefits.models import Benefit
+from app.benefits.service import apply_service_benefit
+from app.campaigns.models import Campaign, CampaignGrant, CampaignStatus
 from app.core.config import settings
 from app.core.deps import DbSession
+from app.invitations.models import Invitation, InvitationRedemption, InvitationStatus
+from app.invitations.service import refresh_status
 from app.platform.api import PlatformOwner
 from app.subscriptions.models import (
     AISource,
     Plan,
     ServiceLinkType,
     Subscription,
+    SubscriptionOrigin,
     SubscriptionStatus,
 )
-from app.subscriptions.service import (
-    effective_service,
-    grant_service,
-    revoke_service,
-    seed_services,
-)
+from app.subscriptions.service import effective_service, revoke_service, seed_services
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 
 ACCOUNTS_PAGE = 50
 
 
-class ServiceIn(BaseModel):
-    name: str = Field(min_length=2, max_length=120)
-    source: AISource
-    linkType: ServiceLinkType = ServiceLinkType.PERSONAL
-    durationDays: int | None = Field(default=None, ge=1, le=3650)
-    dailyRequestLimit: int | None = Field(default=None, ge=1, le=100000)
-    description: str | None = Field(default=None, max_length=300)
-    active: bool = True
+class ServiceUpdateIn(BaseModel):
+    """Estado de una combinación fija Servicio × Fuente."""
+
+    # No aceptar intentos de cambiar servicio/fuente ni campos antiguos silenciosamente.
+    model_config = ConfigDict(extra="forbid")
+
+    active: bool
 
 
-class GrantIn(BaseModel):
-    serviceId: int
-    days: int | None = Field(default=None, ge=1, le=3650)
-    note: str | None = Field(default=None, max_length=200)
+class GrantBenefitIn(BaseModel):
+    benefitId: int
 
 
-def _service_out(db, plan: Plan) -> dict:
-    holders = db.scalar(
+def _combination_blockers(db: DbSession, plan: Plan) -> dict[str, int]:
+    now = utcnow()
+    active_accounts = db.scalar(
         select(func.count(Subscription.id)).where(
-            Subscription.plan_id == plan.id, Subscription.status == SubscriptionStatus.ACTIVE
+            Subscription.plan_id == plan.id,
+            Subscription.status == SubscriptionStatus.ACTIVE,
+            (Subscription.expires_at.is_(None) | (Subscription.expires_at > now)),
         )
+    ) or 0
+
+    # Sin un beneficio/suscripción vigente, una cuenta personal usa Individual × BYOK
+    # como combinación efectiva por defecto. Esas cuentas también protegen la combinación.
+    if plan.link_type == ServiceLinkType.PERSONAL and plan.ai_source == AISource.BYOK:
+        has_active_subscription = (
+            select(Subscription.id)
+            .where(
+                Subscription.account_id == Account.id,
+                Subscription.status == SubscriptionStatus.ACTIVE,
+                (Subscription.expires_at.is_(None) | (Subscription.expires_at > now)),
+            )
+            .exists()
+        )
+        default_byok_accounts = db.scalar(
+            select(func.count(Account.id)).where(
+                Account.account_type == AccountType.PERSONAL,
+                Account.status == AccountStatus.ACTIVE,
+                Account.platform_role.is_(None),
+                ~has_active_subscription,
+            )
+        ) or 0
+        active_accounts += int(default_byok_accounts)
+    active_benefits = db.scalar(
+        select(func.count(Benefit.id)).where(
+            Benefit.plan_id == plan.id,
+            Benefit.active.is_(True),
+            Benefit.deleted_at.is_(None),
+        )
+    ) or 0
+    active_campaigns = db.scalar(
+        select(func.count(Campaign.id))
+        .join(Benefit, Benefit.id == Campaign.benefit_id)
+        .where(
+            Benefit.plan_id == plan.id,
+            Campaign.deleted_at.is_(None),
+            Campaign.status.in_([CampaignStatus.ACTIVE, CampaignStatus.PAUSED]),
+        )
+    ) or 0
+
+    invitations = db.scalars(
+        select(Invitation)
+        .join(Benefit, Benefit.id == Invitation.benefit_id)
+        .where(Benefit.plan_id == plan.id)
+    ).all()
+    for invitation in invitations:
+        refresh_status(db, invitation, now=now)
+    active_invitations = sum(
+        1 for invitation in invitations if invitation.status == InvitationStatus.ACTIVE
     )
+
+    return {
+        "activeAccounts": int(active_accounts),
+        "activeBenefits": int(active_benefits),
+        "activeCampaigns": int(active_campaigns),
+        "activeInvitations": int(active_invitations),
+    }
+
+
+def _service_out(db: DbSession, plan: Plan) -> dict:
+    blockers = _combination_blockers(db, plan)
     return {
         "id": plan.id,
         "code": plan.code,
         "name": plan.name,
         "source": plan.ai_source.value,
         "linkType": plan.link_type.value,
-        "durationDays": plan.duration_days,
-        "dailyRequestLimit": plan.daily_request_limit,
         "description": plan.description,
         "active": plan.active,
-        "activeAccounts": int(holders or 0),
+        **blockers,
+        "canDisable": not any(blockers.values()),
     }
 
 
-def _apply(plan: Plan, payload: ServiceIn) -> None:
-    if payload.linkType == ServiceLinkType.CORPORATE:
-        # El vínculo corporativo llega con las empresas (T-004 etapa 5 / T-005).
-        raise HTTPException(
-            422, "Los servicios corporativos llegan con empresas."
-        )
-    plan.name = payload.name.strip()
-    plan.ai_source = payload.source
-    plan.link_type = payload.linkType
-    plan.duration_days = payload.durationDays
-    plan.daily_request_limit = payload.dailyRequestLimit
-    plan.description = (payload.description or "").strip() or None
+def _apply(plan: Plan, payload: ServiceUpdateIn, db: DbSession) -> None:
+    if plan.active and not payload.active:
+        blockers = _combination_blockers(db, plan)
+        if any(blockers.values()):
+            parts = []
+            if blockers["activeAccounts"]:
+                parts.append(f'{blockers["activeAccounts"]} cuenta(s) vigente(s)')
+            if blockers["activeBenefits"]:
+                parts.append(f'{blockers["activeBenefits"]} beneficio(s) activo(s)')
+            if blockers["activeCampaigns"]:
+                parts.append(f'{blockers["activeCampaigns"]} campaña(s) activa(s)/pausada(s)')
+            if blockers["activeInvitations"]:
+                parts.append(f'{blockers["activeInvitations"]} invitación(es) vigente(s)')
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "No se puede deshabilitar la combinación mientras tenga " + ", ".join(parts) + ".",
+            )
     plan.active = payload.active
 
 
@@ -91,28 +157,50 @@ def list_services(_: PlatformOwner, db: DbSession) -> list[dict]:
     seed_services(db)
     db.commit()
     plans = db.scalars(select(Plan).order_by(Plan.id)).all()
-    return [_service_out(db, plan) for plan in plans]
-
-
-@router.post("/services", status_code=status.HTTP_201_CREATED)
-def create_service(payload: ServiceIn, _: PlatformOwner, db: DbSession) -> dict:
-    plan = Plan(code="", name="", ai_source=payload.source)
-    _apply(plan, payload)
-    db.add(plan)
-    db.flush()
-    plan.code = f"SERVICE_{plan.id}"
+    rows = [_service_out(db, plan) for plan in plans]
     db.commit()
-    return _service_out(db, plan)
+    return rows
 
 
 @router.put("/services/{service_id}")
-def update_service(service_id: int, payload: ServiceIn, _: PlatformOwner, db: DbSession) -> dict:
+def update_service(service_id: int, payload: ServiceUpdateIn, _: PlatformOwner, db: DbSession) -> dict:
     plan = db.get(Plan, service_id)
     if plan is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Servicio inexistente.")
-    _apply(plan, payload)
+    _apply(plan, payload, db)
     db.commit()
     return _service_out(db, plan)
+
+
+def _channel(db, subscription_id: int | None) -> dict | None:
+    """Canal por el que la cuenta recibió su beneficio vigente: campaña, invitación o manual."""
+    if subscription_id is None:
+        return None
+    subscription = db.get(Subscription, subscription_id)
+    if subscription is None:
+        return None
+    origin = subscription.origin.value if subscription.origin else None
+    name = None
+    if origin == "CAMPAIGN":
+        name = db.scalar(
+            select(Campaign.name)
+            .join(CampaignGrant, CampaignGrant.campaign_id == Campaign.id)
+            .where(CampaignGrant.subscription_id == subscription_id)
+            .order_by(CampaignGrant.applied_at.asc(), CampaignGrant.id.asc())
+            .limit(1)
+        )
+    elif origin == "INVITATION":
+        name = db.scalar(
+            select(Invitation.name)
+            .join(InvitationRedemption, InvitationRedemption.invitation_id == Invitation.id)
+            .where(InvitationRedemption.subscription_id == subscription_id)
+            .order_by(InvitationRedemption.redeemed_at.asc(), InvitationRedemption.id.asc())
+            .limit(1)
+        )
+    elif origin == "MANUAL" and subscription.granted_by_account_id:
+        granter = db.get(Account, subscription.granted_by_account_id)
+        name = granter.email if granter else None
+    return {"type": origin, "name": name}
 
 
 def _account_out(db, account: Account) -> dict:
@@ -138,6 +226,7 @@ def _account_out(db, account: Account) -> dict:
         "ownConnections": int(own_keys or 0),
         "platformRequests24h": platform_requests(db, account.id, since=utcnow() - LIMIT_WINDOW),
         "service": service.payload(),
+        "channel": _channel(db, service.subscription_id),
     }
 
 
@@ -166,15 +255,43 @@ def _account(db, account_id: int) -> Account:
     return account
 
 
-@router.post("/accounts/{account_id}/service")
-def grant(account_id: int, payload: GrantIn, owner: PlatformOwner, db: DbSession) -> dict:
+@router.post("/accounts/{account_id}/benefit")
+def grant_benefit(
+    account_id: int,
+    payload: GrantBenefitIn,
+    owner: PlatformOwner,
+    db: DbSession,
+) -> dict:
+    """Asignación manual: el OWNER establece o reemplaza el Benefit en una sola acción."""
     account = _account(db, account_id)
-    plan = db.get(Plan, payload.serviceId)
-    if plan is None or not plan.active:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servicio inexistente o inactivo.")
-    grant_service(
-        db, account, plan, granted_by=owner, days=payload.days, note=(payload.note or None)
+    benefit = db.get(Benefit, payload.benefitId)
+    if (
+        benefit is None
+        or benefit.organization_id is not None
+        or not benefit.active
+        or benefit.deleted_at is not None
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Beneficio inexistente o inactivo.")
+
+    plan = db.get(Plan, benefit.plan_id)
+    if plan is None or not plan.active or plan.link_type != ServiceLinkType.PERSONAL:
+        raise HTTPException(status.HTTP_409_CONFLICT, "El servicio del beneficio no está disponible.")
+
+    result = apply_service_benefit(
+        db,
+        benefit,
+        account,
+        granted_by=owner,
+        origin=SubscriptionOrigin.MANUAL,
+        note=f"Otorgamiento manual · beneficio #{benefit.id}: {benefit.name}",
+        replace_existing=True,
     )
+    if not result.applied:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            result.error or "El beneficio no pudo aplicarse.",
+        )
+
     db.commit()
     return _account_out(db, account)
 
@@ -185,7 +302,6 @@ def revoke(account_id: int, _: PlatformOwner, db: DbSession) -> dict:
     revoke_service(db, account)
     db.commit()
     return _account_out(db, account)
-
 
 
 @router.delete("/accounts/{account_id}/dev-purge", status_code=status.HTTP_204_NO_CONTENT)

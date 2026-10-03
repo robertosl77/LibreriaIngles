@@ -33,8 +33,9 @@ export interface ServiceStatus {
   linkType: LinkType;
   granted: boolean;
   origin: 'MANUAL' | 'CAMPAIGN' | 'INVITATION' | 'PAYMENT' | null;
+  benefitId: number | null;
+  benefitName: string | null;
   expiresAt: string | null;
-  dailyRequestLimit: number | null;
   /** Rol de las keys propias: required (BYOK) · optional (Híbrido) · unused (Plataforma). */
   ownKeys: 'required' | 'optional' | 'unused';
   expired: { name: string; at: string } | null;
@@ -43,7 +44,6 @@ export interface ServiceStatus {
 export interface MyService extends ServiceStatus {
   usesOwnKeys: boolean;
   usesPlatform: boolean;
-  platformRequests24h?: number;
 }
 
 export interface PlatformService {
@@ -52,14 +52,16 @@ export interface PlatformService {
   name: string;
   source: AiSource;
   linkType: LinkType;
-  durationDays: number | null;
-  dailyRequestLimit: number | null;
   description: string | null;
   active: boolean;
   activeAccounts: number;
+  activeBenefits: number;
+  activeCampaigns: number;
+  activeInvitations: number;
+  canDisable: boolean;
 }
 
-export type PlatformServiceDraft = Omit<PlatformService, 'id' | 'code' | 'activeAccounts'>;
+export type PlatformServiceDraft = Pick<PlatformService, 'active'>;
 
 export interface PlatformAccount {
   id: number;
@@ -72,6 +74,39 @@ export interface PlatformAccount {
   ownConnections: number;
   platformRequests24h: number;
   service: ServiceStatus;
+  /** Cómo recibió el beneficio vigente: campaña, invitación o manual (null = sin beneficio). */
+  channel: { type: 'CAMPAIGN' | 'INVITATION' | 'MANUAL' | 'PAYMENT' | null; name: string | null } | null;
+}
+
+export interface PlatformBenefit {
+  id: number;
+  code: string;
+  name: string;
+  /** Id interno de la combinación Servicio × Fuente. */
+  serviceId: number;
+  combinationId: number;
+  service: LinkType;
+  serviceName: string;
+  source: AiSource;
+  combinationName: string;
+  combinationActive: boolean;
+  durationDays: number | null;
+  conflictPolicy: 'EXTEND_SAME_SERVICE';
+  active: boolean;
+  usedByCampaigns: number;
+  usedByInvitations: number;
+  activeBeneficiaries: number;
+  activeCampaigns: number;
+  activeInvitations: number;
+  canDelete: boolean;
+}
+
+export interface PlatformBenefitDraft {
+  name: string;
+  service: LinkType;
+  source: AiSource;
+  durationDays: number | null;
+  active: boolean;
 }
 
 export type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ENDED';
@@ -88,28 +123,94 @@ export interface PlatformCampaign {
   id: number;
   code: string;
   name: string;
-  serviceId: number;
+  benefitId: number;
+  benefitName: string;
+  serviceId: number | null;
   serviceName: string;
+  grantDays: number | null;
   status: CampaignStatus;
   trigger: CampaignTrigger;
   rules: CampaignRule[];
-  grantDays: number | null;
   priority: number;
   stackable: boolean;
   maxRecipients: number | null;
   recipients: number;
   startsAt: string | null;
   endsAt: string | null;
+  activatedAt?: string | null;
   notification: CampaignNotification;
   message: string | null;
   pendingEmails: number;
   overlapWarnings: { id: number; name: string; priority: number; stackable: boolean }[];
 }
 
-export type PlatformCampaignDraft = Omit<
-  PlatformCampaign,
-  'id' | 'code' | 'serviceName' | 'status' | 'recipients' | 'pendingEmails' | 'overlapWarnings'
->;
+export interface PlatformCampaignDraft {
+  name: string;
+  benefitId: number;
+  trigger: CampaignTrigger;
+  rules: CampaignRule[];
+  priority: number;
+  stackable: boolean;
+  maxRecipients: number | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  notification: CampaignNotification;
+  message: string | null;
+}
+
+export type InvitationRecipientMode = 'NAMED' | 'OPEN';
+export type InvitationStatus = 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'EXHAUSTED';
+
+export interface PlatformInvitation {
+  id: number;
+  name: string;
+  benefitId: number | null;
+  benefitName: string;
+  serviceName: string;
+  durationDays: number | null;
+  recipientMode: InvitationRecipientMode;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  status: InvitationStatus;
+  maxRedemptions: number;
+  redemptions: number;
+  remaining: number;
+  expiresAt: string | null;
+  emailStatus: string | null;
+  token: string | null;
+  createdAt: string;
+}
+
+export interface PlatformInvitationDraft {
+  name: string;
+  benefitId: number;
+  recipientMode: InvitationRecipientMode;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  maxRedemptions: number;
+  expiresAt: string | null;
+}
+
+export interface InvitationPreview {
+  name: string;
+  recipientMode: InvitationRecipientMode;
+  recipientEmailHint: string | null;
+  benefitName: string;
+  serviceName: string;
+  durationDays: number | null;
+  status: InvitationStatus;
+  remaining: number;
+  expiresAt: string | null;
+}
+
+export interface InvitationRedemption {
+  invitation: string;
+  benefit: string;
+  alreadyRedeemed: boolean;
+  redeemedAt: string;
+}
 
 export interface CampaignNotice {
   grantId: number;
@@ -378,6 +479,14 @@ export interface PlatformOverview {
   daily: { date: string; requests: number; platform: number; errors: number }[];
   connections: { id: number; name: string; last24h: UsageCounts; last30d: UsageCounts }[];
   topAccounts24h: { email: string; requests: number }[];
+  benefitUsage: { id: number; name: string; campaigns: number; invitations: number }[];
+  accountBenefits: {
+    email: string;
+    benefitName: string;
+    serviceName: string;
+    origin: 'MANUAL' | 'CAMPAIGN' | 'INVITATION' | 'PAYMENT';
+    expiresAt: string | null;
+  }[];
 }
 
 export interface ConnectionDraft {

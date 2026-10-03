@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService, errorMessage } from '../../core/api.service';
 import { AbilityProgress, Dashboard, SkillProgress } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 import { scoreChip } from '../../shared/status';
 
 const SKILL_STATUS: Record<SkillProgress['status'], { label: string; chip: string }> = {
@@ -32,7 +33,7 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink],
+  imports: [RouterLink, CollapseCardComponent],
   template: `
     <main class="page stack">
       <div class="page-header">
@@ -102,19 +103,18 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
         <section class="abilities" aria-label="Habilidades">
           @for (ab of d.abilities; track ab.key) {
             @let area = areaOf(d, ab);
-            <details class="card ability" [class.empty]="ab.score === null">
-              <summary>
+            <app-collapse-card>
+              <div collapse-header class="ability-head" [class.empty]="ab.score === null">
                 <span class="ab-name">{{ ab.name }}</span>
                 <span class="ab-chip" [class]="statusInfo(ab.status).chip">{{ statusInfo(ab.status).label }}</span>
                 <strong class="ab-score">{{ ab.score === null ? '—' : ab.score + '%' }}</strong>
-                <span class="chevron" aria-hidden="true"></span>
                 <span class="bar ab-bar"><span [class]="'ab-fill ' + band(ab.score)" [style.width.%]="ab.score ?? 0"></span></span>
                 <span class="muted small ab-meta">
                   {{ ab.evidenceCount }} evidencia(s)
                   @if (ab.trend) { · {{ trend[ab.trend] }} }
                   @if (ab.assistedRecent) { · <span class="help-mark">{{ ab.assistedRecent }} reciente(s) con ayuda</span> }
                 </span>
-              </summary>
+              </div>
 
               <div class="ab-body">
                 <p class="muted small">{{ help[ab.key] }}</p>
@@ -191,7 +191,7 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
                   }
                 }
               </div>
-            </details>
+            </app-collapse-card>
           }
         </section>
       }
@@ -203,13 +203,12 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
     .orthography-score { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; }
     .orthography-score > strong { font-size: 1.8rem; }
     .abilities { display: flex; flex-direction: column; gap: 0.7rem; }
-    .ability { padding: 0; }
-    .ability summary {
-      list-style: none; cursor: pointer; padding: 0.9rem 1.1rem;
-      display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.3rem 0.8rem; align-items: center;
+    .ability-head {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 0.3rem 0.8rem;
+      align-items: center;
     }
-    .ability summary::-webkit-details-marker { display: none; }
-    .ability summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius); }
     .ab-name { font-weight: 700; font-size: 1.05rem; min-width: 0; }
     .weak .chip { white-space: normal; }
     .ab-score { min-width: 3.5rem; text-align: right; }
@@ -221,14 +220,8 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
     .ab-fill.b-green { background: linear-gradient(90deg, #6fcf9b, #1f8a52); }
     .ab-meta { grid-column: 1 / -1; }
     .help-mark { color: var(--warn); font-weight: 600; }
-    .chevron {
-      width: 0.55rem; height: 0.55rem; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
-      transform: rotate(45deg); transition: transform 0.15s ease; margin: 0 0.2rem 0.2rem;
-    }
-    .ability[open] .chevron { transform: rotate(-135deg); margin-bottom: -0.2rem; }
-    .ability.empty .ab-name { color: var(--muted); }
-    .ab-body { padding: 0 1.1rem 1rem; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.5rem; }
-    .ab-body > p:first-child { margin-top: 0.8rem; }
+    .ability-head.empty .ab-name { color: var(--muted); }
+    .ab-body { display: flex; flex-direction: column; gap: 0.5rem; }
     .ab-body p { margin: 0; }
     .practice { background: var(--info-bg); border-radius: 0.6rem; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.2rem; }
     .label { font-weight: 600; font-size: 0.85rem; }
@@ -241,15 +234,12 @@ const ABILITY_HELP: Record<AbilityProgress['key'], string> = {
     @media (max-width: 560px) {
       .orthography-card { align-items: flex-start; flex-direction: column; }
       .orthography-score { align-items: flex-start; }
-      .ability summary { gap: 0.3rem 0.45rem; padding: 0.8rem 0.9rem; }
+      .ability-head { gap: 0.3rem 0.45rem; grid-template-columns: 1fr auto; }
       .ab-score { min-width: 0; }
-      .ability summary { grid-template-columns: 1fr auto auto; }
       .ab-chip { grid-row: 2; grid-column: 1 / -1; justify-self: start; }
-      .ab-body { padding: 0 0.9rem 0.9rem; }
       .skill { flex-direction: column; align-items: flex-start; }
       .skill-score { justify-content: flex-start; min-width: 0; }
     }
-    @media (prefers-reduced-motion: reduce) { .chevron { transition: none; } }
   `
 })
 export class DashboardComponent implements OnInit {

@@ -5,8 +5,8 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
 from app.accounts.models import AuthMethod, PlatformRole
-from app.ai.models import AIConnection, AIConnectionOwnerType, utcnow
-from app.ai.service import LIMIT_WINDOW, ai_sources, candidate_connections, platform_requests
+from app.ai.models import AIConnection, AIConnectionOwnerType
+from app.ai.service import ai_sources, candidate_connections
 from app.auth import service
 from app.core.config import settings
 from app.core.deps import CurrentStudy, DbSession
@@ -40,11 +40,13 @@ class AuthConfig(BaseModel):
 
 class GoogleLoginRequest(BaseModel):
     credential: str = Field(min_length=10)
+    invitationToken: str | None = Field(default=None, min_length=10, max_length=500)
 
 
 class DevLoginRequest(BaseModel):
     email: EmailStr
     name: str | None = None
+    invitationToken: str | None = Field(default=None, min_length=10, max_length=500)
 
 
 class TokenResponse(BaseModel):
@@ -74,6 +76,7 @@ def login_google(payload: GoogleLoginRequest, db: DbSession) -> TokenResponse:
             google_subject=identity.subject,
             display_name=identity.name,
             auth_method=AuthMethod.GOOGLE,
+            invitation_token=payload.invitationToken,
         )
     except service.AuthError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
@@ -92,6 +95,7 @@ def login_dev(payload: DevLoginRequest, db: DbSession) -> TokenResponse:
             display_name=payload.name,
             # Simula el alta personal (Google) sin pasar por Google. Solo en local.
             auth_method=AuthMethod.GOOGLE,
+            invitation_token=payload.invitationToken,
         )
     except service.AuthError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc))
@@ -118,10 +122,6 @@ def _me_payload(study, db) -> dict:
         # El dueño no tiene servicio: usa sus keys y las de la plataforma (T-004: "empresa dueña").
         service_payload.update(
             name="Dueño de la plataforma", source="HYBRID", ownKeys="optional", granted=False
-        )
-    if service.daily_request_limit is not None:
-        service_payload["platformRequests24h"] = platform_requests(
-            db, account.id, since=utcnow() - LIMIT_WINDOW
         )
     return {
         "account": {

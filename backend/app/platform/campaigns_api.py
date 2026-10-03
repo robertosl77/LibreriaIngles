@@ -8,6 +8,8 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
+from app.benefits.models import Benefit
+from app.benefits.service import benefit_duration, seed_benefits
 from app.campaigns.models import (
     Campaign,
     CampaignGrant,
@@ -40,10 +42,9 @@ class CampaignRuleIn(BaseModel):
 
 class CampaignIn(BaseModel):
     name: str = Field(min_length=2, max_length=120)
-    serviceId: int
+    benefitId: int
     trigger: CampaignTrigger = CampaignTrigger.FIRST_LOGIN
     rules: list[CampaignRuleIn] = Field(default_factory=list, max_length=20)
-    grantDays: int | None = Field(default=None, ge=1, le=3650)
     priority: int = Field(default=100, ge=1, le=10000)
     stackable: bool = False
     maxRecipients: int | None = Field(default=None, ge=1, le=10_000_000)
@@ -102,25 +103,27 @@ def _validate_rule(rule: CampaignRuleIn) -> dict:
     return {"field": field, "operator": operator, "value": value}
 
 
-def _plan(db: DbSession, plan_id: int) -> Plan:
-    plan = db.get(Plan, plan_id)
-    if plan is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Servicio inexistente.")
-    if plan.link_type != ServiceLinkType.PERSONAL:
+def _benefit(db: DbSession, benefit_id: int, *, require_active: bool = False) -> Benefit:
+    benefit = db.get(Benefit, benefit_id)
+    if benefit is None or benefit.organization_id is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Beneficio inexistente.")
+    plan = db.get(Plan, benefit.plan_id)
+    if plan is None or plan.link_type != ServiceLinkType.PERSONAL:
         raise HTTPException(422, "Las campañas corporativas llegan con la etapa de empresas.")
-    return plan
+    if require_active and (not benefit.active or not plan.active):
+        raise HTTPException(409, "El beneficio o su servicio está inactivo.")
+    return benefit
 
 
 def _apply(campaign: Campaign, payload: CampaignIn, db: DbSession) -> None:
-    _plan(db, payload.serviceId)
+    _benefit(db, payload.benefitId)
     campaign.name = payload.name.strip()
-    campaign.plan_id = payload.serviceId
+    campaign.benefit_id = payload.benefitId
     campaign.trigger = payload.trigger
     campaign.eligibility = {
         "mode": "ALL",
         "rules": [_validate_rule(rule) for rule in payload.rules],
     }
-    campaign.grant_days = payload.grantDays
     campaign.priority = payload.priority
     campaign.stackable = payload.stackable
     campaign.max_recipients = payload.maxRecipients
@@ -168,7 +171,8 @@ def _overlap_warnings(db: DbSession, campaign: Campaign) -> list[dict]:
 
 
 def _out(db: DbSession, campaign: Campaign) -> dict:
-    plan = db.get(Plan, campaign.plan_id)
+    benefit = db.get(Benefit, campaign.benefit_id)
+    plan = db.get(Plan, benefit.plan_id) if benefit else None
     recipients = db.scalar(
         select(func.count(CampaignGrant.id)).where(CampaignGrant.campaign_id == campaign.id)
     ) or 0
@@ -183,12 +187,14 @@ def _out(db: DbSession, campaign: Campaign) -> dict:
         "id": campaign.id,
         "code": campaign.code,
         "name": campaign.name,
-        "serviceId": campaign.plan_id,
+        "benefitId": campaign.benefit_id,
+        "benefitName": benefit.name if benefit else "Beneficio eliminado",
+        "serviceId": plan.id if plan else None,
         "serviceName": plan.name if plan else "Servicio eliminado",
+        "grantDays": benefit_duration(benefit, plan) if benefit and plan else None,
         "status": campaign.status.value,
         "trigger": campaign.trigger.value,
         "rules": eligibility.get("rules", []),
-        "grantDays": campaign.grant_days,
         "priority": campaign.priority,
         "stackable": campaign.stackable,
         "maxRecipients": campaign.max_recipients,
@@ -216,6 +222,7 @@ def _campaign(db: DbSession, campaign_id: int) -> Campaign:
 
 @router.get("")
 def list_campaigns(_: PlatformOwner, db: DbSession) -> list[dict]:
+    seed_benefits(db)
     seed_campaigns(db)
     db.commit()
     campaigns = db.scalars(
@@ -234,7 +241,7 @@ def create_campaign(payload: CampaignIn, owner: PlatformOwner, db: DbSession) ->
     campaign = Campaign(
         code=f"CAMPAIGN_{uuid4().hex.upper()}",
         name="",
-        plan_id=payload.serviceId,
+        benefit_id=payload.benefitId,
         created_by_account_id=owner.id,
     )
     _apply(campaign, payload, db)
@@ -260,9 +267,7 @@ def activate_campaign(campaign_id: int, _: PlatformOwner, db: DbSession) -> dict
     campaign = _campaign(db, campaign_id)
     if campaign.status == CampaignStatus.ENDED:
         raise HTTPException(409, "Una campaña terminada no se puede reactivar.")
-    plan = _plan(db, campaign.plan_id)
-    if not plan.active:
-        raise HTTPException(409, "El servicio de la campaña está inactivo.")
+    _benefit(db, campaign.benefit_id, require_active=True)
     if campaign.trigger == CampaignTrigger.SCHEDULED:
         raise HTTPException(409, "Las campañas programadas requieren el scheduler de T-059.")
     if campaign.status != CampaignStatus.ACTIVE:
@@ -292,11 +297,6 @@ def finish_campaign(campaign_id: int, _: PlatformOwner, db: DbSession) -> dict:
 
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_campaign(campaign_id: int, _: PlatformOwner, db: DbSession) -> None:
-    """Eliminar solo campañas terminadas.
-
-    Sin beneficiarios se borra físicamente. Con beneficiarios se oculta lógicamente para conservar
-    CampaignGrant como historial/idempotencia.
-    """
     campaign = _campaign(db, campaign_id)
     if campaign.status != CampaignStatus.ENDED:
         raise HTTPException(409, "Solo se puede eliminar una campaña terminada.")

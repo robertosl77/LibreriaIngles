@@ -90,10 +90,10 @@ Luego proteger `main` para que los cambios entren mediante Pull Request y requie
 
 ## T-002 — Revisar vulnerabilidades npm
 
-**Estado:** Resuelta (PR #28 a `develop`) · Claude  
-**Estado:** Resuelta (PR a `develop`) · Claude
+**Estado:** Reabierta para revisión (2026-10-03) · la resolución anterior de PR #28 sigue vigente para
+las vulnerabilidades originales.
 
-Resolución (2026-10-01): `npm audit` pasó de **29 (2 críticas, 14 altas) a 0**.
+Resolución anterior (2026-10-01): `npm audit` pasó de **29 (2 críticas, 14 altas) a 0**.
 
 1. Causa: Angular 19 ya no recibe parches (todas las 19.x afectadas: XSS en el compilador,
    hidratación/SSR, etc.), y sus herramientas fijaban versiones viejas de vite, piscina, tar…
@@ -109,6 +109,14 @@ Resolución (2026-10-01): `npm audit` pasó de **29 (2 críticas, 14 altas) a 0*
 6. CI: Node 22 y `npm audit --audit-level=high` en el job del frontend. Se borra el workflow
    viejo `t002-npm-audit.yml` (aplicaba `npm audit fix` automático en una rama que ya no existe).
 7. Requisito: Node.js 22.12+ (o 20.19+/24+). Después de actualizar: `npm ci` en el frontend.
+
+**Nueva detección (2026-10-03):** durante la validación de T-004, `npm audit --audit-level=high`
+volvió a informar **9 vulnerabilidades altas** por el advisory
+`GHSA-ch52-4w7c-c8xp` de `http-cache-semantics`, arrastrado por dependencias de
+`@angular/cli`/npm (`make-fetch-happen`, `sigstore`, `pacote`, etc.). El build de Angular
+sigue pasando. npm propone corregirlo únicamente con `npm audit fix --force`, que actualizaría a
+Angular CLI 22.2.1 y es un cambio mayor; **no aplicar automáticamente** dentro de T-004. Revisar
+como tarea separada.
 
 Durante la instalación actual npm informó vulnerabilidades, incluyendo una crítica.
 
@@ -187,7 +195,7 @@ No eliminar el modelo PLATFORM/HYBRID; solamente evitar que se active antes de i
 ## T-004 — Membresías, servicios, campañas e invitaciones
 
 **Prioridad:** P1 — Alta (antes de publicar la app o cobrar)  
-**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · Etapa 1 (Servicios) resuelta (PR #26 a `develop`) · etapas 2–6 pendientes  
+**Estado:** Diseño acordado (Roberto + Claude, 2026-10-01) · Etapa 1 (Servicios) resuelta (PR #26) · Etapa 2 (Campañas) resuelta (PR #34) · Etapa 3 (Invitaciones) en desarrollo/pruebas en `feat/t-004-invitations` · etapas 4–6 pendientes  
 **Responsable:** Claude  
 **Relación:** T-003 (cada usuario usa solo su IA propia: hoy decide `platform_ai_allowed()`),
 T-005 (conexiones de IA de una organización), T-006 (portal del dueño con las keys de
@@ -209,36 +217,49 @@ FUENTE DE IA (lo único que elige la persona)
    PLATAFORMA  → las keys de sr.macros
    HÍBRIDO     → las propias primero; si fallan de fondo, las de sr.macros
 
-SERVICIO     = vínculo + fuente + vigencia + tope de tokens + costo (futuro)
+SERVICIO     = fila del modelo de negocio (PERSONAL; CORPORATIVA futuro)
+FUENTE IA    = columna fija (BYOK / PLATAFORMA / HÍBRIDO)
+MEMBRESÍA    = servicio × fuente; se puede habilitar/deshabilitar
+BENEFICIO    = servicio + fuente + duración/vigencia + política de otorgamiento
 
 OTORGAMIENTO (cómo alguien recibe un servicio)
    PAGO        → lo contrata el cliente (futuro)
-   INVITACIÓN  → a una persona puntual, por link
+   INVITACIÓN  → alguien llega/reclama mediante un link (nominado o abierto)
    CAMPAÑA     → automático a un grupo (ej. "todos los que se registren desde hoy")
 ```
 
-- **La membresía no se elige.** Personal o corporativa se deduce de si la persona vino por una
-  empresa. Es un ordenamiento interno de configuraciones, no una opción para el usuario.
+- **El servicio base** es Personal o Corporativa y se deduce del contexto de la cuenta.
+  La **membresía** es la intersección efectiva entre ese Servicio y la Fuente de IA.
 - **Hoy (sin pagos):** vínculo + fuente y ya funciona. **Con pagos:** triple restricción
   vínculo × fuente × pago (el pago habilita el servicio por un período, ej. mensual).
 - Analogías: **home banking** (uno para personas, otro para empresas: el de empresas es el que
   tiene una empresa de por medio), AWS (base fija + uso variable) y el celular (cuenta controlada
   / línea libre).
 
-### 2. Servicios (catálogo configurable por sr.macros)
+### 2. Servicios, fuentes y membresías
 
-Cada combinación vínculo × fuente es un servicio que después tendrá su costo:
+El modelo se separa explícitamente en dos ejes fijos y una intersección configurable:
 
 ```text
                 │ BYOK              │ PLATAFORMA          │ HÍBRIDO
 ────────────────┼───────────────────┼─────────────────────┼──────────────────────
-PERSONAL        │ servicio A        │ servicio B          │ servicio C
-CORPORATIVO     │ servicio D        │ servicio E          │ servicio F
+PERSONAL        │ membresía         │ membresía           │ membresía
+CORPORATIVA fut.│ membresía         │ membresía           │ membresía
 ```
 
-- **Panel de servicios de sr.macros:** crear/editar servicios (nombre, vínculo, fuente, duración,
-  tope de tokens por día, costo futuro). Permite agregar combinaciones nuevas más adelante.
-  Nombres iniciales: **Individual** y **Corporativa**.
+**Decisión Roberto + ChatGPT, 2026-10-02:**
+
+- **Servicios (filas):** hoy solo `PERSONAL`; futuro `CORPORATIVA`. Se muestran como información
+  del modelo de negocio y no se crean, editan, activan ni desactivan desde el portal.
+- **Fuentes (columnas):** `BYOK`, `PLATFORM` y `HYBRID`. También son fijas e informativas.
+- **Membresías:** la intersección Servicio × Fuente sí se administra. El OWNER puede habilitar o
+  deshabilitar, por ejemplo, `Personal × Híbrido`.
+- Una membresía **no puede deshabilitarse** mientras tenga una cuenta vigente, un beneficio
+  activo, una campaña ACTIVE/PAUSED o una invitación todavía canjeable vinculada.
+- Una empresa concreta (por ejemplo Cacatúa) no es una fila: utiliza el servicio Corporativa.
+- Agregar una nueva fila o una nueva fuente implica una decisión de modelo y cambios de código.
+- Servicio **no lleva duración ni límites de consumo**. La duración pertenece exclusivamente a
+  Beneficio y los límites actuales pertenecen a cada conexión de IA.
 - **Costos (futuro):** PLATAFORMA = cuota fija estimada para cubrir los tokens; HÍBRIDO = base +
   uso a demanda de sr.macros, detallado como factura (T-049).
 - **BYOK corporativo:** las keys las carga la empresa (paga la capacitación, no el empleado) →
@@ -248,32 +269,228 @@ CORPORATIVO     │ servicio D        │ servicio E          │ servicio F
 
 ```text
 CAMPAÑA
-  servicio     → uno del catálogo (ej. PERSONAL + PLATAFORMA, sin costo, 3 días, tope chico)
+  beneficio    → referencia un Benefit (ej. Plataforma 3 días)
   para quién   → ej. personas registradas a partir de que se activa la campaña
   estado       → activa / pausada / terminada
 ```
 
-- **Panel de campañas de sr.macros.** Una campaña se alimenta de un servicio del catálogo.
-- **La bienvenida es la primera campaña** (no algo fijo en el código): PERSONAL + PLATAFORMA,
-  sin costo, **3 días corridos**, con tope de tokens. Deja probar la app sin saber qué es una API
-  key. Como PedidosYa: cupones a todos al principio; después solo para fidelizar (T-050).
+- **Panel de campañas de sr.macros.** Una campaña referencia un Beneficio; no vuelve a configurar
+  servicio ni días.
+- **La bienvenida es la primera campaña** (no algo fijo en el código): usa el beneficio
+  "Plataforma · 3 días", que a su vez referencia PERSONAL + PLATAFORMA. Deja probar la app sin
+  saber qué es una API key. Como PedidosYa: cupones a todos al principio; después solo para
+  fidelizar (T-050).
 
-### 4. Invitaciones (sr.macros o una empresa otorgan un servicio a una persona)
+### 4. Invitaciones (un solo motor para plataforma y empresas)
+
+**Decisión Roberto + ChatGPT, 2026-10-02:** existe **un solo motor de invitaciones**. No se construye
+un motor para sr.macros y otro para empresas. La Etapa 3 habilita primero la gestión del
+PLATFORM_OWNER; la Etapa 5/T-010 expondrá el mismo motor a los ADMIN de organización, limitado por
+scope/permisos/capacidades.
 
 ```text
-INVITACIÓN
-  quién invita  → sr.macros | una empresa (futuro: usuarios con invitaciones de regalo)
-  servicio      → uno del catálogo (vínculo + fuente + días + costo)
-  cómo llega    → un LINK que se copia y se manda como quiera (WhatsApp, etc.)
-                  el envío por email (T-051) llevará el mismo link
-
-Ej.: sr.macros → amigo:    PERSONAL + PLATAFORMA, 30 días, sin costo
-     Empresa X → empleado:  CORPORATIVO + HÍBRIDO, mensual, la paga la empresa
+MOTOR DE INVITACIONES (100 % de capacidades)
+             │
+             ├── PLATFORM / OWNER (sr.macros)
+             │      └── beneficios PERSONALES
+             │
+             └── ORGANIZATION / ADMIN (futuro T-010)
+                    └── beneficios CORPORATIVOS
 ```
 
-La invitación no es una membresía: es el medio para otorgar un servicio. La corporativa llega al
-email corporativo (unir cuentas personal/corporativa de una misma persona, por ejemplo por DNI,
-queda por ver).
+sr.macros se comporta conceptualmente como la "empresa dueña" para clientes individuales, pero
+**Librería Inglés no se modela como una Organization**: el cliente personal no debe convertirse en
+miembro corporativo ni heredar semántica ADMIN/STUDENT.
+
+#### 4.1. Capa central de Beneficios: no duplicar servicio + días
+
+Campañas e invitaciones **no deben configurar por separado la misma cosa**. Se extrae una capa
+atómica reutilizable:
+
+```text
+PLAN / SERVICIO
+¿Qué servicio existe?
+        │
+        ▼
+BENEFICIO
+¿Qué se otorga?
+servicio + fuente + duración + política de conflicto
+        │
+        ├────────────────┐
+        ▼                ▼
+    CAMPAÑA          INVITACIÓN
+cuándo/a quién       cómo se reclama
+automáticamente      mediante link
+        │                │
+        └───────┬────────┘
+                ▼
+          grant_service()
+```
+
+Ejemplo:
+
+```text
+BENEFICIO
+"Plataforma 30 días"
+  servicio = Personal
+  fuente = Plataforma
+  duración = 30 días
+
+CAMPAÑA "Volvé a estudiar" ────────┐
+                                   ├── usa el MISMO beneficio
+INVITACIÓN "Regalo amigo" ─────────┘
+```
+
+La comunicación **no pertenece al Beneficio**. El mismo beneficio puede llegar por aviso IN_APP,
+email de invitación o link compartido por WhatsApp.
+
+Política conservadora inicial al aplicar un beneficio:
+
+- sin servicio otorgado vigente → se otorga normalmente;
+- mismo servicio vigente → se suman los días;
+- servicio vigente **distinto** → no se reemplaza silenciosamente y el canje no consume cupo;
+- reemplazo/crédito/unificación requieren una política explícita futura (ver sección 10).
+
+**Corrección de frontera de responsabilidades (2026-10-02):** `Plan/Service.duration_days` se elimina.
+Servicio ya no tiene vigencia propia. Si una configuración anterior tenía duración en Servicio, la
+migración 0017 la materializa en Beneficio antes de quitar la columna. Desde ese punto, vacío en
+`Benefit.duration_days` significa explícitamente **sin vencimiento**, no "heredar del servicio".
+
+El otorgamiento manual desde "Cuentas y servicios" también debe elegir un **Beneficio**, no volver a
+pedir Servicio + días. Así los cuatro mecanismos convergen en la misma capa:
+
+```text
+MANUAL ───────┐
+CAMPAÑA ──────┤
+INVITACIÓN ───┼──> BENEFICIO ──> grant_service() ──> Subscription
+PAGO futuro ──┘
+```
+
+Para estados booleanos reutilizar el mismo control visual Activo/Inactivo en Servicios y Beneficios.
+Campañas e Invitaciones conservan controles distintos porque tienen ciclos de vida multietapa.
+
+#### 4.2. Dos modalidades del mismo objeto Invitation
+
+```text
+NAMED / NOMINADA
+  destinatario = email concreto
+  cupo = 1
+  solo esa identidad puede canjear el beneficio
+
+OPEN / ABIERTA
+  destinatario = ninguno
+  cupo = 1, N, ...
+  cualquier cuenta con el link puede canjear mientras quede cupo
+```
+
+`max_redemptions` = **cantidad máxima total de canjes del link por cuentas distintas**. No significa
+que una misma cuenta pueda cobrar el beneficio N veces. El canje de la misma invitación por la misma
+cuenta es idempotente.
+
+Casos:
+
+```text
+OPEN + cupo 1   → regalo transferible: quien lo use primero lo consume
+OPEN + cupo 10  → las primeras 10 cuentas distintas reciben el beneficio
+NAMED           → amigo@ejemplo.com; otra identidad no recibe ese beneficio
+```
+
+Si alguien abre una invitación NAMED pero inicia sesión con otro email, **no se rechaza el login**:
+entra como usuario normal; simplemente no canjea la invitación. Las campañas normales (por ejemplo
+Bienvenida) siguen pudiendo aplicarle.
+
+Cuando el login sí llega con una invitación válida, el motor intenta el canje **antes** de evaluar
+campañas de login/primer login. Así la invitación correcta no queda pisada ni bloqueada por la
+campaña de bienvenida.
+
+#### 4.3. Pre-invitación ≠ cuenta
+
+Una persona invitada que todavía nunca ingresó no se agrega a "Cuentas y servicios". Vive en
+**Invitaciones / pre-invitaciones pendientes**:
+
+```text
+pre-invitación
+(email / nombre / apellido / beneficio / token / estado)
+        ↓
+la persona llega + verifica su identidad
+        ↓
+cuenta existente o nueva
+        ↓
+canje
+        ↓
+Subscription origin=INVITATION
+```
+
+La invitación y sus canjes se separan:
+
+```text
+INVITATION
+  qué beneficio ofrece
+  quién la creó
+  scope plataforma/organización
+  modalidad NAMED/OPEN
+  destinatario (si NAMED)
+  token
+  cupo
+  vigencia
+  estado
+
+INVITATION_REDEMPTION (CANJE)
+  qué cuenta la utilizó
+  cuándo
+  qué suscripción recibió
+  resumen histórico del beneficio
+```
+
+Esto reemplaza el modelo de un único `accepted_at`: un link abierto puede producir muchos canjes y
+cada uno necesita trazabilidad propia.
+
+El token se busca por **hash** y se conserva además **cifrado** para que el OWNER pueda copiarlo y
+T-051 pueda reenviar exactamente el mismo link sin guardar el secreto en texto plano.
+
+#### 4.4. Email y carga masiva futura
+
+Una invitación NAMED, tanto creada manualmente como generada por una futura importación de empleados,
+**debe enviarse por email** cuando T-051 esté implementada. En Etapa 3 queda en cola
+`email_status=PENDING`; mientras no exista proveedor de correo, el OWNER puede copiar el mismo link
+como respaldo.
+
+Para empresa (Etapa 5/T-010), el archivo CSV/XLS describe **personas, no reglas internas**:
+
+```text
+SÍ:
+email
+nombre
+apellido
+(+ datos personales opcionales que se definan: DNI, nacimiento, etc.)
+
+NO:
+rol
+servicio
+beneficio
+plan
+fuente de IA
+permisos internos
+```
+
+El ADMIN primero selecciona/configura el beneficio y luego importa. Cada fila crea una invitación
+NAMED independiente y el rol por defecto es **STUDENT**. El archivo no puede elevar privilegios ni
+cambiar reglas de negocio por un error de tipeo.
+
+#### 4.5. Recuperación sin link y controles corporativos futuros
+
+Si un email corporativo precargado no recibe el correo o pierde el link, el futuro portal corporativo
+debe poder detectar una invitación NAMED pendiente por **email verificado**. No debe incorporar a la
+persona silenciosamente por usar un email corporativo: debe ofrecer explícitamente algo como:
+"Tenés una invitación pendiente de Cacatúa. ¿Querés incorporarte?"
+
+También queda para T-010 definir dominios permitidos por organización (`@cacatua.com`,
+`@cacatua.com.ar`, etc.) y una política de capacidades controlada por PLATFORM_OWNER. Ejemplo:
+sr.macros puede permitir a una empresa invitaciones NAMED y carga masiva, pero deshabilitar links
+OPEN; si en el futuro habilita OPEN, puede exigir dominio corporativo verificado.
+
+La invitación no es una membresía: es el medio de incorporación/otorgamiento. En el flujo
+corporativo, el canje exitoso podrá además crear/activar la membresía STUDENT correspondiente.
 
 ### 5. Estructura: sr.macros como "empresa dueña"
 
@@ -307,16 +524,20 @@ siempre:
 
 ### 8. Topes y frenos (para no perder plata ni sufrir abusos)
 
-1. **Tope de TOKENS por día** (no por cantidad de pedidos), configurable por servicio. Aplica a
-   todo lo que usa las keys de sr.macros: campañas (bienvenida), servicio plataforma y la parte de
-   plataforma del híbrido. Depende de T-049; hasta tenerlo, tope provisorio por pedidos.
-2. **Generar una clase ya gasta tokens del tope:** crear clases y no terminarlas consume el tope
-   igual (se frena solo).
-3. **Máximo de clases abiertas a la vez** (ej. 3, configurable): para crear otra, terminá o
+1. **Límites actuales por PEDIDOS:** pertenecen exclusivamente a cada **conexión de IA de
+   plataforma**, nunca al Servicio. Cada conexión puede definir:
+   - límite total de pedidos en ventana móvil de 24 h;
+   - límite de pedidos por usuario en ventana móvil de 24 h.
+   Ambos campos deben mostrar explícitamente la unidad **pedidos**.
+2. **Tokens/costo (T-049):** cuando exista medición real de tokens, definir allí la política
+   comercial/operativa correspondiente sin volver a introducir un límite de pedidos dentro de
+   Servicio.
+3. **Generar una clase ya consume IA:** crear clases y no terminarlas igualmente consume pedidos
+   y, cuando T-049 exista, tokens/costo.
+4. **Máximo de clases abiertas a la vez** (ej. 3, configurable): para crear otra, terminá o
    descartá una.
-4. El tope se controla al **crear**: una clase ya generada se puede terminar y corregir aunque se
-   pase un poco (es acotado: ~6 ejercicios).
-5. Al alumno se le muestra en porcentaje ("usaste el 80 % de tu IA de hoy"), nunca en tokens.
+5. El control de consumo se evalúa al intentar usar una conexión. La visualización para el alumno
+   deberá diseñarse con T-049/T-053 y no inferirse desde un límite del Servicio.
 
 ### 9. Consumo de tokens (T-049)
 
@@ -340,7 +561,7 @@ Ej.: pagó su individual hasta el 15/10 y el 01/10 su empresa lo invita.
 1. Servicios: catálogo + panel de sr.macros; vínculo y fuente efectivos;
    platform_ai_allowed() pasa a mirar el servicio vigente; vencimiento en solo lectura
 2. Campañas: panel + bienvenida (3 días, plataforma, tope provisorio por pedidos)
-3. Invitaciones de sr.macros por link
+3. Beneficios reutilizables + invitaciones por link (motor genérico; UI inicial PLATFORM_OWNER)
 4. Tokens y costo por uso (T-049) → topes por tokens, frenos de clases abiertas, detalle al cliente
 5. Corporativo: empresas, keys de la empresa (T-005), invitaciones de empresa, unificar/separar
 6. Pagos (otro otorgamiento; débito automático a definir)
@@ -349,27 +570,119 @@ Ej.: pagó su individual hasta el 15/10 y el 01/10 su empresa lo invita.
 **Etapa 1 — Resuelta (PR #26 a `develop`):**
 
 ```text
-migración 0012     plans: vínculo, duración, tope diario, descripción
+migración 0012     plans: vínculo, tope diario, descripción
+corrección 0017     duración retirada de plans; vigencia centralizada en benefits
                    subscriptions: vence, origen (manual/campaña/invitación/pago), otorgado por, nota
                    siembra: Individual · propias keys / · Plataforma / · Híbrido
 servicio vigente   effective_service(cuenta): suscripción activa; si no hay o venció →
                    "Individual · propias keys" (+ aviso "venció" durante 14 días)
 router de IA       BYOK → propias · PLATAFORMA → plataforma · HÍBRIDO → propias y luego
                    plataforma · dueño → ambas (reemplaza platform_ai_allowed de T-003)
-tope provisorio    pedidos exitosos a la plataforma por cuenta en 24 h (hasta T-049 tokens)
-portal sr.macros   Servicios (alta/edición) + Cuentas y servicios (buscar, otorgar N días, quitar)
+límites actuales  solo en ai_connections: total 24 h + por usuario 24 h, medidos en pedidos
+portal sr.macros   Servicios (sin límites) + Beneficios (servicio + duración)
+                   + Cuentas y servicios (buscar, otorgar beneficio, quitar)
 usuario            "Tu servicio" en IA e Inicio: nombre, vence, % de uso de hoy, aviso de vencido
 ```
 
 Al vencer, por ahora vuelve a "Individual · propias keys": si tiene keys propias sigue; si
 no, no puede generar clases nuevas pero ve todo lo hecho (solo lectura de hecho).
 
-### 12. Pendiente de definir más adelante
+**Etapa 2 — Resuelta (PR #34 a `develop`):**
 
+```text
+campañas        trigger + condiciones + prioridad + acumulabilidad + vigencia + límites
+historial       CampaignGrant idempotente por campaña/cuenta
+bienvenida      ejemplo en borrador: 3 días de Plataforma
+ciclo           borrador / activa / pausada / terminada + borrado seguro
+seguridad       una falla del motor nunca impide login, /me o /me/level
+```
+
+**Etapa 3 — En desarrollo/pruebas (`feat/t-004-invitations`):**
+
+```text
+benefits        única fuente de verdad para servicio + duración + política de conflicto
+servicios       sin duración ni límites de consumo; vínculo + fuente + metadatos
+conexiones       única fuente de verdad para límites actuales: total 24 h + por usuario 24 h
+manual          Cuentas y servicios otorga benefit_id, no service_id + días
+campañas        pasan a referenciar benefit_id (sin duplicar plan_id + grant_days)
+invitaciones    NAMED u OPEN, token, cupo, vigencia opcional, cancelación/regeneración
+canjes          InvitationRedemption por cuenta; Subscription origin=INVITATION
+login           canje de invitación antes de campañas; errores de invitación no bloquean login
+portal OWNER    Beneficios + Pre-invitaciones/Invitaciones
+email           NAMED queda PENDING hasta implementar T-051
+```
+
+### 12. Ajustes de Configuración resueltos en revisión manual (Roberto, 2026-10-02)
+
+Aplicados en `feat/t-004-invitations`:
+
+- **Fuentes de IA visibles y fijas:** Configuración tiene un bloque propio e informativo con
+  BYOK / PLATFORM / HYBRID. No se agregan ni eliminan desde el portal; son columnas fijas del
+  modelo de negocio.
+- **Servicios y membresías separados:** Servicios muestra solo las filas del modelo (hoy
+  Personal; Corporativa futuro), sin editar/activar. Un bloque separado de Membresías administra
+  qué intersecciones Servicio × Fuente están habilitadas.
+- **Cuentas en dos vistas con responsabilidades distintas:** Resumen muestra únicamente información
+  de cuentas y membresías efectivas, sin acciones. Configuración conserva la administración de
+  cuentas (otorgar/cambiar/quitar beneficio y acciones DEV).
+- **Beneficio separado por ejes:** al crear/editar un Beneficio se seleccionan por separado
+  Servicio, Fuente de IA y duración; ya no se elige una membresía prearmada en un único campo.
+- **Campañas e Invitaciones muestran solo el nombre del Beneficio:** la composición
+  Servicio/Fuente/Duración se consulta en Beneficios y no se repite en esos selectores/listados.
+- **Filtro de Campañas:** la etiqueta visible `Tiene servicio otorgado` pasa a
+  `Tiene membresía otorgada`; el identificador técnico interno puede conservarse por compatibilidad.
+- **Cuentas:** se renombra "Cuentas y servicios" a "Cuentas".
+- **Beneficio efectivo:** la fila de cada cuenta muestra el nombre del Benefit vigente; el Servicio
+  queda como dato secundario.
+- **Trazabilidad:** `subscriptions.benefit_id` identifica el último Benefit que dejó vigente la
+  suscripción. La migración 0019 recupera referencias históricas desde canjes, campañas y notas
+  manuales cuando es posible.
+- **Selector manual:** muestra solo el nombre del beneficio y preselecciona el `benefit_id` real
+  de la cuenta.
+- **Refresco cruzado:** guardar o dar de baja un Beneficio refresca Cuentas sin necesitar F5.
+- **Cambio manual directo:** el OWNER puede reemplazar un beneficio por otro en una sola
+  confirmación. La suscripción anterior queda CANCELLED como historial; Campañas e Invitaciones
+  conservan su política segura de no reemplazar silenciosamente un servicio distinto.
+- **Baja lógica de Benefit:** la acción Eliminar marca `deleted_at` + inactivo; las referencias
+  históricas siguen existiendo. La baja queda bloqueada mientras exista al menos una cuenta con el
+  beneficio vigente, una campaña ACTIVE/PAUSED que lo referencie o una invitación todavía
+  canjeable. Beneficiarios históricos, campañas terminadas e invitaciones canceladas/expiradas/
+  agotadas no bloquean. En UI el botón Eliminar permanece visible pero deshabilitado/grisado.
+- **Usos fuera de Configuración:** campañas/invitaciones que usan cada Benefit se muestran en
+  Resumen, no en la tabla de edición.
+- **Resumen de beneficios por cuenta:** muestra cuenta, beneficio vigente, servicio resultante,
+  origen y vencimiento.
+- **Nombre semántico:** el seed `WELCOME_PLATFORM_3D` se llama "Bienvenida"; servicio y duración
+  siguen siendo campos de su configuración y no parte obligatoria del nombre.
+- **Patrones UI compartidos:** el sistema de tabs usado por Plataforma se extrajo a
+  `shared/ui/TabNavComponent`, igual que Collapse y Activo/Inactivo, para reutilizarlo sin copiar
+  estilos.
+- **Cabecera de Plataforma:** se elimina el subtítulo interno redundante de Configuración. Debajo de
+  "Plataforma" queda una única descripción dinámica: Resumen explica estadísticas/estado y
+  Configuración explica los elementos administrables.
+
+### 13. Pendiente de definir más adelante
+
+- **Paginación real en Cuentas:** el backend ya limita resultados, pero la UI necesita navegación
+  por páginas (o estrategia equivalente) para evitar listas/scroll interminables cuando haya cientos
+  de cuentas. Bootstrap puede resolver la apariencia del paginador, pero la paginación funcional no
+  debe depender de Bootstrap.
+- **Suspender/bloquear cuentas:** diseñar una acción administrativa distinta de eliminar. Debe
+  permitir suspender temporalmente una cuenta por abuso, exceso de consumo u otro motivo, conservar
+  historial/auditoría y definir con precisión qué acciones quedan bloqueadas durante la suspensión.
 - Nombres comerciales definitivos de los servicios.
 - Tope inicial de la bienvenida (tokens/día) y máximo de clases abiertas.
 - Unión de cuentas personal/corporativa de una misma persona (¿por DNI?).
 - Débito automático y medios de pago.
+- **Estrategia de una fuente futura:** no asumir que `HYBRID` siempre será únicamente
+  "propias primero y plataforma si fallan". La futura sección de Fuentes de IA debe permitir
+  evolucionar hacia políticas configurables de reparto/ruteo (por ejemplo 50/50, prioridad,
+  fallback u otras estrategias) sin tener que redefinir el catálogo de Servicios. **No implementar
+  ahora; queda documentado para una etapa posterior.**
+- **Unidades de los límites:** toda pantalla que muestre/configure límites de conexiones debe
+  indicar explícitamente la unidad usada. **Implementado para límites actuales:** cantidad de
+  **pedidos** en ventana móvil de 24 h, tanto total como por usuario. Futuro: tokens/costo cuando
+  corresponda (T-049).
 
 ---
 
@@ -512,19 +825,69 @@ Objetivo: evitar componentes monolíticos difíciles de mantener y testear.
 ## T-010 — Portal de organización / ADMIN
 
 **Prioridad:** P2 — Media  
-**Estado:** Futuro B2B
+**Estado:** Futuro B2B  
+**Relación:** T-004 Etapa 3/5 (beneficios e invitaciones), T-005 (IA de organización), T-011 (aislamiento),
+T-051 (email)
 
 Todavía falta implementar el portal corporativo completo:
 
 - personas;
 - ADMIN / STUDENT;
 - invitaciones;
-- carga CSV;
+- carga CSV/XLS;
 - branding;
 - seguimiento de progreso;
 - detalle por empleado;
 - aislamiento de actividad personal;
 - suscripción corporativa.
+
+### Invitaciones corporativas: reutilizar el motor único de T-004
+
+**No crear un segundo motor.** El ADMIN usa el mismo `Benefit + Invitation + InvitationRedemption`
+con `organization_id` y permisos de tenant. PLATFORM_OWNER administra el 100 % de capacidades del
+motor y define cuáles quedan habilitadas para empresas.
+
+Ejemplo de política futura configurable:
+
+```text
+Capacidad                         PLATFORM_OWNER     ADMIN organización
+NAMED                             sí                 configurable
+OPEN cupo 1                       sí                 configurable
+OPEN cupo N                       sí                 configurable
+Carga masiva NAMED                configurable       configurable
+Beneficio PERSONAL                sí                 no
+Beneficio CORPORATE               no                 sí, dentro de su organización
+```
+
+No asumir todavía esos valores concretos: la decisión es que el **motor soporte las capacidades** y
+el permiso determine qué actor puede usarlas.
+
+### Alta/carga masiva de empleados
+
+Antes de importar, el ADMIN debe elegir el beneficio/configuración que aplicará al lote. El archivo
+describe solamente personas:
+
+```text
+email | nombre | apellido | [datos personales opcionales futuros]
+```
+
+No aceptar en el archivo `role`, `service`, `benefit`, `plan`, fuente de IA ni permisos. Todas las
+filas importadas crean pre-invitaciones **NAMED** independientes y entran como **STUDENT por
+defecto**. Los ADMIN adicionales se crean/gestionan explícitamente, fuera del archivo masivo.
+
+Cada invitación nominada, tanto manual como masiva, debe dejar email `PENDING` para que T-051 envíe
+el link automáticamente.
+
+### Dominio corporativo y recuperación de invitación
+
+Permitir que una organización declare uno o más dominios de correo admitidos (ej. `cacatua.com`,
+`cacatua.com.ar`). Esto puede utilizarse como condición de seguridad para las modalidades que
+PLATFORM_OWNER habilite, en especial si alguna empresa puede generar links OPEN.
+
+Si el empleado pierde/no recibe el link, una autenticación con email verificado que coincide con una
+pre-invitación NAMED puede **descubrir** esa invitación. No asociar automáticamente la actividad
+personal a la empresa: mostrar confirmación explícita ("Tenés una invitación pendiente de X.
+¿Querés incorporarte?") y recién después crear/activar membresía corporativa.
 
 No bloquea el MVP personal.
 
@@ -533,7 +896,8 @@ No bloquea el MVP personal.
 ## T-011 — Tests específicos de aislamiento B2B
 
 **Prioridad:** P1 cuando comience B2B  
-**Estado:** Pendiente
+**Estado:** Pendiente  
+**Relación:** T-010 (portal ADMIN), T-004 Etapa 5 (beneficios/invitaciones corporativas)
 
 Agregar pruebas obligatorias:
 
@@ -545,7 +909,22 @@ ADMIN empresa A
   ✗ ve actividad personal de sus empleados
 ```
 
-El modelo ya guarda `organization_id` y `membership_id`; falta validar el flujo completo cuando exista el portal ADMIN.
+Al habilitar invitaciones corporativas agregar además:
+
+- un ADMIN de A no puede listar/editar/cancelar beneficios ni invitaciones de B;
+- una invitación de A no puede referenciar un beneficio de B;
+- una invitación NAMED solo puede canjearla la identidad autorizada;
+- una restricción de dominio de A nunca acepta dominios configurados solamente por B;
+- el CSV/XLS no puede inyectar `ADMIN`, servicio, beneficio, plan ni permisos internos;
+- las filas masivas crean STUDENT por defecto y quedan siempre dentro del tenant que importó;
+- encontrar una pre-invitación por email verificado **no** debe vincular silenciosamente el contexto
+  personal con la empresa: requiere aceptación explícita;
+- un link OPEN, si PLATFORM_OWNER lo habilita para una empresa, respeta cupo y política de dominio;
+- regenerar/anular un link de A no afecta invitaciones de B;
+- todos los canjes conservan trazabilidad de cuenta, invitación, beneficio y organización.
+
+El modelo ya guarda `organization_id` y `membership_id`; falta validar el flujo completo cuando exista
+el portal ADMIN.
 
 ---
 
@@ -2033,15 +2412,38 @@ Ideas anotadas para no perderlas (Roberto, 2026-10-01):
 **Relación:** T-004 (invitaciones/campañas), T-050 (avisos y promociones),
 T-059 (campañas programadas y reportes periódicos por empresa)
 
-La app no envía emails. Hace falta un servicio para: invitaciones (llevan el mismo link que hoy se
-copia a mano), avisos de vencimiento, recuperación de cuenta, campañas de fidelización y **entrega
-automática de reportes generados por campañas programadas** (caso guía: resumen mensual de progreso
-de empleados para los ADMIN de una empresa, definido en T-059). Remitente: la cuenta real de
-sr.macros. Elegir proveedor (SMTP propio o servicio transaccional) y plantillas.
+La app no envía emails. Hace falta un servicio para: invitaciones, avisos de vencimiento,
+recuperación de cuenta, campañas de fidelización y **entrega automática de reportes generados por
+campañas programadas** (caso guía: resumen mensual de progreso de empleados para los ADMIN de una
+empresa, definido en T-059). Remitente: la cuenta real de sr.macros. Elegir proveedor (SMTP propio o
+servicio transaccional) y plantillas.
+
+### Contrato con invitaciones (T-004)
+
+Toda invitación **NAMED/nominada** debe enviarse automáticamente por email, tanto si fue creada a mano
+como si provino de una importación masiva corporativa. El correo transporta el **mismo link/token**
+del motor de invitaciones; email no crea otra clase de invitación.
+
+La Etapa 3 deja esas invitaciones con `email_status=PENDING`. T-051 debe consumir esa cola y registrar,
+como mínimo:
+
+```text
+PENDING  → todavía no enviada
+SENT     → proveedor aceptó el envío
+FAILED   → error; debe quedar trazable y permitir reintento
+```
+
+Evaluar además reintentos, bounce/rechazo y fecha del último intento. El token se conserva cifrado
+además de su hash precisamente para poder reenviar el mismo link de forma segura.
+
+Un link OPEN se comparte/copia por el canal que el emisor quiera; solo se envía por email si existe
+un destinatario explícito o una acción futura que así lo defina.
+
+El email **no es requisito único para acreditar una invitación nominada corporativa**: T-010 podrá
+recuperarla mediante identidad/email verificado si el mensaje se pierde, siempre con confirmación
+explícita antes de incorporar a la empresa.
 
 ---
-
-
 
 ## T-052 — Continuar a la siguiente clase desde el resultado
 
@@ -2498,7 +2900,22 @@ Este caso debe guiar la evolución del motor porque obliga a resolver en conjunt
    destinatarios definidos, por ejemplo los ADMIN de la organización.
 
 Además fuerza una generalización importante de T-004: una campaña no debe quedar limitada a
-`GRANT_SERVICE`. El concepto de acción debe poder crecer, por ejemplo:
+`GRANT_SERVICE`. La Etapa 3 de T-004 separa ya el **Benefit** (servicio + duración) de la Campaña.
+Por lo tanto, cuando se generalicen acciones, la acción de servicio debe referenciar un Benefit en
+vez de volver a guardar servicio/días dentro de la campaña:
+
+```text
+ACTION = GRANT_SERVICE    → benefit_id
+ACTION = GENERATE_REPORT  → configuración de reporte
+ACTION = CREATE_INVITATION → configuración/plantilla de invitación
+```
+
+Una invitación **no es una campaña**: pueden relacionarse mediante una acción futura
+`CREATE_INVITATION`, pero `Invitation` mantiene su propio ciclo, token, cupo y canjes. Del mismo
+modo, `Benefit` no debe convertirse en un contenedor genérico de reportes, emails o descuentos:
+representa específicamente una definición reutilizable de otorgamiento de servicio.
+
+El concepto de acción debe poder crecer, por ejemplo:
 
 ```text
 GRANT_SERVICE

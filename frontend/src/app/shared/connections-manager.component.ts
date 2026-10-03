@@ -37,9 +37,11 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
   selector: 'app-connections-manager',
   imports: [FormsModule, DatePipe, ModelPickerComponent],
   template: `
-    <section class="card">
-      <h2>{{ title() }}</h2>
-      @if (note()) { <p class="muted small note">{{ note() }}</p> }
+    <section [class.card]="!embedded()" class="manager-shell">
+      @if (!embedded()) {
+        <h2>{{ title() }}</h2>
+        @if (note()) { <p class="muted small note">{{ note() }}</p> }
+      }
       @if (loading()) {
         <p class="muted"><span class="spinner"></span></p>
       } @else if (connections().length === 0) {
@@ -84,22 +86,22 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
                 @if (isPlatform()) {
                   <div class="limits">
                     <span class="small">
-                      Uso 24 h: <strong>{{ c.usage24h ?? 0 }}</strong>
+                      Uso 24 h (pedidos): <strong>{{ c.usage24h ?? 0 }}</strong>
                       @if (c.dailyRequestLimit) { / {{ c.dailyRequestLimit }} }
                     </span>
                     @if (c.dailyRequestLimit) {
-                      <div class="bar usage-bar" [attr.aria-label]="'Uso ' + (c.usage24h ?? 0) + ' de ' + c.dailyRequestLimit">
+                      <div class="bar usage-bar" [attr.aria-label]="'Uso de pedidos ' + (c.usage24h ?? 0) + ' de ' + c.dailyRequestLimit">
                         <span [style.width.%]="usagePercent(c)"></span>
                       </div>
                     }
                     <label class="small limit-field">
-                      Límite total 24 h
+                      Límite total 24 h (pedidos)
                       <input class="input" type="number" min="1" placeholder="sin límite"
                         [ngModel]="c.dailyRequestLimit"
                         (change)="updateLimit(c, 'dailyRequestLimit', $any($event.target).value)" />
                     </label>
                     <label class="small limit-field">
-                      Límite por usuario 24 h
+                      Límite por usuario 24 h (pedidos)
                       <input class="input" type="number" min="1" placeholder="sin límite"
                         [ngModel]="c.perAccountDailyLimit"
                         (change)="updateLimit(c, 'perAccountDailyLimit', $any($event.target).value)" />
@@ -183,11 +185,11 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
           </label>
           @if (isPlatform()) {
             <label class="field">
-              Límite total 24 h
+              Límite total 24 h (pedidos)
               <input class="input" type="number" min="1" name="daily" [(ngModel)]="form.dailyRequestLimit" placeholder="sin límite" />
             </label>
             <label class="field">
-              Límite por usuario 24 h
+              Límite por usuario 24 h (pedidos)
               <input class="input" type="number" min="1" name="perAccount" [(ngModel)]="form.perAccountDailyLimit" placeholder="sin límite" />
             </label>
           }
@@ -253,6 +255,8 @@ export class ConnectionsManagerComponent implements OnInit {
   /** false: solo se administran las existentes (ej. servicio Plataforma, T-055). */
   readonly allowCreate = input(true);
   readonly note = input<string | null>(null);
+  /** true: el contenedor visual/título lo provee una tarjeta compartida externa. */
+  readonly embedded = input(false);
   readonly changed = output<void>();
 
   private readonly api = inject(ApiService);

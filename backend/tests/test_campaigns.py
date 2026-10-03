@@ -1,4 +1,4 @@
-"""T-004 etapa 2: campañas configurables y otorgamiento idempotente."""
+"""T-004 etapa 2: campañas configurables sobre beneficios reutilizables."""
 
 from datetime import datetime, timezone
 
@@ -15,6 +15,16 @@ def _owner_and_services(client):
     assert response.status_code == 200, response.text
     services = {row["code"]: row for row in response.json()}
     return owner, services
+
+
+def _benefit(client, owner, service_id: int, *, name: str, days: int) -> dict:
+    response = client.post(
+        f"{API}/platform/benefits",
+        headers=owner,
+        json={"name": name, "serviceId": service_id, "durationDays": days, "active": True},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
 
 
 def _campaigns(client, owner):
@@ -36,15 +46,15 @@ def _create_campaign(
     notification: str = "IN_APP",
     rules: list[dict] | None = None,
 ):
+    benefit = _benefit(client, owner, service_id, name=f"{name} · beneficio", days=days)
     response = client.post(
         f"{API}/platform/campaigns",
         headers=owner,
         json={
             "name": name,
-            "serviceId": service_id,
+            "benefitId": benefit["id"],
             "trigger": "FIRST_LOGIN",
             "rules": rules or [{"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"}],
-            "grantDays": days,
             "priority": priority,
             "stackable": stackable,
             "maxRecipients": max_recipients,
@@ -67,6 +77,7 @@ def test_campaign_portal_is_owner_only_and_welcome_is_seeded_as_draft(client) ->
     welcome = next(row for row in _campaigns(client, owner) if row["code"] == "WELCOME_PLATFORM")
     assert welcome["status"] == "DRAFT"
     assert welcome["trigger"] == "FIRST_LOGIN"
+    assert welcome["benefitName"] == "Bienvenida"
     assert welcome["grantDays"] == 3
     assert welcome["notification"] == "IN_APP"
 
@@ -152,6 +163,7 @@ def test_reactivation_does_not_capture_first_login_that_happened_while_paused(cl
     neptune = login(client, "neptuno1@example.com")
     assert client.get(f"{API}/me", headers=neptune).json()["service"]["source"] == "BYOK"
 
+
 def test_existing_account_does_not_receive_first_login_campaign_later(client) -> None:
     alice = login(client, "old@example.com")
     owner, _ = _owner_and_services(client)
@@ -227,15 +239,15 @@ def test_overlapping_non_stackable_campaigns_return_warning(client) -> None:
     owner, services = _owner_and_services(client)
     plan_id = services["INDIVIDUAL_PLATFORM"]["id"]
     first = _create_campaign(client, owner, plan_id, name="Campaña A", days=3, priority=10)
+    benefit = _benefit(client, owner, plan_id, name="Campaña B · beneficio", days=5)
     response = client.post(
         f"{API}/platform/campaigns",
         headers=owner,
         json={
             "name": "Campaña B",
-            "serviceId": plan_id,
+            "benefitId": benefit["id"],
             "trigger": "FIRST_LOGIN",
             "rules": [],
-            "grantDays": 5,
             "priority": 20,
             "stackable": False,
             "notification": "NONE",
@@ -290,18 +302,13 @@ def test_ended_campaign_cannot_be_reactivated_or_deleted_before_end(client) -> N
         priority=10,
     )
 
-    not_ended_delete = client.delete(
-        f"{API}/platform/campaigns/{campaign['id']}", headers=owner
-    )
-    assert not_ended_delete.status_code == 409
-
+    assert client.delete(f"{API}/platform/campaigns/{campaign['id']}", headers=owner).status_code == 409
     assert client.post(
         f"{API}/platform/campaigns/{campaign['id']}/finish", headers=owner
     ).status_code == 200
-    reactivation = client.post(
+    assert client.post(
         f"{API}/platform/campaigns/{campaign['id']}/activate", headers=owner
-    )
-    assert reactivation.status_code == 409
+    ).status_code == 409
 
 
 def test_delete_ended_campaign_without_recipients_is_physical(client) -> None:
@@ -309,15 +316,17 @@ def test_delete_ended_campaign_without_recipients_is_physical(client) -> None:
     from app.db import SessionLocal
 
     owner, services = _owner_and_services(client)
+    benefit = _benefit(
+        client, owner, services["INDIVIDUAL_PLATFORM"]["id"], name="Sin beneficiarios · beneficio", days=3
+    )
     response = client.post(
         f"{API}/platform/campaigns",
         headers=owner,
         json={
             "name": "Sin beneficiarios",
-            "serviceId": services["INDIVIDUAL_PLATFORM"]["id"],
+            "benefitId": benefit["id"],
             "trigger": "FIRST_LOGIN",
             "rules": [],
-            "grantDays": 3,
             "priority": 20,
             "stackable": False,
             "notification": "NONE",
@@ -327,17 +336,11 @@ def test_delete_ended_campaign_without_recipients_is_physical(client) -> None:
     campaign_id = response.json()["id"]
     campaign_code = response.json()["code"]
 
-    assert client.post(
-        f"{API}/platform/campaigns/{campaign_id}/finish", headers=owner
-    ).status_code == 200
-    deleted = client.delete(f"{API}/platform/campaigns/{campaign_id}", headers=owner)
-    assert deleted.status_code == 204, deleted.text
+    assert client.post(f"{API}/platform/campaigns/{campaign_id}/finish", headers=owner).status_code == 200
+    assert client.delete(f"{API}/platform/campaigns/{campaign_id}", headers=owner).status_code == 204
 
-    # Primero verificamos el borrado físico. Luego el listado puede sembrar WELCOME_PLATFORM y
-    # SQLite puede reutilizar el mismo id recién liberado, por eso no comparamos solo el id.
     with SessionLocal() as db:
         assert db.get(Campaign, campaign_id) is None
-
     assert all(row["code"] != campaign_code for row in _campaigns(client, owner))
 
 
@@ -370,13 +373,8 @@ def test_delete_ended_campaign_with_recipients_keeps_grant_history(client) -> No
             )
         ) is not None
 
-    assert client.post(
-        f"{API}/platform/campaigns/{campaign['id']}/finish", headers=owner
-    ).status_code == 200
-    deleted = client.delete(
-        f"{API}/platform/campaigns/{campaign['id']}", headers=owner
-    )
-    assert deleted.status_code == 204, deleted.text
+    assert client.post(f"{API}/platform/campaigns/{campaign['id']}/finish", headers=owner).status_code == 200
+    assert client.delete(f"{API}/platform/campaigns/{campaign['id']}", headers=owner).status_code == 204
     assert all(row["id"] != campaign["id"] for row in _campaigns(client, owner))
 
     login(client, "history@example.com")
@@ -398,11 +396,56 @@ def test_deleted_seed_welcome_without_recipients_is_not_recreated(client) -> Non
     welcome = next(row for row in _campaigns(client, owner) if row["code"] == "WELCOME_PLATFORM")
     assert welcome["recipients"] == 0
 
-    assert client.post(
-        f"{API}/platform/campaigns/{welcome['id']}/finish", headers=owner
-    ).status_code == 200
-    assert client.delete(
-        f"{API}/platform/campaigns/{welcome['id']}", headers=owner
-    ).status_code == 204
-
+    assert client.post(f"{API}/platform/campaigns/{welcome['id']}/finish", headers=owner).status_code == 200
+    assert client.delete(f"{API}/platform/campaigns/{welcome['id']}", headers=owner).status_code == 204
     assert all(row["code"] != "WELCOME_PLATFORM" for row in _campaigns(client, owner))
+
+
+def test_benefit_cannot_be_deleted_while_campaign_is_active_or_paused(client) -> None:
+    owner, services = _owner_and_services(client)
+    service_id = services["INDIVIDUAL_PLATFORM"]["id"]
+    benefit = _benefit(client, owner, service_id, name="Beneficio campaña vigente", days=15)
+    campaign = client.post(
+        f"{API}/platform/campaigns",
+        headers=owner,
+        json={
+            "name": "Campaña vigente",
+            "benefitId": benefit["id"],
+            "trigger": "FIRST_LOGIN",
+            "rules": [],
+            "priority": 10,
+            "stackable": False,
+            "notification": "NONE",
+        },
+    ).json()
+
+    assert client.post(
+        f"{API}/platform/campaigns/{campaign['id']}/activate", headers=owner
+    ).status_code == 200
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeCampaigns"] == 1
+    assert listed["canDelete"] is False
+    assert client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner).status_code == 409
+
+    assert client.post(
+        f"{API}/platform/campaigns/{campaign['id']}/pause", headers=owner
+    ).status_code == 200
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeCampaigns"] == 1
+    assert listed["canDelete"] is False
+
+    assert client.post(
+        f"{API}/platform/campaigns/{campaign['id']}/finish", headers=owner
+    ).status_code == 200
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeCampaigns"] == 0
+    assert listed["canDelete"] is True
