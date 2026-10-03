@@ -93,3 +93,47 @@ persona estudiase solo dos días de treinta. No representa un promedio diario.
 
 T-065 no se considera resuelta por esta validación automática. Permanece **En curso** hasta la
 validación funcional del usuario.
+
+
+## Carga real en la base local
+
+Además de la simulación automatizada, T-065 siembra **15 campañas reales en estado DRAFT**
+cuando `APP_ENV` es `local`, `dev` o `development`.
+
+Características del seed:
+
+- es idempotente: cada caso tiene un `code` y un `CampaignSeedMarker`;
+- no se ejecuta en producción ni en tests;
+- no activa ninguna campaña;
+- crea Benefits de laboratorio reutilizables y luego las Campaigns;
+- funciona también sobre una base local ya existente que tenga sembrada la bienvenida;
+- si una campaña de laboratorio se elimina posteriormente, el marker evita que reaparezca en
+  cada reinicio.
+
+Los casos persistidos son:
+
+1. Permanencia 6 meses + promedio alto.
+2. Aniversario de 1 año.
+3. Constancia diaria 7 días.
+4. Racha de estudio 14 días.
+5. Alta presencia mensual.
+6. Volumen mensual de 50 clases.
+7. Impulso A1 intensivo.
+8. Volvé después de 30 días.
+9. Recuperación larga 90 días.
+10. Regreso tras servicio vencido.
+11. Registrado pero nunca empezó.
+12. Riesgo por baja actividad.
+13. Fidelidad usando propias keys.
+14. Fidelidad híbrida + actividad.
+15. Compensación manual post-reclamo.
+
+El caso 15 usa `ACCOUNT_EMAIL = reemplazar@ejemplo.invalid` para que sea imposible aplicarlo
+accidentalmente. El operador debe editar la campaña y reemplazar ese email por la cuenta real
+después de resolver el reclamo. Esto permite probar una gestión manual de compensación sin fingir
+que hoy existe un sistema automático de tickets/reclamos.
+
+Los tres casos no ejecutables del laboratorio IA (reclamos automáticos, referidos automáticos y
+descuento porcentual) siguen sirviendo como pruebas negativas: el asistente debe advertir esas
+limitaciones y no inventar una segmentación. La campaña post-reclamo persistida es deliberadamente
+un flujo **manual por email exacto**, no una automatización de reclamos.
