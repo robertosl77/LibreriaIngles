@@ -3,6 +3,7 @@ import { Component, signal } from '@angular/core';
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 import { AiSourcesInfoComponent } from './ai-sources-info.component';
+import { AccountsAdminComponent } from './accounts-admin.component';
 import { BenefitsAdminComponent } from './benefits-admin.component';
 import { CampaignsAdminComponent } from './campaigns-admin.component';
 import { InvitationsAdminComponent } from './invitations-admin.component';
@@ -14,6 +15,7 @@ import { ServicesAdminComponent } from './services-admin.component';
     ConnectionsManagerComponent,
     CollapseCardComponent,
     AiSourcesInfoComponent,
+    AccountsAdminComponent,
     ServicesAdminComponent,
     BenefitsAdminComponent,
     CampaignsAdminComponent,
@@ -32,6 +34,8 @@ import { ServicesAdminComponent } from './services-admin.component';
         [refreshVersion]="configurationRefreshVersion()"
         (changed)="configurationChanged()"
       />
+
+      <app-accounts-admin (changed)="configurationChanged()" />
 
       <app-campaigns-admin />
 
