@@ -507,3 +507,73 @@ def test_campaign_assist_builds_reviewable_draft_without_persisting(client, monk
     assert any("disparador" in warning.lower() for warning in body["warnings"])
     assert any("descuento" in warning.lower() for warning in body["warnings"])
     assert len(_campaigns(client, owner)) == before
+
+
+def test_campaign_assist_uses_platform_ai_only_and_does_not_create_campaign(client) -> None:
+    from app.ai.models import AIConnectionOwnerType, AIUsageEvent
+    from app.db import SessionLocal
+
+    owner, _ = _owner_and_services(client)
+
+    own = client.post(
+        f"{API}/ai/connections",
+        headers=owner,
+        json={
+            "provider": "MOCK",
+            "name": "Owner BYOK",
+            "model": "mock",
+            "priority": 1,
+            "scope": "account",
+        },
+    )
+    assert own.status_code == 201, own.text
+
+    platform = client.post(
+        f"{API}/ai/connections",
+        headers=owner,
+        json={
+            "provider": "MOCK",
+            "name": "Asistente plataforma",
+            "model": "mock",
+            "priority": 20,
+            "scope": "platform",
+        },
+    )
+    assert platform.status_code == 201, platform.text
+
+    before = len(_campaigns(client, owner))
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={"description": "Usuarios con al menos un año desde el registro, al volver a ingresar."},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["draft"]["trigger"] == "LOGIN"
+    assert any(
+        rule["field"] == "DAYS_SINCE_CREATED"
+        and rule["operator"] == "GTE"
+        and rule["value"] == 365
+        for rule in body["draft"]["rules"]
+    )
+    assert len(_campaigns(client, owner)) == before
+
+    with SessionLocal() as db:
+        events = list(
+            db.scalars(
+                select(AIUsageEvent).where(AIUsageEvent.operation == "campaign_assist")
+            )
+        )
+        assert len(events) == 1
+        assert events[0].owner_type == AIConnectionOwnerType.PLATFORM
+        assert events[0].connection_id == platform.json()["id"]
+
+
+def test_campaign_assist_is_owner_only(client) -> None:
+    user = login(client, "campaign-assist-user@example.com")
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=user,
+        json={"description": "Crear una campaña de bienvenida para usuarios nuevos."},
+    )
+    assert response.status_code == 403
