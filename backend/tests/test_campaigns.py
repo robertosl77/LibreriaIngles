@@ -449,3 +449,61 @@ def test_benefit_cannot_be_deleted_while_campaign_is_active_or_paused(client) ->
     )
     assert listed["activeCampaigns"] == 0
     assert listed["canDelete"] is True
+
+
+def test_campaign_assist_builds_reviewable_draft_without_persisting(client, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import app.platform.campaigns_api as campaigns_api
+
+    owner, services = _owner_and_services(client)
+    benefit = _benefit(
+        client,
+        owner,
+        services["INDIVIDUAL_PLATFORM"]["id"],
+        name="Fidelidad",
+        days=30,
+    )
+    before = len(_campaigns(client, owner))
+
+    def fake_assist(*args, **kwargs):
+        return SimpleNamespace(
+            data={
+                "draft": {
+                    "name": "Aniversario",
+                    "benefitId": benefit["id"],
+                    "trigger": "SCHEDULED",
+                    "rules": [
+                        {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+                        {"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365},
+                    ],
+                    "priority": 50,
+                    "stackable": True,
+                    "maxRecipients": 100,
+                    "notification": "IN_APP",
+                    "message": "Gracias por seguir con nosotros.",
+                },
+                "warnings": ["El pedido menciona un descuento, que el motor actual no administra."],
+                "summary": "Fidelización al cumplir un año.",
+            }
+        )
+
+    monkeypatch.setattr(campaigns_api, "run_platform_json_task", fake_assist)
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={"description": "Al cumplir un año, dar un beneficio y 20% de descuento."},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["draft"]["name"] == "Aniversario"
+    assert body["draft"]["benefitId"] == benefit["id"]
+    assert body["draft"]["trigger"] == "LOGIN"
+    assert body["draft"]["rules"][1] == {
+        "field": "DAYS_SINCE_CREATED",
+        "operator": "GTE",
+        "value": 365,
+    }
+    assert any("disparador" in warning.lower() for warning in body["warnings"])
+    assert any("descuento" in warning.lower() for warning in body["warnings"])
+    assert len(_campaigns(client, owner)) == before
