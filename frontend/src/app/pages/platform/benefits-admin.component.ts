@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
@@ -166,6 +166,7 @@ export class BenefitsAdminComponent implements OnInit {
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly editingId = signal<number | null>(null);
+  readonly changed = output<void>();
   readonly grantableServices = computed(() =>
     this.services().filter((service) => service.active && service.linkType === 'PERSONAL')
   );
