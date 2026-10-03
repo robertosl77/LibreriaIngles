@@ -3103,6 +3103,246 @@ por lo que cualquier metadata adicional del proveedor se descarta antes de llega
 exista de forma confiable; cuando no exista, debe mantenerse simple y sin duplicar texto ni fabricar
 atributos.
 
+
+---
+
+## T-065 — Evolución del motor de campañas para fidelización y automatizaciones futuras
+
+**Prioridad:** P3 — Baja / futura  
+**Estado:** Para analizar / diseñar  
+**Relación:** T-004 (motor actual de campañas, beneficios e invitaciones), T-050 (fidelización),
+T-051 (emails), T-053 (métricas/consumo por cliente), T-059 (scheduler y campañas programadas)
+
+Objetivo: evolucionar el motor actual de campañas, sin reemplazarlo ni crear un segundo motor
+paralelo, para que pueda reutilizarse más adelante en fidelización, recuperación de usuarios,
+promociones, automatizaciones y casos corporativos. Esta tarea **no debe modificar el alcance actual
+de T-004**: T-004 debe cerrarse con el modelo y capacidades ya acordados. T-065 toma esa base como
+punto de partida futuro.
+
+### 1. Principio rector: un solo motor
+
+No crear un “motor de fidelización” separado. Bienvenida, recuperación, fidelización, promociones,
+reportes y automatizaciones futuras deben expresarse como combinaciones de las mismas piezas:
+
+~~~text
+CAMPAÑA
+   SCOPE       → sobre quién opera
+   TRIGGER     → qué la dispara
+   CONDITIONS  → quién califica
+   ACTION      → qué hace
+   DELIVERY    → cómo se comunica
+   LIMITS      → cuántos / cuántas veces
+   TRACKING    → qué ocurrió
+~~~
+
+El objetivo es evitar funciones especiales del tipo win_back_campaign, welcome_campaign,
+monthly_report_campaign, etc. Cada caso debe surgir de configuración + capacidades del motor.
+
+### 2. Catálogo central de capacidades
+
+Crear una única fuente de verdad en backend para las capacidades disponibles del motor:
+
+- campos de condición soportados;
+- operadores válidos por campo;
+- triggers disponibles;
+- acciones disponibles;
+- deliveries disponibles;
+- tipos y validaciones de valores;
+- capacidades permitidas por scope/rol.
+
+El formulario manual, las plantillas y el asistente IA deben consumir o derivarse de ese mismo
+catálogo. No repetir manualmente la misma capacidad en backend, prompt IA, frontend y plantillas.
+
+Ejemplo: si se agrega DAYS_SINCE_LAST_ACTIVITY, debe definirse una sola vez como capacidad del
+motor y desde ahí quedar disponible para validación, constructor y asistencia IA.
+
+### 3. Segmentación orientada a fidelización
+
+Extender las condiciones cuando existan las fuentes de datos necesarias. Casos a contemplar:
+
+- días desde última actividad;
+- días desde vencimiento del último servicio/membresía;
+- tiene / no tiene servicio activo;
+- fecha del último otorgamiento;
+- clases realizadas en una ventana de tiempo;
+- inactividad durante N días;
+- progreso detenido durante N días;
+- nivel actual;
+- consumo o comportamiento de IA cuando T-053 lo permita;
+- antigüedad de pago / fecha de último pago **solo cuando exista un dominio real de facturación**.
+
+No aproximar conceptos comerciales con otros datos. Ejemplo: “90 días desde que dejó de pagar” no
+puede reemplazarse por “90 días desde que creó la cuenta”.
+
+### 4. Acción explícita y desacoplada
+
+Hoy la campaña está centrada en otorgar un Benefit. A futuro debe modelarse una acción explícita,
+manteniendo Benefit exclusivamente como definición reutilizable de otorgamiento de servicio.
+
+Acciones posibles:
+
+~~~text
+GRANT_BENEFIT
+SEND_NOTIFICATION
+GENERATE_REPORT
+CREATE_INVITATION
+APPLY_DISCOUNT        ← solo cuando exista facturación/promociones reales
+...
+~~~
+
+No convertir Benefit en un contenedor genérico para descuentos, reportes, emails u otras acciones.
+
+### 5. Scheduler independiente — T-059
+
+Las campañas de fidelización no pueden depender del login del usuario. Reutilizar T-059 para que un
+scheduler independiente determine cuándo evaluar campañas programadas.
+
+Ejemplo:
+
+~~~text
+todos los días 09:00
+   ↓
+buscar campañas SCHEDULED activas
+   ↓
+obtener candidatos
+   ↓
+evaluar CONDITIONS con el mismo motor
+   ↓
+ejecutar ACTION
+   ↓
+ejecutar DELIVERY
+   ↓
+registrar resultado
+~~~
+
+Scheduler y campaña deben seguir siendo conceptos separados. El scheduler decide **cuándo**; la
+campaña decide **sobre quién, bajo qué condiciones y qué acción ejecutar**.
+
+### 6. Delivery separado — T-051
+
+La entrega/comunicación debe seguir desacoplada de la acción:
+
+~~~text
+NONE
+IN_APP
+EMAIL
+IN_APP_EMAIL
+~~~
+
+T-051 debe encargarse del envío real de email. El motor de campañas solo debe generar el trabajo /
+estado pendiente correspondiente y registrar el resultado de entrega.
+
+### 7. Preview de audiencia antes de activar
+
+Agregar una capacidad de simulación/previsualización:
+
+- cantidad aproximada o exacta de cuentas que calificarían;
+- muestra opcional de cuentas elegibles;
+- explicación de por qué una cuenta entra o queda afuera;
+- advertencias cuando una campaña resulte demasiado amplia;
+- sin ejecutar la acción ni crear grants.
+
+El objetivo es que SrMacros pueda validar una campaña antes de activarla y detectar errores de
+segmentación sin afectar usuarios reales.
+
+### 8. Tracking e historial de ejecuciones
+
+Registrar cada ejecución programada o masiva con trazabilidad suficiente:
+
+- fecha/hora;
+- campaña;
+- cantidad de candidatos;
+- elegibles;
+- aplicados;
+- omitidos;
+- errores;
+- duración de ejecución;
+- resultado de delivery cuando corresponda.
+
+Esta información debe permitir posteriormente medir efectividad sin reconstruirla de forma
+indirecta desde otras tablas.
+
+### 9. IA como asistente del mismo motor
+
+Potenciar el asistente IA de T-004 para que use el catálogo central de capacidades.
+
+Ejemplo futuro:
+
+~~~text
+"Usuarios que hace 60 días no estudian y no tienen membresía activa;
+darles 7 días de plataforma y avisarles por email."
+~~~
+
+La IA debe transformar la intención en una propuesta estructurada usando únicamente capacidades
+reales. Si falta una capacidad, debe advertirlo y dejar el campo sin resolver; nunca inventar una
+regla equivalente.
+
+Las plantillas y la IA pueden combinarse: una plantilla puede ser punto de partida y luego ajustarse
+con IA, pero ambos caminos deben terminar en el mismo draft/formulario de campaña.
+
+### 10. Fidelización como capa de producto, no como segundo motor — T-050
+
+La futura sección “Fidelización” de SrMacros debe ser una vista especializada sobre Campaigns:
+
+- segmentos frecuentes;
+- campañas activas de retención;
+- campañas de recuperación;
+- resultados y métricas;
+- plantillas orientadas a fidelización;
+- acceso al mismo constructor manual / plantilla / IA.
+
+Crear una campaña desde Fidelización debe generar una Campaign normal. No debe existir una segunda
+tabla o lógica paralela de “fidelization campaigns”.
+
+### 11. Retención y borrado de datos fuera del motor
+
+T-050 incluye la política futura de conservar datos de una membresía vencida durante 1 año y luego
+borrarlos. La **eliminación obligatoria** de datos no debe depender de una campaña.
+
+Sí puede existir una campaña de aviso, por ejemplo:
+
+~~~text
+faltan 30 días para eliminación
+   ↓
+SEND_NOTIFICATION / EMAIL
+~~~
+
+Pero el proceso que efectivamente elimina datos al cumplirse la política debe ser independiente,
+obligatorio e inmune a que una campaña se pause, edite o elimine.
+
+### 12. Caso guía para validar la arquitectura
+
+Antes de considerar esta evolución terminada, el motor debería poder representar sin lógica especial:
+
+~~~text
+Campaña: "Volvé a estudiar"
+
+SCHEDULE:
+todos los días 09:00
+
+CONDITIONS:
+cuenta PERSONAL
+AND sin membresía activa
+AND última actividad >= 60 días
+AND nunca recibió esta campaña
+
+ACTION:
+GRANT_BENEFIT → "Plataforma 7 días"
+
+DELIVERY:
+IN_APP + EMAIL
+
+LIMIT:
+una vez por persona
+~~~
+
+Si este caso puede configurarse combinando capacidades genéricas, sin agregar código específico para
+“recuperación” o “fidelización”, el diseño está correctamente generalizado.
+
+**Criterio final:** ampliar el vocabulario del motor, no multiplicar motores. T-004 permanece como la
+base actual; T-065 se aborda más adelante, coordinada con T-050, T-051 y T-059 cuando esas etapas
+entren en desarrollo.
+
 # 3. Orden sugerido de trabajo
 
 Para continuar probando la aplicación sin frenar el MVP:
