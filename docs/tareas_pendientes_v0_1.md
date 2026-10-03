@@ -234,22 +234,31 @@ OTORGAMIENTO (cómo alguien recibe un servicio)
   tiene una empresa de por medio), AWS (base fija + uso variable) y el celular (cuenta controlada
   / línea libre).
 
-### 2. Servicios (catálogo configurable por sr.macros)
+### 2. Servicios (matriz fija de vínculo × fuente)
 
-Cada combinación vínculo × fuente es un servicio que después tendrá su costo:
+Cada combinación vínculo × fuente es un servicio que después tendrá sus metadatos/costo:
 
 ```text
                 │ BYOK              │ PLATAFORMA          │ HÍBRIDO
 ────────────────┼───────────────────┼─────────────────────┼──────────────────────
-PERSONAL        │ servicio A        │ servicio B          │ servicio C
-CORPORATIVO     │ servicio D        │ servicio E          │ servicio F
+INDIVIDUAL      │ servicio A        │ servicio B          │ servicio C
+EMPRESA         │ servicio D        │ servicio E          │ servicio F
 ```
 
-- **Panel de servicios de sr.macros:** crear/editar servicios (nombre, vínculo, fuente,
-  descripción y costo futuro). **No lleva duración ni límites de consumo.**
-  La duración pertenece exclusivamente a Beneficio para evitar dos fuentes de verdad.
-  Permite agregar combinaciones nuevas más adelante.
-  Nombres iniciales: **Individual** y **Corporativa**.
+**Decisión Roberto + ChatGPT, 2026-10-02:** los dos ejes forman parte del modelo de negocio y no se
+crean dinámicamente desde formularios.
+
+- **Filas:** hoy `INDIVIDUAL`; futuro `EMPRESA`. Una empresa concreta (por ejemplo Cacatúa) no es
+  una fila: es una organización que utiliza la fila Empresa.
+- **Columnas:** `BYOK`, `PLATFORM` y `HYBRID`.
+- Con Empresa implementada existirán las seis combinaciones de la matriz.
+- Agregar una nueva fila o una nueva fuente implica una decisión de modelo y cambios de código;
+  no es un alta administrativa común.
+- **Panel de Servicios:** administra únicamente metadatos de las combinaciones definidas
+  (nombre, descripción y estado). No permite crear combinaciones arbitrarias ni cambiar su vínculo
+  o fuente.
+- Servicio **no lleva duración ni límites de consumo**. La duración pertenece exclusivamente a
+  Beneficio y los límites actuales pertenecen a cada conexión de IA.
 - **Costos (futuro):** PLATAFORMA = cuota fija estimada para cubrir los tokens; HÍBRIDO = base +
   uso a demanda de sr.macros, detallado como factura (T-049).
 - **BYOK corporativo:** las keys las carga la empresa (paga la capacitación, no el empleado) →
@@ -605,8 +614,12 @@ email           NAMED queda PENDING hasta implementar T-051
 
 Aplicados en `feat/t-004-invitations`:
 
-- **Fuentes de IA visibles:** Configuración tiene un bloque propio e informativo con
-  BYOK / PLATFORM / HYBRID. El selector de Servicio sigue referenciando esas fuentes.
+- **Fuentes de IA visibles y fijas:** Configuración tiene un bloque propio e informativo con
+  BYOK / PLATFORM / HYBRID. No se agregan ni eliminan desde el portal; son columnas fijas del
+  modelo de negocio.
+- **Servicios como matriz fija:** las filas son Individual y, a futuro, Empresa; cada Servicio es
+  la intersección fila × fuente. El portal solo edita nombre, descripción y estado de combinaciones
+  definidas por código.
 - **Cuentas:** se renombra "Cuentas y servicios" a "Cuentas".
 - **Beneficio efectivo:** la fila de cada cuenta muestra el nombre del Benefit vigente; el Servicio
   queda como dato secundario.
@@ -633,6 +646,9 @@ Aplicados en `feat/t-004-invitations`:
 - **Patrones UI compartidos:** el sistema de tabs usado por Plataforma se extrajo a
   `shared/ui/TabNavComponent`, igual que Collapse y Activo/Inactivo, para reutilizarlo sin copiar
   estilos.
+- **Cabecera de Plataforma:** se elimina el subtítulo interno redundante de Configuración. Debajo de
+  "Plataforma" queda una única descripción dinámica: Resumen explica estadísticas/estado y
+  Configuración explica los elementos administrables.
 
 ### 13. Pendiente de definir más adelante
 
