@@ -433,3 +433,46 @@ def test_benefit_delete_is_logical_and_keeps_active_history(client) -> None:
     )
     assert account["service"]["benefitId"] == benefit["id"]
     assert account["service"]["benefitName"] == "Temporal trazable"
+
+
+def test_benefit_cannot_be_deleted_with_current_beneficiary(client) -> None:
+    owner = login(client, OWNER)
+    _student(client, "protected-benefit@example.com")
+    service_id = _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"]
+    account_id = _account_id(client, owner, "protected-benefit@example.com")
+
+    benefit = client.post(
+        f"{API}/platform/benefits",
+        json={
+            "name": "Promesa 30 días",
+            "serviceId": service_id,
+            "durationDays": 30,
+            "active": True,
+        },
+        headers=owner,
+    ).json()
+    assert client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        json={"benefitId": benefit["id"]},
+        headers=owner,
+    ).status_code == 200
+
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeBeneficiaries"] == 1
+    assert listed["canDelete"] is False
+
+    blocked = client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner)
+    assert blocked.status_code == 409
+    assert "beneficiario" in blocked.json()["detail"]
+
+    assert client.delete(f"{API}/platform/accounts/{account_id}/service", headers=owner).status_code == 200
+    listed = next(
+        row for row in client.get(f"{API}/platform/benefits", headers=owner).json()
+        if row["id"] == benefit["id"]
+    )
+    assert listed["activeBeneficiaries"] == 0
+    assert listed["canDelete"] is True
+    assert client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner).status_code == 204
