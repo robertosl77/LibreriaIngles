@@ -21,34 +21,8 @@ const SOURCE_SHORT: Record<AiSource, string> = {
   template: `
     <app-collapse-card
       title="Cuentas"
-      description="Resumen de cuentas por combinación y administración puntual de beneficios."
+      description="Administrá beneficios y acciones puntuales sobre las cuentas."
     >
-      <div class="combination-summary">
-        @for (group of combinationGroups(); track group.source) {
-          <article class="combo-card">
-            <div class="combo-head">
-              <div>
-                <strong>Individual</strong>
-                <div class="muted small">{{ sourceShort[group.source] }}</div>
-              </div>
-              <span class="chip">{{ group.accounts.length }}</span>
-            </div>
-            @if (group.accounts.length) {
-              <div class="account-preview muted tiny">
-                @for (account of group.accounts.slice(0, 4); track account.id; let last = $last) {
-                  {{ account.email }}{{ last ? '' : ' · ' }}
-                }
-                @if (group.accounts.length > 4) {
-                  · +{{ group.accounts.length - 4 }}
-                }
-              </div>
-            } @else {
-              <div class="muted tiny">Sin cuentas cargadas en esta combinación.</div>
-            }
-          </article>
-        }
-      </div>
-
       <form class="row search-row" (ngSubmit)="loadAccounts()">
         <input class="input search" name="q" [(ngModel)]="query" placeholder="Buscar por email o nombre" />
         <button class="btn btn-sm" type="submit" [disabled]="loadingAccounts()">Buscar</button>
@@ -72,7 +46,7 @@ const SOURCE_SHORT: Record<AiSource, string> = {
                   @if (a.service.granted) {
                     <span class="chip chip-ok">{{ a.service.benefitName ?? 'Beneficio sin identificar' }}</span>
                     <span class="muted small">
-                      {{ a.service.linkType === 'PERSONAL' ? 'Individual' : 'Empresa' }}
+                      {{ a.service.linkType === 'PERSONAL' ? 'Personal' : 'Corporativa' }}
                       · {{ sourceShort[a.service.source] }}
                     </span>
                     <span class="small">
@@ -84,7 +58,7 @@ const SOURCE_SHORT: Record<AiSource, string> = {
                     </span>
                   } @else {
                     <span class="chip">Sin beneficio</span>
-                    <span class="muted small">Individual · {{ sourceShort[a.service.source] }}</span>
+                    <span class="muted small">Personal · {{ sourceShort[a.service.source] }}</span>
                   }
                   @if (a.service.expired) {
                     <span class="chip chip-warn">Venció {{ a.service.expired.name }}</span>
@@ -120,9 +94,7 @@ const SOURCE_SHORT: Record<AiSource, string> = {
                       Beneficio
                       <select class="input" name="gBenefit{{ a.id }}" [(ngModel)]="grantBenefitId">
                         @for (benefit of grantableBenefits(); track benefit.id) {
-                          <option [ngValue]="benefit.id">
-                            {{ benefit.name }} · {{ benefit.serviceName }} · {{ sourceShort[benefit.source] }}
-                          </option>
+                          <option [ngValue]="benefit.id">{{ benefit.name }}</option>
                         }
                       </select>
                     </label>
@@ -159,28 +131,6 @@ const SOURCE_SHORT: Record<AiSource, string> = {
   styles: `
     :host { display: contents; }
 
-    .combination-summary {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0.75rem;
-      margin-bottom: 0.9rem;
-    }
-
-    .combo-card {
-      padding: 0.75rem;
-      border: 1px solid var(--border);
-      border-radius: 0.6rem;
-      background: var(--bg);
-    }
-
-    .combo-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 0.75rem;
-      align-items: flex-start;
-    }
-
-    .account-preview { margin-top: 0.55rem; line-height: 1.4; }
     .tiny { font-size: 0.76rem; }
 
     .search-row { align-items: center; }
@@ -242,7 +192,6 @@ const SOURCE_SHORT: Record<AiSource, string> = {
     }
 
     @media (max-width: 980px) {
-      .combination-summary { grid-template-columns: 1fr; }
       .account-line { grid-template-columns: 1fr; gap: 0.45rem; }
       .account-actions { justify-content: flex-start; flex-wrap: wrap; }
       .account-admin { grid-template-columns: 1fr; }
@@ -267,15 +216,7 @@ export class AccountsAdminComponent implements OnInit {
     this.benefits().filter((benefit) => benefit.active && benefit.combinationActive)
   );
 
-  readonly combinationGroups = computed(() => {
-    const regular = this.accounts().filter((account) => !account.isPlatformOwner);
-    return (['BYOK', 'PLATFORM', 'HYBRID'] as AiSource[]).map((source) => ({
-      source,
-      accounts: regular.filter(
-        (account) => account.service.linkType === 'PERSONAL' && account.service.source === source
-      )
-    }));
-  });
+
 
   query = '';
   grantBenefitId: number | null = null;
