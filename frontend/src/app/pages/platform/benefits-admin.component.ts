@@ -116,7 +116,15 @@ function numberOrNull(value: unknown): number | null {
                   </td>
                   <td>
                     <button class="btn btn-sm" type="button" (click)="startEdit(benefit)">Editar</button>
-                    <button class="btn btn-sm btn-danger" type="button" (click)="remove(benefit)">Eliminar</button>
+                    <button
+                      class="btn btn-sm btn-danger"
+                      type="button"
+                      (click)="remove(benefit)"
+                      [disabled]="!benefit.canDelete"
+                      [title]="deleteReason(benefit)"
+                    >
+                      Eliminar
+                    </button>
                   </td>
                 </tr>
               }
@@ -229,7 +237,17 @@ export class BenefitsAdminComponent implements OnInit {
     }
   }
 
+  deleteReason(benefit: PlatformBenefit): string {
+    if (benefit.canDelete) return 'Dar de baja lógicamente. El historial se conserva.';
+    const blockers: string[] = [];
+    if (benefit.activeBeneficiaries) blockers.push(`${benefit.activeBeneficiaries} beneficiario(s) vigente(s)`);
+    if (benefit.activeCampaigns) blockers.push(`${benefit.activeCampaigns} campaña(s) activa(s)/pausada(s)`);
+    if (benefit.activeInvitations) blockers.push(`${benefit.activeInvitations} invitación(es) vigente(s)`);
+    return 'No se puede eliminar: ' + blockers.join(', ') + '.';
+  }
+
   async remove(benefit: PlatformBenefit): Promise<void> {
+    if (!benefit.canDelete) return;
     if (!confirm('¿Dar de baja el beneficio "' + benefit.name + '"? El historial se conserva.')) return;
     try {
       await firstValueFrom(this.api.deletePlatformBenefit(benefit.id));
