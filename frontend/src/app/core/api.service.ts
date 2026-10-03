@@ -309,6 +309,10 @@ export class ApiService {
     return this.http.put<PlatformBenefit>(`${this.base}/platform/benefits/${id}`, draft);
   }
 
+  deletePlatformBenefit(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/platform/benefits/${id}`);
+  }
+
   // Campañas (T-004 etapa 2)
   platformCampaigns(): Observable<PlatformCampaign[]> {
     return this.http.get<PlatformCampaign[]>(`${this.base}/platform/campaigns`);
