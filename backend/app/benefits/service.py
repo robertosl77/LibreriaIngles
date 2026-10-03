@@ -99,6 +99,19 @@ def apply_service_benefit(
     duration = benefit_duration(benefit, plan)
     now = utcnow()
 
+    if current.granted and replace_existing:
+        subscription = grant_service(
+            db,
+            account,
+            plan,
+            granted_by=granted_by,
+            days=duration,
+            origin=origin,
+            benefit_id=benefit.id,
+            note=note,
+        )
+        return BenefitApplication(subscription, summary)
+
     if current.granted:
         if current.plan_id != plan.id or current.subscription_id is None:
             return BenefitApplication(
@@ -109,6 +122,9 @@ def apply_service_benefit(
         subscription = db.get(Subscription, current.subscription_id)
         if subscription is None:
             return BenefitApplication(None, summary, "No se pudo localizar el servicio vigente.")
+        subscription.benefit_id = benefit.id
+        if note:
+            subscription.note = note
         if duration is None:
             subscription.expires_at = None
         else:
@@ -125,6 +141,7 @@ def apply_service_benefit(
         granted_by=granted_by,
         days=duration,
         origin=origin,
+        benefit_id=benefit.id,
         note=note,
     )
     return BenefitApplication(subscription, summary)
