@@ -318,13 +318,19 @@ def limit_reason(db: Session, connection: AIConnection, account: Account) -> str
 # ------------------------------------------------------------------ router
 
 
-def run_json_task(
-    db: Session, account: Account, *, system: str, user: str, task: dict
+def _run_json_task_with_connections(
+    db: Session,
+    account: Account,
+    *,
+    connections: list[AIConnection],
+    system: str,
+    user: str,
+    task: dict,
 ) -> AIResult:
     errors: list[str] = []
     failed: list[str] = []
     operation = str(task.get("kind") or "unknown")[:40]
-    for connection in candidate_connections(db, account):
+    for connection in connections:
         reason = limit_reason(db, connection, account)
         if reason:
             # Límite de consumo: se saltea sin marcarla como caída.
@@ -344,6 +350,45 @@ def run_json_task(
         db.commit()
         return AIResult(data=data, connection=connection, failed_connections=failed)
     raise NoAIAvailable(errors)
+
+
+def run_json_task(
+    db: Session, account: Account, *, system: str, user: str, task: dict
+) -> AIResult:
+    return _run_json_task_with_connections(
+        db,
+        account,
+        connections=candidate_connections(db, account),
+        system=system,
+        user=user,
+        task=task,
+    )
+
+
+def run_platform_json_task(
+    db: Session, account: Account, *, system: str, user: str, task: dict
+) -> AIResult:
+    """Tarea administrativa que consume únicamente conexiones PLATFORM.
+
+    Evita que el PLATFORM_OWNER gaste accidentalmente sus keys personales al usar
+    asistentes internos del portal.
+    """
+    connections = db.scalars(
+        select(AIConnection)
+        .where(
+            AIConnection.owner_type == AIConnectionOwnerType.PLATFORM,
+            AIConnection.active.is_(True),
+        )
+        .order_by(AIConnection.priority, AIConnection.id)
+    ).all()
+    return _run_json_task_with_connections(
+        db,
+        account,
+        connections=[connection for connection in connections if connection.is_usable],
+        system=system,
+        user=user,
+        task=task,
+    )
 
 
 def transcribe_audio(
