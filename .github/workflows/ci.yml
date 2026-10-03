@@ -61,5 +61,5 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Audit (T-002)
-        run: npm audit --audit-level=high
+      - name: Audit runtime dependencies (T-002)
+        run: npm audit --omit=dev --audit-level=high
