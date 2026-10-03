@@ -346,3 +346,90 @@ def test_dev_account_purge_flag_is_disabled_in_qa_and_production() -> None:
     assert Settings(app_env="test").dev_account_purge_allowed is True
     assert Settings(app_env="qa").dev_account_purge_allowed is False
     assert Settings(app_env="production").dev_account_purge_allowed is False
+
+
+def test_manual_benefit_can_be_replaced_and_remains_traceable(client) -> None:
+    from app.db import SessionLocal
+    from app.subscriptions.models import Subscription, SubscriptionStatus
+
+    owner = login(client, OWNER)
+    _student(client, "neptuno@example.com")
+    services = _services(client, owner)
+    service_id = services["INDIVIDUAL_PLATFORM"]["id"]
+    account_id = _account_id(client, owner, "neptuno@example.com")
+
+    first = client.post(
+        f"{API}/platform/benefits",
+        json={"name": "Bienvenida prueba", "serviceId": service_id, "durationDays": 3, "active": True},
+        headers=owner,
+    ).json()
+    second = client.post(
+        f"{API}/platform/benefits",
+        json={"name": "Invitación amigo", "serviceId": service_id, "durationDays": 10, "active": True},
+        headers=owner,
+    ).json()
+
+    granted = client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        json={"benefitId": first["id"]},
+        headers=owner,
+    )
+    assert granted.status_code == 200, granted.text
+    assert granted.json()["service"]["benefitId"] == first["id"]
+    assert granted.json()["service"]["benefitName"] == "Bienvenida prueba"
+
+    replaced = client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        json={"benefitId": second["id"]},
+        headers=owner,
+    )
+    assert replaced.status_code == 200, replaced.text
+    assert replaced.json()["service"]["benefitId"] == second["id"]
+    assert replaced.json()["service"]["benefitName"] == "Invitación amigo"
+
+    with SessionLocal() as db:
+        rows = db.scalars(
+            select(Subscription)
+            .where(Subscription.account_id == account_id)
+            .order_by(Subscription.id)
+        ).all()
+        assert [row.benefit_id for row in rows[-2:]] == [first["id"], second["id"]]
+        assert rows[-2].status == SubscriptionStatus.CANCELLED
+        assert rows[-1].status == SubscriptionStatus.ACTIVE
+
+    overview = client.get(f"{API}/platform/overview", headers=owner).json()
+    row = next(item for item in overview["accountBenefits"] if item["email"] == "neptuno@example.com")
+    assert row["benefitName"] == "Invitación amigo"
+    assert row["serviceName"] == "Individual · Plataforma"
+    assert row["origin"] == "MANUAL"
+
+
+def test_benefit_delete_is_logical_and_keeps_active_history(client) -> None:
+    owner = login(client, OWNER)
+    _student(client, "logical-delete@example.com")
+    service_id = _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"]
+    account_id = _account_id(client, owner, "logical-delete@example.com")
+
+    benefit = client.post(
+        f"{API}/platform/benefits",
+        json={"name": "Temporal trazable", "serviceId": service_id, "durationDays": 7, "active": True},
+        headers=owner,
+    ).json()
+    assert client.post(
+        f"{API}/platform/accounts/{account_id}/benefit",
+        json={"benefitId": benefit["id"]},
+        headers=owner,
+    ).status_code == 200
+
+    deleted = client.delete(f"{API}/platform/benefits/{benefit['id']}", headers=owner)
+    assert deleted.status_code == 204
+    assert benefit["id"] not in {
+        item["id"] for item in client.get(f"{API}/platform/benefits", headers=owner).json()
+    }
+
+    account = next(
+        item for item in client.get(f"{API}/platform/accounts", headers=owner).json()
+        if item["email"] == "logical-delete@example.com"
+    )
+    assert account["service"]["benefitId"] == benefit["id"]
+    assert account["service"]["benefitName"] == "Temporal trazable"
