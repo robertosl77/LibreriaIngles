@@ -116,6 +116,7 @@ function numberOrNull(value: unknown): number | null {
                   </td>
                   <td>
                     <button class="btn btn-sm" type="button" (click)="startEdit(benefit)">Editar</button>
+                    <button class="btn btn-sm btn-danger" type="button" (click)="remove(benefit)">Eliminar</button>
                   </td>
                 </tr>
               }
@@ -220,10 +221,25 @@ export class BenefitsAdminComponent implements OnInit {
       this.toast.success(id ? 'Beneficio actualizado.' : 'Beneficio creado.');
       this.editingId.set(null);
       await this.load();
+      this.changed.emit();
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
       this.saving.set(false);
     }
   }
+
+  async remove(benefit: PlatformBenefit): Promise<void> {
+    if (!confirm('¿Dar de baja el beneficio "' + benefit.name + '"? El historial se conserva.')) return;
+    try {
+      await firstValueFrom(this.api.deletePlatformBenefit(benefit.id));
+      this.toast.success('Beneficio dado de baja.');
+      if (this.editingId() === benefit.id) this.editingId.set(null);
+      await this.load();
+      this.changed.emit();
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    }
+  }
+
 }
