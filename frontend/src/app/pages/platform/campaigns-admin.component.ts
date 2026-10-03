@@ -13,6 +13,9 @@ import {
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
+import { CAMPAIGN_TEMPLATES, CampaignTemplate } from './campaign-templates';
+
+type NewCampaignMode = 'choose' | 'templates' | 'ai' | null;
 
 interface CampaignForm {
   name: string;
