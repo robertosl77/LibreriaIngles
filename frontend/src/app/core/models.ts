@@ -33,6 +33,8 @@ export interface ServiceStatus {
   linkType: LinkType;
   granted: boolean;
   origin: 'MANUAL' | 'CAMPAIGN' | 'INVITATION' | 'PAYMENT' | null;
+  benefitId: number | null;
+  benefitName: string | null;
   expiresAt: string | null;
   /** Rol de las keys propias: required (BYOK) · optional (Híbrido) · unused (Plataforma). */
   ownKeys: 'required' | 'optional' | 'unused';
@@ -460,6 +462,14 @@ export interface PlatformOverview {
   daily: { date: string; requests: number; platform: number; errors: number }[];
   connections: { id: number; name: string; last24h: UsageCounts; last30d: UsageCounts }[];
   topAccounts24h: { email: string; requests: number }[];
+  benefitUsage: { id: number; name: string; campaigns: number; invitations: number }[];
+  accountBenefits: {
+    email: string;
+    benefitName: string;
+    serviceName: string;
+    origin: 'MANUAL' | 'CAMPAIGN' | 'INVITATION' | 'PAYMENT';
+    expiresAt: string | null;
+  }[];
 }
 
 export interface ConnectionDraft {
