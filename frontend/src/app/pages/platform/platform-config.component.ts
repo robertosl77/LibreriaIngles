@@ -24,11 +24,14 @@ import { ServicesAdminComponent } from './services-admin.component';
       <app-ai-sources-info />
 
       <app-services-admin
-        [refreshVersion]="benefitRefreshVersion()"
+        [refreshVersion]="configurationRefreshVersion()"
         (changed)="configurationChanged()"
       />
 
-      <app-benefits-admin (changed)="benefitChanged()" />
+      <app-benefits-admin
+        [refreshVersion]="configurationRefreshVersion()"
+        (changed)="configurationChanged()"
+      />
 
       <app-campaigns-admin />
 
@@ -49,13 +52,9 @@ import { ServicesAdminComponent } from './services-admin.component';
   styles: ``
 })
 export class PlatformConfigComponent {
-  readonly benefitRefreshVersion = signal(0);
-
-  benefitChanged(): void {
-    this.benefitRefreshVersion.update((value) => value + 1);
-  }
+  readonly configurationRefreshVersion = signal(0);
 
   configurationChanged(): void {
-    // Punto único para futuros refrescos cruzados entre componentes de Configuración.
+    this.configurationRefreshVersion.update((value) => value + 1);
   }
 }
