@@ -124,6 +124,29 @@ class MockProvider:
         if ("año" in lower or "365" in lower) and not payment_tenure:
             rules.append({"field": "DAYS_SINCE_CREATED", "operator": "GTE", "value": 365})
 
+        if "nunca" in lower and ("estudi" in lower or "clase" in lower):
+            rules.append({"field": "NEVER_STUDIED", "operator": "EQ", "value": True})
+        elif any(word in lower for word in ("inactiv", "sin estudiar", "no estudia", "no practica")):
+            days = 60
+            for candidate in (365, 180, 120, 90, 60, 30, 14, 7):
+                if str(candidate) in lower:
+                    days = candidate
+                    break
+            rules.append({"field": "DAYS_SINCE_LAST_ACTIVITY", "operator": "GTE", "value": days})
+
+        if any(word in lower for word in ("vencido", "venció", "vencio", "vencimiento")):
+            days = 30
+            for candidate in (365, 180, 120, 90, 60, 30, 14, 7):
+                if str(candidate) in lower:
+                    days = candidate
+                    break
+            rules.append({"field": "DAYS_SINCE_SERVICE_EXPIRED", "operator": "GTE", "value": days})
+
+        for level in ("A1", "A2", "B1", "B2", "C1", "C2"):
+            if level.lower() in lower:
+                rules.append({"field": "CURRENT_LEVEL", "operator": "EQ", "value": level})
+                break
+
         warnings = []
         if "%" in description or "descuento" in lower or "bonific" in lower:
             warnings.append(
