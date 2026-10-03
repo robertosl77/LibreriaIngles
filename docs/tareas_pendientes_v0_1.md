@@ -3119,7 +3119,7 @@ atributos.
 ## T-065 — Evolución del motor de campañas para fidelización y automatizaciones futuras
 
 **Prioridad:** P3 — Baja / futura  
-**Estado:** Para analizar / diseñar  
+**Estado:** En curso · ChatGPT  
 **Relación:** T-004 (motor actual de campañas, beneficios e invitaciones), T-050 (fidelización),
 T-051 (emails), T-053 (métricas/consumo por cliente), T-059 (scheduler y campañas programadas)
 
