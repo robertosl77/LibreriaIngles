@@ -165,7 +165,7 @@ def grant_benefit(
     owner: PlatformOwner,
     db: DbSession,
 ) -> dict:
-    """Otorgamiento manual: el OWNER elige un Benefit, nunca servicio + días por separado."""
+    """Asignación manual: el OWNER establece o reemplaza el Benefit en una sola acción."""
     account = _account(db, account_id)
     benefit = db.get(Benefit, payload.benefitId)
     if (
@@ -187,6 +187,7 @@ def grant_benefit(
         granted_by=owner,
         origin=SubscriptionOrigin.MANUAL,
         note=f"Otorgamiento manual · beneficio #{benefit.id}: {benefit.name}",
+        replace_existing=True,
     )
     if not result.applied:
         raise HTTPException(
