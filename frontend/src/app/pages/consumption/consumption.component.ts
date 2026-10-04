@@ -193,7 +193,7 @@ import {
             <header class="modal-head">
               <div>
                 <h2>Diagnóstico de consumo</h2>
-                <p class="muted small">{{ operationName(report.operation) }} · evento #{{ report.eventId }}</p>
+                <p class="muted small">{{ diagnosticOperationName(report) }} · evento #{{ report.eventId }}</p>
               </div>
               <button class="modal-close" type="button" (click)="closeDiagnostic()" aria-label="Cerrar">×</button>
             </header>
@@ -875,6 +875,13 @@ export class ConsumptionComponent implements OnInit {
 
   ratioLabel(value: number | null): string {
     return value === null ? '—' : `${value.toLocaleString('es-AR', { maximumFractionDigits: 2 })}×`;
+  }
+
+  diagnosticOperationName(report: AiUsageDiagnosticResponse): string {
+    if (report.operation === 'generate_class' && report.subject?.type === 'EXAM') {
+      return 'Generación de examen';
+    }
+    return this.operationName(report.operation);
   }
 
   operationName(operation: string): string {
