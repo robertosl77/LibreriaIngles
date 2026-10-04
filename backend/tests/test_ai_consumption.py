@@ -350,7 +350,14 @@ def test_consumption_reference_includes_class_and_exercise(client) -> None:
         headers=headers,
     ).status_code == 201
 
-    created = client.post(f"{API}/classes", headers=headers)
+    # La generación usa random global; preservar su estado evita contaminar tests posteriores.
+    import random
+
+    random_state = random.getstate()
+    try:
+        created = client.post(f"{API}/classes", headers=headers)
+    finally:
+        random.setstate(random_state)
     assert created.status_code == 201, created.text
     klass = created.json()
 
