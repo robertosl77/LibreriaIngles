@@ -590,6 +590,11 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
                 subject_type="CAMPAIGN_ASSIST",
                 subject_label="Asistente de campañas",
                 subject_route="/app/plataforma/configuracion",
+                diagnostic={
+                    "descriptionChars": len(payload.description.strip()),
+                    "benefitCount": len(benefit_options),
+                    "capabilityCount": len(capabilities_payload()),
+                },
             ),
         )
     except NoAIAvailable as exc:
