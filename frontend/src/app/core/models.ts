@@ -121,6 +121,7 @@ export type CampaignAction =
 
 export interface CampaignRule {
   field: string;
+  subject?: string | null;
   operator: string;
   value: string | number | boolean;
   windowDays?: number | null;
@@ -211,6 +212,8 @@ export interface CampaignRuleCapability {
   operators: string[];
   description: string;
   options: { value: string; label: string }[];
+  subjectLabel: string | null;
+  subjectOptions: { value: string; label: string }[];
   available: boolean;
   requiresWindow: boolean;
   windowMinDays: number | null;
@@ -237,6 +240,7 @@ export interface CampaignAudienceRuleResult {
   operator: string;
   expected: string | number | boolean;
   actual: string | number | boolean | null;
+  subject?: string | null;
   matched: boolean;
   windowDays?: number | null;
 }

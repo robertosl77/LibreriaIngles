@@ -272,11 +272,20 @@ function isoDate(value: string): string | null {
             @for (rule of form.rules; track $index; let i = $index) {
               @if (ruleCapability(rule.field); as capability) {
                 <div class="rule-row">
-                  <select class="input" [name]="'rField' + i" [(ngModel)]="rule.field" (ngModelChange)="resetRule(rule)">
-                    @for (availableRule of ruleCapabilities(); track availableRule.key) {
-                      <option [value]="availableRule.key">{{ availableRule.label }}</option>
+                  <div class="rule-subject-stack">
+                    <select class="input" [name]="'rField' + i" [(ngModel)]="rule.field" (ngModelChange)="resetRule(rule)">
+                      @for (availableRule of ruleCapabilities(); track availableRule.key) {
+                        <option [value]="availableRule.key">{{ availableRule.label }}</option>
+                      }
+                    </select>
+                    @if (capability.subjectOptions.length > 0) {
+                      <select class="input" [name]="'rSubject' + i" [(ngModel)]="rule.subject">
+                        @for (option of capability.subjectOptions; track option.value) {
+                          <option [value]="option.value">{{ option.label }}</option>
+                        }
+                      </select>
                     }
-                  </select>
+                  </div>
 
                   <select class="input op" [name]="'rOp' + i" [(ngModel)]="rule.operator">
                     @for (operator of capability.operators; track operator) {
@@ -486,7 +495,7 @@ function isoDate(value: string): string | null {
     .check-row { display: flex; gap: 0.5rem; align-items: flex-start; }
     .rule-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, 0.7fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
     .rule-description { margin-top: -0.25rem; }
-    .rule-value-stack { display: flex; flex-direction: column; gap: 0.3rem; }
+    .rule-subject-stack, .rule-value-stack { display: flex; flex-direction: column; gap: 0.3rem; }
     .window-field { display: flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.76rem; white-space: nowrap; }
     .window-input { width: 5rem; padding-block: 0.25rem; }
     .operator { text-align: center; font-size: 0.86rem; color: var(--muted); }
@@ -752,9 +761,11 @@ export class CampaignsAdminComponent implements OnInit {
     const capability = this.ruleCapability(rule.field);
     rule.operator = capability?.operators[0] ?? 'EQ';
     if (!capability) {
+      rule.subject = null;
       rule.value = '';
       return;
     }
+    rule.subject = capability.subjectOptions[0]?.value ?? null;
     if (capability.valueType === 'boolean') {
       rule.value = false;
     } else if (capability.valueType === 'integer' || capability.valueType === 'number') {
@@ -778,7 +789,9 @@ export class CampaignsAdminComponent implements OnInit {
       this.form.priority > 0 &&
       this.form.rules.every((rule) => {
         const capability = this.ruleCapability(rule.field);
-        return !capability?.requiresWindow || Number(rule.windowDays) > 0;
+        const subjectOk = !capability?.subjectOptions.length || !!rule.subject;
+        const windowOk = !capability?.requiresWindow || Number(rule.windowDays) > 0;
+        return subjectOk && windowOk;
       })
     );
   }

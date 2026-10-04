@@ -29,8 +29,18 @@ from app.campaigns.models import (
     CampaignTrigger,
 )
 from app.core.config import settings
-from app.learning.models import ClassSession, ClassSessionStatus, SessionKind
+from app.learning.models import (
+    Attempt,
+    ClassSession,
+    ClassSessionStatus,
+    Exercise,
+    PresentationMode,
+    ResponseMode,
+    SessionKind,
+    StudySkillProgress,
+)
 from app.memberships.models import Membership, MembershipStatus
+from app.progress.service import ability_progress
 from app.study_profiles.models import (
     AccountStudyProfile,
     AccountStudyProfileStatus,
@@ -635,6 +645,104 @@ def _current_level(db: Session, account: Account) -> str | None:
     return profile.operational_level or profile.selected_level or profile.estimated_level
 
 
+def _active_study_profile(db: Session, account: Account) -> tuple[AccountStudyProfile, StudyProfile] | None:
+    row = db.execute(
+        select(AccountStudyProfile, StudyProfile)
+        .join(StudyProfile, StudyProfile.id == AccountStudyProfile.study_profile_id)
+        .where(
+            AccountStudyProfile.account_id == account.id,
+            AccountStudyProfile.status == AccountStudyProfileStatus.ACTIVE,
+            StudyProfile.status == StudyProfileStatus.ACTIVE,
+        )
+        .order_by(AccountStudyProfile.linked_at.desc())
+    ).first()
+    return (row[0], row[1]) if row is not None else None
+
+
+def _progress_metric(
+    db: Session,
+    account: Account,
+    *,
+    field: str,
+    subject: str,
+) -> str | float | None:
+    active = _active_study_profile(db, account)
+    if active is None:
+        return None
+    link, profile = active
+
+    if field.startswith("SKILL_"):
+        progress = db.scalar(
+            select(StudySkillProgress).where(
+                StudySkillProgress.study_profile_id == link.study_profile_id,
+                StudySkillProgress.skill_key == subject,
+                StudySkillProgress.organization_id.is_(None),
+            )
+        )
+        if field == "SKILL_STATUS":
+            return progress.status if progress is not None and progress.attempt_count else "NOT_STARTED"
+        if field == "SKILL_SCORE":
+            return progress.score if progress is not None and progress.attempt_count else None
+        if field == "SKILL_TREND":
+            return progress.trend.upper() if progress is not None and progress.trend else None
+        return None
+
+    level = profile.operational_level or profile.selected_level or profile.estimated_level
+    if not level:
+        return None
+    # Campaigns consume el agregado oficial del dominio de progreso; no recalculan
+    # evidencias, estados ni tendencias por su cuenta.
+    item = next(
+        (row for row in ability_progress(db, link.study_profile_id, level) if row["key"] == subject),
+        None,
+    )
+    if item is None:
+        return None
+    if field == "ABILITY_STATUS":
+        return item.get("status")
+    if field == "ABILITY_SCORE":
+        return item.get("score")
+    if field == "ABILITY_TREND":
+        trend = item.get("trend")
+        return str(trend).upper() if trend else None
+    return None
+
+
+def _appeals_count(
+    db: Session,
+    account: Account,
+    *,
+    window_days: int | None,
+    now: datetime,
+) -> int | None:
+    if window_days is None:
+        return None
+    since = now - timedelta(days=window_days)
+    return int(
+        db.scalar(
+            select(func.count(Attempt.id)).where(
+                Attempt.account_id == account.id,
+                Attempt.appealed_at.is_not(None),
+                Attempt.appealed_at >= since,
+            )
+        )
+        or 0
+    )
+
+
+def _modality_response_count(db: Session, account: Account, *, field: str) -> int:
+    query = (
+        select(func.count(Attempt.id))
+        .join(Exercise, Exercise.id == Attempt.exercise_id)
+        .where(Attempt.account_id == account.id)
+    )
+    if field == "SPEAKING_RESPONSES":
+        query = query.where(Attempt.response_mode == ResponseMode.SPEAK)
+    else:
+        query = query.where(Exercise.presentation_mode == PresentationMode.LISTEN)
+    return int(db.scalar(query) or 0)
+
+
 def rule_evaluation(
     db: Session,
     account: Account,
@@ -719,6 +827,40 @@ def rule_evaluation(
         actual = _current_level(db, account)
         matched = operator == "EQ" and actual == str(expected).upper()
     elif field in {
+        "SKILL_STATUS",
+        "SKILL_SCORE",
+        "SKILL_TREND",
+        "ABILITY_STATUS",
+        "ABILITY_SCORE",
+        "ABILITY_TREND",
+    }:
+        subject = str(rule.get("subject") or "").strip()
+        actual = _progress_metric(db, account, field=field, subject=subject)
+        if field.endswith("_SCORE"):
+            try:
+                matched = actual is not None and _compare_number(float(actual), operator, float(expected))
+            except (TypeError, ValueError):
+                matched = False
+        else:
+            matched = operator == "EQ" and actual is not None and str(actual).upper() == str(expected).upper()
+    elif field == "APPEALS_COUNT":
+        window_days = rule.get("windowDays")
+        try:
+            window_days = int(window_days) if window_days is not None else None
+        except (TypeError, ValueError):
+            window_days = None
+        actual = _appeals_count(db, account, window_days=window_days, now=now)
+        try:
+            matched = actual is not None and _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
+    elif field in {"SPEAKING_RESPONSES", "LISTENING_RESPONSES"}:
+        actual = _modality_response_count(db, account, field=field)
+        try:
+            matched = _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
+    elif field in {
         "CLASSES_COMPLETED",
         "CLASSES_GENERATED",
         "CLASSES_STARTED",
@@ -761,6 +903,8 @@ def rule_evaluation(
         "actual": actual,
         "matched": bool(matched),
     }
+    if rule.get("subject"):
+        result["subject"] = rule.get("subject")
     if rule.get("windowDays") is not None:
         result["windowDays"] = rule.get("windowDays")
     return result

@@ -38,6 +38,7 @@ router = APIRouter(prefix="/platform/campaigns", tags=["platform"])
 
 class CampaignRuleIn(BaseModel):
     field: str = Field(min_length=2, max_length=60)
+    subject: str | None = Field(default=None, max_length=200)
     operator: str = Field(default="EQ", min_length=2, max_length=12)
     value: Any
     windowDays: int | None = Field(default=None, ge=1, le=3650)
@@ -82,7 +83,7 @@ Devolvé SOLO JSON con esta forma:
     "action": "acción disponible",
     "actionConfig": {},
     "trigger": "trigger disponible",
-    "rules": [{"field":"...", "operator":"...", "value":..., "windowDays": null o número}],
+    "rules": [{"field":"...", "subject": null o "...", "operator":"...", "value":..., "windowDays": null o número}],
     "priority": 100,
     "stackable": false,
     "maxRecipients": null,
@@ -115,6 +116,10 @@ limitación solo para producir un borrador válido.
 El motor actual ejecuta GRANT_BENEFIT sobre un beneficio existente. No inventes descuentos,
 precios, pagos, renovaciones ni otras acciones todavía no disponibles. Si una intención requiere
 una capacidad inexistente, explicalo en warnings y no la reemplaces por otra condición parecida.
+
+Las capacidades que exponen subjectOptions requieren un subject exacto del catálogo.
+Por ejemplo, ABILITY_STATUS con subject=WRITING y value=NEEDS_REVIEW representa Writing en estado de repaso.
+No inventes subjects ni uses el nombre visible cuando el catálogo provee una clave.
 
 Para métricas de estudio usá las capacidades del catálogo:
 - CLASSES_COMPLETED cuenta clases completadas dentro de windowDays.
@@ -602,7 +607,13 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 def _validate_rule(rule: CampaignRuleIn) -> dict:
     try:
-        return validate_rule(rule.field, rule.operator, rule.value, rule.windowDays)
+        return validate_rule(
+            rule.field,
+            rule.operator,
+            rule.value,
+            rule.windowDays,
+            rule.subject,
+        )
     except CampaignCapabilityError as exc:
         raise HTTPException(422, str(exc)) from exc
 
