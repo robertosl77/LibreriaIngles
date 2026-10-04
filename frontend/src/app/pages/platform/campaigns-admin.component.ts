@@ -18,7 +18,11 @@ import {
 } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
-import { CAMPAIGN_TEMPLATES, CampaignTemplate } from './campaign-templates';
+import {
+  CAMPAIGN_TEMPLATES,
+  CampaignTemplate,
+  campaignTemplateIssues
+} from './campaign-templates';
 
 type NewCampaignMode = 'choose' | 'templates' | 'ai' | null;
 
@@ -127,10 +131,22 @@ function isoDate(value: string): string | null {
             </div>
             <div class="template-grid">
               @for (template of templates; track template.id) {
-                <button class="template-card" type="button" (click)="applyTemplate(template)">
-                  <strong>{{ template.title }}</strong>
-                  <span>{{ template.description }}</span>
-                </button>
+                @if (templateIssues(template); as issues) {
+                  <button
+                    class="template-card"
+                    type="button"
+                    (click)="applyTemplate(template)"
+                    [disabled]="issues.length > 0"
+                  >
+                    <strong>{{ template.title }}</strong>
+                    <span>{{ template.description }}</span>
+                    @if (issues.length > 0) {
+                      <span class="template-invalid">Requiere revisión: {{ issues.join(' · ') }}</span>
+                    } @else {
+                      <span class="template-ok">Compatible con el catálogo actual</span>
+                    }
+                  </button>
+                }
               }
             </div>
           }
@@ -554,7 +570,10 @@ function isoDate(value: string): string | null {
       font: inherit;
     }
     .choice-card:hover, .template-card:hover { background: var(--bg); }
+    .template-card:disabled { cursor: not-allowed; opacity: 0.7; }
     .choice-card span, .template-card span { color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
+    .template-card .template-ok { font-size: 0.72rem; }
+    .template-card .template-invalid { color: var(--warn); font-size: 0.72rem; }
     .ai-description { min-height: 6.5rem; resize: vertical; }
     .draft-banner { margin-bottom: 0.8rem; }
     .draft-blocked { border-color: var(--warn); }
@@ -633,6 +652,11 @@ export class CampaignsAdminComponent implements OnInit {
     return this.benefits().filter((benefit) => benefit.active);
   }
 
+  templateIssues(template: CampaignTemplate): string[] {
+    const capabilities = this.capabilities();
+    return capabilities ? campaignTemplateIssues(template, capabilities) : ['Catálogo no disponible'];
+  }
+
   form: CampaignForm = emptyForm(null);
 
   async ngOnInit(): Promise<void> {
@@ -692,6 +716,11 @@ export class CampaignsAdminComponent implements OnInit {
   }
 
   applyTemplate(template: CampaignTemplate): void {
+    const issues = this.templateIssues(template);
+    if (issues.length > 0) {
+      this.toast.error('La plantilla no es compatible con el catálogo actual: ' + issues.join(' · '));
+      return;
+    }
     this.form = {
       name: template.name,
       benefitId: null,
