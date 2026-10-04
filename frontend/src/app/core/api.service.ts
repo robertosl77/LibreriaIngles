@@ -113,7 +113,7 @@ export class ApiService {
   aiUsage(
     scope: AiUsageScopeKind,
     organizationId: number | null = null,
-    limit = 200,
+    limit = 50,
     offset = 0
   ): Observable<AiUsageReport> {
     const params: Record<string, string | number> = { scope, limit, offset };
