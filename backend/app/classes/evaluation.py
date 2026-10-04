@@ -547,8 +547,11 @@ def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: 
             membership_id=exercise.membership_id,
             subject_type="EXERCISE",
             subject_id=exercise.id,
-            subject_label=f"Ejercicio #{exercise.id}",
-            subject_route=f"/app/clase/{exercise.class_session_id}",
+            subject_label=(
+                f"{'Examen' if (session := db.get(ClassSession, exercise.class_session_id)) and session.kind.value == 'EXAM' else 'Clase'} "
+                f"#{exercise.class_session_id} · Ejercicio #{exercise.id}"
+            ),
+            subject_route=f"/app/clase/{exercise.class_session_id}#ex-{exercise.id}",
         ),
     )
     sanitized = _sanitize_ai_result(exercise, result.data)
