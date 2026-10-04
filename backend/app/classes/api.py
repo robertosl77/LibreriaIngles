@@ -351,6 +351,12 @@ async def transcribe_answer_audio(
                     f"#{session.id} · Ejercicio {exercise_display_number(db, exercise)}"
                 ),
                 subject_route=f"/app/clase/{session.id}",
+                diagnostic={
+                    "exerciseType": exercise.exercise_type,
+                    "presentationMode": exercise.presentation_mode.value,
+                    "responseMode": exercise.response_mode.value,
+                    "audioDurationMs": duration_ms,
+                },
             ),
         )
     except NoAIAvailable as exc:
