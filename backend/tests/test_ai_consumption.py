@@ -160,6 +160,61 @@ def test_mock_usage_is_persisted_with_subject_and_visible_in_my_consumption(clie
     assert body["rows"][0]["subject"]["route"] == "/app/clase/77"
 
 
+def test_connection_names_are_unique_per_owner_scope_after_normalization(client) -> None:
+    alice = login(client, "connection-name@example.com")
+
+    first = client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Gemini principal", "priority": 1},
+        headers=alice,
+    )
+    assert first.status_code == 201, first.text
+
+    duplicate = client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "  gemini   PRINCIPAL  ", "priority": 2},
+        headers=alice,
+    )
+    assert duplicate.status_code == 409
+    assert "ese nombre" in duplicate.json()["detail"]
+
+    second = client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Backup", "priority": 2},
+        headers=alice,
+    )
+    assert second.status_code == 201, second.text
+    renamed = client.patch(
+        f"{API}/ai/connections/{second.json()['id']}",
+        json={"name": " GEMINI    principal "},
+        headers=alice,
+    )
+    assert renamed.status_code == 409
+
+    # El mismo nombre es válido en otro owner.
+    bob = login(client, "connection-name-other@example.com")
+    other_owner = client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Gemini principal", "priority": 1},
+        headers=bob,
+    )
+    assert other_owner.status_code == 201, other_owner.text
+
+    # Y también en otro scope: PLATFORM tiene su namespace propio.
+    owner = login(client, "owner@example.com")
+    platform = client.post(
+        f"{API}/ai/connections",
+        json={
+            "provider": "MOCK",
+            "name": "Gemini principal",
+            "priority": 1,
+            "scope": "platform",
+        },
+        headers=owner,
+    )
+    assert platform.status_code == 201, platform.text
+
+
 def test_personal_consumption_masks_platform_engine_details(client) -> None:
     headers = login(client, "student@example.com")
 
@@ -191,6 +246,81 @@ def test_personal_consumption_masks_platform_engine_details(client) -> None:
     assert row["connectionName"] == "IA de Librería Inglés"
     assert row["serviceSource"] == "HYBRID"
     assert row["actualSource"] == "PLATFORM"
+    assert row["connectionRoute"] is None
+    assert row["connectionId"] is None
+
+
+def test_consumption_exposes_connection_route_only_when_viewer_can_manage_it(client) -> None:
+    headers = login(client, "route-owner@example.com")
+    created = client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Ruta personal", "priority": 1},
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    connection_id = created.json()["id"]
+
+    with SessionLocal() as db:
+        account = _account(db, "route-owner@example.com")
+        result = run_json_task(
+            db,
+            account,
+            system="route",
+            user="route",
+            task={"kind": "campaign_assist", "description": "ruta", "benefits": []},
+        )
+        assert result.connection.id == connection_id
+
+    own = client.get(f"{API}/ai/usage", headers=headers)
+    assert own.status_code == 200, own.text
+    row = next(item for item in own.json()["rows"] if item["connectionName"] == "Ruta personal")
+    assert row["connectionId"] == connection_id
+    assert row["connectionRoute"] == "/app/ia"
+
+    owner = login(client, "owner@example.com")
+    platform = client.post(
+        f"{API}/ai/connections",
+        json={
+            "provider": "MOCK",
+            "name": "Ruta plataforma",
+            "priority": 1,
+            "scope": "platform",
+        },
+        headers=owner,
+    )
+    assert platform.status_code == 201, platform.text
+    platform_id = platform.json()["id"]
+
+    with SessionLocal() as db:
+        owner_account = _account(db, "owner@example.com")
+        db.add(
+            AIUsageEvent(
+                connection_id=platform_id,
+                connection_name="Ruta plataforma",
+                owner_type=AIConnectionOwnerType.PLATFORM,
+                provider="MOCK",
+                model="mock",
+                account_id=owner_account.id,
+                service_source="PLATFORM",
+                operation="campaign_assist",
+                input_tokens=10,
+                output_tokens=5,
+                total_tokens=15,
+                success=True,
+            )
+        )
+        db.commit()
+
+    global_report = client.get(
+        f"{API}/ai/usage", headers=owner, params={"scope": "PLATFORM"}
+    )
+    assert global_report.status_code == 200, global_report.text
+    platform_row = next(
+        item for item in global_report.json()["rows"]
+        if item["connectionName"] == "Ruta plataforma"
+    )
+    assert platform_row["connectionId"] == platform_id
+    assert platform_row["connectionRoute"] == "/app/plataforma/configuracion"
 
 
 def test_platform_owner_can_use_global_consumption_scope(client) -> None:
