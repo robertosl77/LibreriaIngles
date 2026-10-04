@@ -299,6 +299,7 @@ def _serialize_event(
         "serviceSource": event.service_source,
         "actualSource": _actual_source(event.owner_type),
         "inputTokens": event.input_tokens,
+        "reasoningTokens": event.reasoning_tokens,
         "outputTokens": event.output_tokens,
         "totalTokens": event.total_tokens,
         "success": event.success,
@@ -415,6 +416,7 @@ def usage(
     sums = db.execute(
         select(
             func.coalesce(func.sum(AIUsageEvent.input_tokens), 0),
+            func.coalesce(func.sum(AIUsageEvent.reasoning_tokens), 0),
             func.coalesce(func.sum(AIUsageEvent.output_tokens), 0),
             func.coalesce(func.sum(AIUsageEvent.total_tokens), 0),
         ).where(*filters)
@@ -444,8 +446,9 @@ def usage(
             "errors": int(total - successful),
             "measuredRequests": int(measured),
             "inputTokens": int(sums[0] or 0),
-            "outputTokens": int(sums[1] or 0),
-            "totalTokens": int(sums[2] or 0),
+            "reasoningTokens": int(sums[1] or 0),
+            "outputTokens": int(sums[2] or 0),
+            "totalTokens": int(sums[3] or 0),
         },
         "offset": offset,
         "limit": limit,
