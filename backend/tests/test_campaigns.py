@@ -581,7 +581,7 @@ def test_campaign_assist_uses_platform_ai_only_and_does_not_create_campaign(clie
     response = client.post(
         f"{API}/platform/campaigns/assist",
         headers=owner,
-        json={"description": "Usuarios con al menos un año desde el registro, al volver a ingresar."},
+        json={"description": "Usuarios con al menos un año desde el registro: darles un beneficio al volver a ingresar."},
     )
     assert response.status_code == 200, response.text
     body = response.json()
