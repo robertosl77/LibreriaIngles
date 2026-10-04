@@ -219,6 +219,12 @@ import {
                   @if (snapshot.userChars !== undefined) {
                     <div><span>Contexto dinámico</span><strong>{{ snapshot.userChars | number }} caracteres</strong></div>
                   }
+                  @if (snapshot.systemFingerprint) {
+                    <div><span>Versión de prompt</span><strong>{{ snapshot.systemFingerprint }}</strong></div>
+                  }
+                  @if (snapshot.responseJsonChars !== undefined) {
+                    <div><span>Respuesta estructurada</span><strong>{{ snapshot.responseJsonChars | number }} caracteres</strong></div>
+                  }
                   @if (snapshot.audioBytes !== undefined) {
                     <div><span>Audio</span><strong>{{ snapshot.audioBytes | number }} bytes</strong></div>
                   }
