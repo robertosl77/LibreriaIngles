@@ -8,7 +8,7 @@ from app.ai.models import (
     AIProviderUsageMapping,
     AIUsageEvent,
 )
-from app.ai.service import run_json_task
+from app.ai.service import NoAIAvailable, run_json_task
 from app.ai.usage import AIUsageContext, normalize_usage
 from app.db import SessionLocal
 
@@ -201,3 +201,162 @@ def test_platform_owner_can_use_global_consumption_scope(client) -> None:
     assert student_row["provider"] == "GEMINI"
     assert student_row["model"] == "gemini-2.5-flash"
     assert student_row["totalTokens"] == 130
+
+
+
+def test_failover_attempts_share_execution_and_report_recovery(client) -> None:
+    headers = login(client, "failover@example.com")
+    first = client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Primaria", "model": "mock-fail-down", "priority": 1},
+        headers=headers,
+    )
+    assert first.status_code == 201, first.text
+    backup = client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Backup", "model": "mock", "priority": 2},
+        headers=headers,
+    )
+    assert backup.status_code == 201, backup.text
+
+    with SessionLocal() as db:
+        account = _account(db, "failover@example.com")
+        result = run_json_task(
+            db,
+            account,
+            system="test",
+            user="test",
+            task={"kind": "campaign_assist", "description": "bienvenida", "benefits": []},
+        )
+        assert result.connection.name == "Backup"
+
+        events = list(
+            db.scalars(
+                select(AIUsageEvent)
+                .where(
+                    AIUsageEvent.account_id == account.id,
+                    AIUsageEvent.operation == "campaign_assist",
+                )
+                .order_by(AIUsageEvent.attempt_index)
+            ).all()
+        )
+        assert len(events) == 2
+        assert events[0].execution_id
+        assert events[0].execution_id == events[1].execution_id
+        assert [event.attempt_index for event in events] == [1, 2]
+        assert [event.success for event in events] == [False, True]
+        assert events[0].error_code == "PROVIDER_DOWN"
+
+    response = client.get(f"{API}/ai/usage", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["summary"]["executions"] == 1
+    assert body["summary"]["requests"] == 2
+    correlated = [row for row in body["rows"] if row["execution"]]
+    assert len(correlated) == 2
+    assert {row["execution"]["id"] for row in correlated} == {
+        correlated[0]["execution"]["id"]
+    }
+    assert {row["execution"]["status"] for row in correlated} == {
+        "RECOVERED_BY_FAILOVER"
+    }
+    assert {row["execution"]["attempts"] for row in correlated} == {2}
+
+
+def test_exhausted_execution_is_reported_as_interrupted(client) -> None:
+    headers = login(client, "interrupted@example.com")
+    for priority, model in ((1, "mock-fail-down"), (2, "mock-fail-auth")):
+        response = client.post(
+            f"{API}/ai/connections",
+            json={
+                "provider": "MOCK",
+                "name": f"Fallida {priority}",
+                "model": model,
+                "priority": priority,
+            },
+            headers=headers,
+        )
+        assert response.status_code == 201, response.text
+
+    with SessionLocal() as db:
+        account = _account(db, "interrupted@example.com")
+        try:
+            run_json_task(
+                db,
+                account,
+                system="test",
+                user="test",
+                task={"kind": "campaign_assist", "description": "bienvenida", "benefits": []},
+            )
+            assert False, "La ejecución debía agotar todas las conexiones."
+        except NoAIAvailable:
+            pass
+
+        events = list(
+            db.scalars(
+                select(AIUsageEvent)
+                .where(AIUsageEvent.account_id == account.id)
+                .order_by(AIUsageEvent.attempt_index)
+            ).all()
+        )
+        assert len(events) == 2
+        assert events[0].execution_id == events[1].execution_id
+        assert all(not event.success for event in events)
+
+    response = client.get(f"{API}/ai/usage", headers=headers)
+    assert response.status_code == 200
+    rows = [row for row in response.json()["rows"] if row["execution"]]
+    assert rows
+    assert {row["execution"]["status"] for row in rows} == {"INTERRUPTED"}
+
+
+def test_consumption_reference_includes_class_and_exercise(client) -> None:
+    from app.classes.evaluation import evaluate_with_ai
+    from app.learning.models import EvaluationMode, Exercise
+
+    headers = login(client, "reference@example.com")
+    assert client.put(
+        f"{API}/me/level", json={"level": "A1"}, headers=headers
+    ).status_code == 200
+    assert client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Mock reference", "model": "mock", "priority": 1},
+        headers=headers,
+    ).status_code == 201
+
+    created = client.post(f"{API}/classes", headers=headers)
+    assert created.status_code == 201, created.text
+    klass = created.json()
+
+    with SessionLocal() as db:
+        account = _account(db, "reference@example.com")
+        exercise = db.scalar(
+            select(Exercise)
+            .where(Exercise.class_session_id == klass["id"])
+            .order_by(Exercise.id)
+        )
+        assert exercise is not None
+        exercise.evaluation_mode = EvaluationMode.AI
+        db.commit()
+
+        evaluate_with_ai(db, account, exercise, "A deliberately open answer")
+
+        event = db.scalar(
+            select(AIUsageEvent)
+            .where(
+                AIUsageEvent.account_id == account.id,
+                AIUsageEvent.operation == "evaluate_answer",
+            )
+            .order_by(AIUsageEvent.id.desc())
+        )
+        assert event is not None
+        assert event.subject_label == f"Clase #{klass['id']} · Ejercicio #{exercise.id}"
+        assert event.subject_route == f"/app/clase/{klass['id']}#ex-{exercise.id}"
+
+    report = client.get(f"{API}/ai/usage", headers=headers)
+    assert report.status_code == 200
+    correction = next(
+        row for row in report.json()["rows"] if row["operation"] == "evaluate_answer"
+    )
+    assert correction["subject"]["label"].startswith(f"Clase #{klass['id']} · Ejercicio #")
+    assert correction["subject"]["route"].startswith(f"/app/clase/{klass['id']}#ex-")
