@@ -162,6 +162,74 @@ def _attempt_for_event(db, event: AIUsageEvent, exercise_id: int) -> Attempt | N
     return db.scalar(query.order_by(Attempt.attempt_number.desc(), Attempt.id.desc()))
 
 
+def _execution_context(
+    event: AIUsageEvent,
+    exercise: Exercise,
+    attempt: Attempt | None,
+    draft: DraftAnswer | None,
+) -> dict:
+    """Datos observables que ayudan a explicar por qué una operación consumió IA."""
+    signals = dict(
+        (attempt.signals if attempt else None)
+        or (draft.signals if draft else None)
+        or {}
+    )
+    pronunciation = (
+        attempt.pronunciation_result
+        if attempt and attempt.pronunciation_result
+        else (draft.pronunciation_result if draft else None)
+    )
+    assistance = (
+        attempt.assistance.value
+        if attempt
+        else (draft.assistance.value if draft else "NONE")
+    )
+    response_mode = (
+        attempt.response_mode.value
+        if attempt
+        else exercise.response_mode.value
+    )
+    evaluation_source = (
+        attempt.evaluation_source.value
+        if attempt and attempt.evaluation_source
+        else None
+    )
+    audio_duration_ms = (
+        attempt.audio_duration_ms
+        if attempt
+        else (draft.audio_duration_ms if draft else None)
+    )
+    practice_scores = [
+        int(score) for score in (signals.get("practiceScores") or []) if score is not None
+    ]
+    content = exercise.content or {}
+
+    return {
+        "operation": event.operation,
+        "presentationMode": exercise.presentation_mode.value,
+        "responseMode": response_mode,
+        "evaluationMode": exercise.evaluation_mode.value,
+        "evaluationSource": evaluation_source,
+        "audioDurationMs": audio_duration_ms,
+        "listenPlays": int(signals.get("listenPlays", 0) or 0),
+        "listenSlowPlays": int(signals.get("listenSlowPlays", 0) or 0),
+        "speakRetakes": int(signals.get("speakRetakes", 0) or 0),
+        "pronunciationPracticeScores": practice_scores,
+        "pronunciationEvaluated": bool(pronunciation),
+        "assistance": assistance,
+        "contextStats": {
+            "instructionChars": len(exercise.instruction or ""),
+            "questionChars": len(exercise.prompt or ""),
+            "passageChars": len(str(content.get("passage") or "")),
+            "answerChars": len(
+                (attempt.raw_answer if attempt else (draft.answer_text if draft else "")) or ""
+            ),
+            "options": len(content.get("options") or []),
+            "expectedConcepts": len(exercise.expected_concepts or []),
+        },
+    }
+
+
 def _exercise_preview(db, event: AIUsageEvent, exercise: Exercise) -> dict:
     session = db.get(ClassSession, exercise.class_session_id)
     if session is None:
@@ -199,26 +267,41 @@ def _exercise_preview(db, event: AIUsageEvent, exercise: Exercise) -> dict:
             "result": result.get("result") if result else None,
             "feedback": result.get("feedback") if result else None,
             "correctAnswer": result.get("correctAnswer") if result else None,
+            "executionContext": _execution_context(event, exercise, attempt, draft),
         },
     }
 
 
 def _class_preview(db, event: AIUsageEvent, session: ClassSession) -> dict:
     items = []
+    type_counts: dict[str, int] = {}
+    presentation_counts: dict[str, int] = {}
+    response_counts: dict[str, int] = {}
+    logical_numbers: set[int] = set()
+
     for exercise in class_service.exercises_of(db, session):
         attempt = _attempt_for_event(db, event, exercise.id)
         draft = db.scalar(select(DraftAnswer).where(DraftAnswer.exercise_id == exercise.id))
         result = attempt.evaluation_result or {} if attempt else {}
+        number = exercise_display_number(db, exercise)
+        logical_numbers.add(number)
+        type_counts[exercise.exercise_type] = type_counts.get(exercise.exercise_type, 0) + 1
+        presentation = exercise.presentation_mode.value
+        response_mode = exercise.response_mode.value
+        presentation_counts[presentation] = presentation_counts.get(presentation, 0) + 1
+        response_counts[response_mode] = response_counts.get(response_mode, 0) + 1
         items.append(
             {
                 "id": exercise.id,
-                "number": exercise_display_number(db, exercise),
+                "number": number,
                 "type": exercise.exercise_type,
                 "area": exercise.area,
                 "instruction": exercise.instruction,
                 "question": exercise.prompt,
                 "passage": (exercise.content or {}).get("passage"),
                 "conversation": (exercise.content or {}).get("conversation"),
+                "presentation": presentation,
+                "responseMode": response_mode,
                 "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else None),
                 "score": attempt.score if attempt else None,
                 "feedback": result.get("feedback") if result else None,
@@ -226,6 +309,7 @@ def _class_preview(db, event: AIUsageEvent, session: ClassSession) -> dict:
         )
     return {
         "kind": "CLASS",
+        "operation": event.operation,
         "class": {
             "id": session.id,
             "kind": session.kind.value,
@@ -234,6 +318,13 @@ def _class_preview(db, event: AIUsageEvent, session: ClassSession) -> dict:
             "targetLevel": session.target_level,
             "status": session.status.value,
             "score": session.score,
+        },
+        "generationSummary": {
+            "logicalExercises": len(logical_numbers),
+            "storedExerciseRows": len(items),
+            "types": type_counts,
+            "presentationModes": presentation_counts,
+            "responseModes": response_counts,
         },
         "exercises": items,
     }
