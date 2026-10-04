@@ -6,6 +6,7 @@ from conftest import login
 from sqlalchemy import select
 
 from app.accounts.models import Account
+from app.ai.models import AIConnection, AIConnectionOwnerType, AIUsageEvent
 from app.campaigns.models import CampaignGrant
 from app.curriculum.service import get_level
 from app.db import SessionLocal
@@ -101,6 +102,19 @@ def test_campaign_capabilities_are_single_owner_catalog(client) -> None:
     assert rules["APPEALS_COUNT"]["requiresWindow"] is True
     assert rules["SPEAKING_RESPONSES"]["requiresWindow"] is False
     assert rules["LISTENING_RESPONSES"]["requiresWindow"] is False
+    assert rules["AI_FAILURES_COUNT"]["requiresWindow"] is True
+    ai_filters = {item["key"]: item for item in rules["AI_FAILURES_COUNT"]["filters"]}
+    assert {option["value"] for option in ai_filters["ownerType"]["options"]} >= {
+        "ACCOUNT",
+        "PLATFORM",
+    }
+    assert {option["value"] for option in ai_filters["errorCode"]["options"]} >= {
+        "CREDENTIAL_OR_QUOTA",
+        "INVALID_CREDENTIALS",
+        "QUOTA_EXCEEDED",
+    }
+    assert ai_filters["operation"]["valueType"] == "string"
+    assert rules["DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS"]["valueType"] == "integer"
 
     actions = {action["key"]: action for action in body["actions"]}
     assert actions["GRANT_BENEFIT"]["available"] is True
@@ -790,6 +804,202 @@ def test_preview_can_segment_by_speaking_and_listening_usage(client) -> None:
     values = {row["field"]: row["actual"] for row in body["sample"][0]["rules"]}
     assert values["SPEAKING_RESPONSES"] == 0
     assert values["LISTENING_RESPONSES"] == 2
+
+
+def test_preview_counts_ai_failures_with_compound_filters(client) -> None:
+    login(client, "ai-failures-campaign@example.com")
+    now = datetime.now(timezone.utc)
+
+    with SessionLocal() as db:
+        account = db.scalar(
+            select(Account).where(Account.email == "ai-failures-campaign@example.com")
+        )
+        assert account is not None
+        selected = [
+            ("INVALID_CREDENTIALS", "generate_class"),
+            ("INVALID_CREDENTIALS", "generate_class"),
+            ("QUOTA_EXCEEDED", "generate_class"),
+        ]
+        excluded = [
+            (AIConnectionOwnerType.ACCOUNT, "NETWORK_ERROR", "generate_class"),
+            (AIConnectionOwnerType.ACCOUNT, "QUOTA_EXCEEDED", "transcribe_audio"),
+            (AIConnectionOwnerType.PLATFORM, "INVALID_CREDENTIALS", "generate_class"),
+        ]
+        for error_code, operation in selected:
+            db.add(
+                AIUsageEvent(
+                    owner_type=AIConnectionOwnerType.ACCOUNT,
+                    provider="MOCK",
+                    account_id=account.id,
+                    operation=operation,
+                    success=False,
+                    error_code=error_code,
+                    created_at=now - timedelta(days=1),
+                )
+            )
+        for owner_type, error_code, operation in excluded:
+            db.add(
+                AIUsageEvent(
+                    owner_type=owner_type,
+                    provider="MOCK",
+                    account_id=account.id,
+                    operation=operation,
+                    success=False,
+                    error_code=error_code,
+                    created_at=now - timedelta(days=1),
+                )
+            )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "AI_FAILURES_COUNT",
+                "filters": {
+                    "ownerType": "ACCOUNT",
+                    "errorCode": "CREDENTIAL_OR_QUOTA",
+                    "operation": "generate_class",
+                },
+                "operator": "GTE",
+                "value": 3,
+                "windowDays": 7,
+            }
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] == 3
+    assert result["matched"] is True
+    assert result["filters"] == {
+        "ownerType": "ACCOUNT",
+        "errorCode": "CREDENTIAL_OR_QUOTA",
+        "operation": "generate_class",
+    }
+
+    invalid = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "AI_FAILURES_COUNT",
+                "filters": {"ownerType": "BYOK"},
+                "operator": "GTE",
+                "value": 1,
+                "windowDays": 7,
+            }
+        ],
+    )
+    assert invalid.status_code == 422
+    assert "filtro" in invalid.text.lower()
+
+
+def test_preview_detects_byok_configured_but_never_used_successfully(client) -> None:
+    login(client, "byok-never-activated@example.com")
+    now = datetime.now(timezone.utc)
+
+    with SessionLocal() as db:
+        account = db.scalar(
+            select(Account).where(Account.email == "byok-never-activated@example.com")
+        )
+        assert account is not None
+        connection = AIConnection(
+            owner_type=AIConnectionOwnerType.ACCOUNT,
+            owner_id=account.id,
+            provider="MOCK",
+            name="BYOK sin activar",
+            model="mock",
+            active=True,
+            created_at=now - timedelta(days=8),
+        )
+        db.add(connection)
+        db.flush()
+        # Un health check exitoso demuestra que la key respondió, pero no que el alumno
+        # haya logrado usarla en una operación real.
+        db.add(
+            AIUsageEvent(
+                connection_id=connection.id,
+                owner_type=AIConnectionOwnerType.ACCOUNT,
+                provider="MOCK",
+                model="mock",
+                account_id=account.id,
+                operation="health_check",
+                success=True,
+                created_at=now - timedelta(days=7),
+            )
+        )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS",
+                "operator": "GTE",
+                "value": 7,
+            }
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] >= 7
+    assert result["matched"] is True
+
+    with SessionLocal() as db:
+        account = db.scalar(
+            select(Account).where(Account.email == "byok-never-activated@example.com")
+        )
+        connection = db.scalar(
+            select(AIConnection).where(
+                AIConnection.owner_type == AIConnectionOwnerType.ACCOUNT,
+                AIConnection.owner_id == account.id,
+            )
+        )
+        assert account is not None and connection is not None
+        db.add(
+            AIUsageEvent(
+                connection_id=connection.id,
+                owner_type=AIConnectionOwnerType.ACCOUNT,
+                provider="MOCK",
+                model="mock",
+                account_id=account.id,
+                operation="generate_class",
+                success=True,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+    after_success = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS",
+                "operator": "GTE",
+                "value": 7,
+            }
+        ],
+    )
+    assert after_success.status_code == 200, after_success.text
+    assert after_success.json()["eligibleCount"] == 0
+    result = after_success.json()["sample"][0]["rules"][0]
+    assert result["actual"] is None
+    assert result["matched"] is False
 
 
 def test_unavailable_action_is_rejected_instead_of_faked(client) -> None:
