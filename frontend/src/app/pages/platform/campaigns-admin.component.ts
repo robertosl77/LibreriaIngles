@@ -85,7 +85,7 @@ function isoDate(value: string): string | null {
   template: `
     <app-collapse-card
       title="Campañas"
-      description="Cuándo evaluar + condiciones + beneficio + notificación + límites. Cada persona recibe cada campaña una sola vez."
+      description="Definí qué hace la campaña, cuándo compite, a quién alcanza, cómo se entrega y durante qué vigencia. Cada persona recibe cada campaña una sola vez."
     >
       @if (editingId() === null && !newMode()) {
         <div class="collapse-actions">
@@ -202,67 +202,80 @@ function isoDate(value: string): string | null {
         }
         @if (capabilities()) {
         <form class="editor stack" (ngSubmit)="save()">
-          <div class="grid">
-            <label class="field">
-              Nombre
-              <input class="input" name="cName" [(ngModel)]="form.name" maxlength="120" required />
-            </label>
-            <label class="field">
-              Acción
-              <select class="input" name="cAction" [(ngModel)]="form.action">
-                @for (action of capabilities()?.actions ?? []; track action.key) {
-                  <option [value]="action.key" [disabled]="!action.available">
-                    {{ action.label }}{{ action.available ? '' : ' · próxima etapa' }}
-                  </option>
-                }
-              </select>
-              <span class="muted tiny">La acción es explícita. Hoy se ejecuta Otorgar beneficio; las demás quedan reservadas para etapas futuras.</span>
-            </label>
-            <label class="field">
-              Beneficio que aplica
-              <select class="input" name="cBenefit" [(ngModel)]="form.benefitId" required>
-                <option [ngValue]="null" disabled>Elegí un beneficio</option>
-                @for (benefit of activeBenefits(); track benefit.id) {
-                  <option [ngValue]="benefit.id">{{ benefit.name }}</option>
-                }
-              </select>
-              <span class="muted tiny">La composición del beneficio se consulta y edita en Beneficios.</span>
-            </label>
-            <label class="field">
-              Cuándo se evalúa
-              <select class="input" name="cTrigger" [(ngModel)]="form.trigger">
-                @for (trigger of capabilities()?.triggers ?? []; track trigger.key) {
-                  <option [value]="trigger.key" [disabled]="!trigger.available">
-                    {{ trigger.label }}{{ trigger.available ? '' : ' · T-059' }}
-                  </option>
-                }
-              </select>
-            </label>
-            <label class="field">
-              Prioridad
-              <input class="input" type="number" min="1" name="cPriority" [(ngModel)]="form.priority" />
-              <span class="muted tiny">1 = mayor prioridad. Puede repetirse.</span>
-            </label>
-            <label class="field">
-              Máximo de beneficiarios
-              <input class="input" type="number" min="1" name="cMax" [(ngModel)]="form.maxRecipients"
-                placeholder="sin límite" />
-            </label>
-            <label class="field">
-              Activa desde
-              <input class="input" type="datetime-local" name="cStart" [(ngModel)]="form.startsAt" />
-            </label>
-            <label class="field">
-              Activa hasta
-              <input class="input" type="datetime-local" name="cEnd" [(ngModel)]="form.endsAt" />
-            </label>
-          </div>
+          <section class="editor-section stack">
+            <div class="section-head">
+              <div>
+                <strong>1. Qué hace</strong>
+                <div class="muted tiny">Identidad de la campaña y acción que ejecutará cuando corresponda.</div>
+              </div>
+            </div>
+            <div class="grid">
+              <label class="field">
+                Nombre
+                <input class="input" name="cName" [(ngModel)]="form.name" maxlength="120" required />
+              </label>
+              <label class="field">
+                Acción
+                <select class="input" name="cAction" [(ngModel)]="form.action">
+                  @for (action of capabilities()?.actions ?? []; track action.key) {
+                    <option [value]="action.key" [disabled]="!action.available">
+                      {{ action.label }}{{ action.available ? '' : ' · próxima etapa' }}
+                    </option>
+                  }
+                </select>
+                <span class="muted tiny">Hoy se ejecuta Otorgar beneficio; las demás acciones quedan reservadas para etapas futuras.</span>
+              </label>
+              <label class="field">
+                Beneficio que aplica
+                <select class="input" name="cBenefit" [(ngModel)]="form.benefitId" required>
+                  <option [ngValue]="null" disabled>Elegí un beneficio</option>
+                  @for (benefit of activeBenefits(); track benefit.id) {
+                    <option [ngValue]="benefit.id">{{ benefit.name }}</option>
+                  }
+                </select>
+                <span class="muted tiny">La composición del beneficio se consulta y edita en Beneficios.</span>
+              </label>
+            </div>
+          </section>
 
-          <div class="rules stack">
+          <section class="editor-section stack">
+            <div class="section-head">
+              <div>
+                <strong>2. Cuándo se evalúa y cómo compite</strong>
+                <div class="muted tiny">Estas opciones resuelven campañas elegibles en la misma evaluación. No representan supresiones históricas ni frequency caps.</div>
+              </div>
+            </div>
+            <div class="grid">
+              <label class="field">
+                Cuándo se evalúa
+                <select class="input" name="cTrigger" [(ngModel)]="form.trigger">
+                  @for (trigger of capabilities()?.triggers ?? []; track trigger.key) {
+                    <option [value]="trigger.key" [disabled]="!trigger.available">
+                      {{ trigger.label }}{{ trigger.available ? '' : ' · T-059' }}
+                    </option>
+                  }
+                </select>
+              </label>
+              <label class="field">
+                Prioridad
+                <input class="input" type="number" min="1" name="cPriority" [(ngModel)]="form.priority" />
+                <span class="muted tiny">1 = mayor prioridad. Si varias campañas coinciden al mismo tiempo, se intenta primero la de mayor prioridad.</span>
+              </label>
+              <label class="check-card">
+                <input type="checkbox" name="cStack" [(ngModel)]="form.stackable" />
+                <span>
+                  <strong>Puede convivir con otra campaña en la misma evaluación</strong>
+                  <small class="muted">Solo permite intentar más de una campaña elegible en ese mismo evento. No ignora campañas recibidas anteriormente ni futuras reglas de supresión.</small>
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <div class="rules editor-section stack">
             <div class="row spread">
               <div>
-                <strong>Condiciones</strong>
-                <div class="muted tiny">Por ahora se cumplen TODAS (AND). El modelo queda preparado para grupos futuros.</div>
+                <strong>3. A quién alcanza</strong>
+                <div class="muted tiny">Condiciones de elegibilidad. Por ahora se cumplen TODAS (AND); las supresiones/exclusiones son una capa distinta y todavía están en análisis.</div>
               </div>
               <button class="btn btn-sm" type="button" (click)="addRule()">+ Condición</button>
             </div>
@@ -372,29 +385,56 @@ function isoDate(value: string): string | null {
             }
           </div>
 
-          <div class="grid">
-            <label class="field">
-              Notificación / entrega
-              <select class="input" name="cNotification" [(ngModel)]="form.notification">
-                @for (delivery of capabilities()?.deliveries ?? []; track delivery.key) {
-                  <option [value]="delivery.key">{{ delivery.label }}</option>
+          <section class="editor-section stack">
+            <div class="section-head">
+              <div>
+                <strong>4. Entrega</strong>
+                <div class="muted tiny">Cómo se comunica el resultado cuando la campaña logra aplicarse.</div>
+              </div>
+            </div>
+            <div class="grid">
+              <label class="field">
+                Notificación / entrega
+                <select class="input" name="cNotification" [(ngModel)]="form.notification">
+                  @for (delivery of capabilities()?.deliveries ?? []; track delivery.key) {
+                    <option [value]="delivery.key">{{ delivery.label }}</option>
+                  }
+                </select>
+                @if (form.notification === 'EMAIL' || form.notification === 'IN_APP_EMAIL') {
+                  <span class="muted tiny">Se encola como pendiente; el envío real corresponde a T-051.</span>
                 }
-              </select>
-              @if (form.notification === 'EMAIL' || form.notification === 'IN_APP_EMAIL') {
-                <span class="muted tiny">Se encola como pendiente; el envío real corresponde a T-051.</span>
-              }
-            </label>
-            <label class="field">
-              Mensaje
-              <input class="input" name="cMessage" [(ngModel)]="form.message" maxlength="500"
-                placeholder="Se genera uno automático si queda vacío" />
-            </label>
-          </div>
+              </label>
+              <label class="field">
+                Mensaje
+                <input class="input" name="cMessage" [(ngModel)]="form.message" maxlength="500"
+                  placeholder="Se genera uno automático si queda vacío" />
+              </label>
+            </div>
+          </section>
 
-          <label class="check-row small">
-            <input type="checkbox" name="cStack" [(ngModel)]="form.stackable" />
-            Acumulable con otras campañas. Para sumar días, ambas deben permitir acumulación y otorgar la MISMA membresía; si son distintas, la segunda no se aplica.
-          </label>
+          <section class="editor-section stack">
+            <div class="section-head">
+              <div>
+                <strong>5. Vigencia y límites</strong>
+                <div class="muted tiny">Cuándo puede aplicarse y cuántas personas pueden recibirla en total.</div>
+              </div>
+            </div>
+            <div class="grid">
+              <label class="field">
+                Máximo de beneficiarios
+                <input class="input" type="number" min="1" name="cMax" [(ngModel)]="form.maxRecipients"
+                  placeholder="sin límite" />
+              </label>
+              <label class="field">
+                Activa desde
+                <input class="input" type="datetime-local" name="cStart" [(ngModel)]="form.startsAt" />
+              </label>
+              <label class="field">
+                Activa hasta
+                <input class="input" type="datetime-local" name="cEnd" [(ngModel)]="form.endsAt" />
+              </label>
+            </div>
+          </section>
 
           @if (audiencePreview(); as preview) {
             <div class="preview-card">
@@ -447,7 +487,7 @@ function isoDate(value: string): string | null {
                   <strong>{{ campaign.name }}</strong>
                   <span [class]="statusClass(campaign.status)">{{ statusLabel(campaign.status) }}</span>
                   <span class="chip">P{{ campaign.priority }}</span>
-                  @if (campaign.stackable) { <span class="chip chip-ok">Acumulable</span> }
+                  @if (campaign.stackable) { <span class="chip chip-ok">Convive</span> }
                 </div>
                 <div class="small">
                   {{ triggerLabel(campaign.trigger) }} · {{ actionLabel(campaign.action) }} → <strong>{{ campaign.benefitName }}</strong>
@@ -464,7 +504,7 @@ function isoDate(value: string): string | null {
                     @for (warning of campaign.overlapWarnings; track warning.id; let last = $last) {
                       <strong>{{ warning.name }}</strong>{{ last ? '' : ', ' }}
                     }
-                    . Revisá prioridad y acumulabilidad.
+                    . Revisá prioridad y convivencia.
                   </div>
                 }
               </div>
@@ -521,6 +561,24 @@ function isoDate(value: string): string | null {
     .requirement-list { margin-top: 0.45rem; padding-top: 0.45rem; border-top: 1px solid var(--border); }
     .spread { justify-content: space-between; }
     .check-row { display: flex; gap: 0.5rem; align-items: flex-start; }
+    .editor-section {
+      padding: 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 0.7rem;
+      background: var(--surface);
+    }
+    .section-head { display: flex; justify-content: space-between; gap: 0.75rem; }
+    .check-card {
+      display: flex;
+      gap: 0.55rem;
+      align-items: flex-start;
+      padding: 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 0.55rem;
+      cursor: pointer;
+    }
+    .check-card span { display: flex; flex-direction: column; gap: 0.18rem; }
+    .check-card small { line-height: 1.35; }
     .rule-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, 0.7fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
     .rule-description { margin-top: -0.25rem; }
     .rule-subject-stack, .rule-value-stack { display: flex; flex-direction: column; gap: 0.3rem; }
