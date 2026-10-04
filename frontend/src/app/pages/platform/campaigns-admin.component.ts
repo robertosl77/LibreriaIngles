@@ -163,7 +163,7 @@ function isoDate(value: string): string | null {
                 [disabled]="aiLoading() || aiDescription.trim().length < 8"
               >
                 @if (aiLoading()) { <span class="spinner"></span> }
-                Generar borrador
+                Interpretar con IA
               </button>
             </div>
           }
