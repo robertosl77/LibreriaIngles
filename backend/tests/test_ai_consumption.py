@@ -360,7 +360,14 @@ def test_exhausted_execution_is_reported_as_interrupted(client) -> None:
 
 def test_consumption_reference_includes_class_and_exercise(client) -> None:
     from app.classes.evaluation import evaluate_with_ai
-    from app.learning.models import EvaluationMode, Exercise
+    from app.learning.models import (
+        Assistance,
+        DraftAnswer,
+        EvaluationMode,
+        Exercise,
+        PresentationMode,
+        ResponseMode,
+    )
 
     headers = login(client, "reference@example.com")
     assert client.put(
@@ -385,6 +392,24 @@ def test_consumption_reference_includes_class_and_exercise(client) -> None:
         )
         assert exercise is not None
         exercise.evaluation_mode = EvaluationMode.AI
+        exercise.presentation_mode = PresentationMode.LISTEN
+        exercise.response_mode = ResponseMode.SPEAK
+        db.add(
+            DraftAnswer(
+                class_session_id=klass["id"],
+                exercise_id=exercise.id,
+                account_id=account.id,
+                answer_text="A deliberately open answer",
+                audio_duration_ms=4200,
+                signals={
+                    "listenPlays": 3,
+                    "listenSlowPlays": 1,
+                    "speakRetakes": 2,
+                    "practiceScores": [62, 81],
+                },
+                assistance=Assistance.LESSON,
+            )
+        )
         db.commit()
 
         evaluate_with_ai(db, account, exercise, "A deliberately open answer")
@@ -421,6 +446,18 @@ def test_consumption_reference_includes_class_and_exercise(client) -> None:
     assert detail["class"]["id"] == klass["id"]
     assert detail["exercise"]["number"] == number
     assert detail["exercise"]["id"] == exercise.id
+    context = detail["exercise"]["executionContext"]
+    assert context["operation"] == "evaluate_answer"
+    assert context["presentationMode"] == "LISTEN"
+    assert context["responseMode"] == "SPEAK"
+    assert context["evaluationMode"] == "AI"
+    assert context["audioDurationMs"] == 4200
+    assert context["listenPlays"] == 3
+    assert context["listenSlowPlays"] == 1
+    assert context["speakRetakes"] == 2
+    assert context["pronunciationPracticeScores"] == [62, 81]
+    assert context["assistance"] == "LESSON"
+    assert context["contextStats"]["answerChars"] == len("A deliberately open answer")
     assert detail["fullClassRoute"] == f"/app/clase/{klass['id']}"
 
     generation = next(
@@ -434,3 +471,9 @@ def test_consumption_reference_includes_class_and_exercise(client) -> None:
     assert class_detail["kind"] == "CLASS"
     assert class_detail["class"]["id"] == klass["id"]
     assert class_detail["exercises"]
+    assert class_detail["generationSummary"]["logicalExercises"] >= 1
+    assert class_detail["generationSummary"]["storedExerciseRows"] == len(
+        class_detail["exercises"]
+    )
+    assert class_detail["generationSummary"]["presentationModes"]
+    assert class_detail["generationSummary"]["responseModes"]
