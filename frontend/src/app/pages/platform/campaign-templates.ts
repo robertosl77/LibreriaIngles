@@ -287,5 +287,112 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     maxRecipients: null,
     notification: 'IN_APP',
     message: '¡Siete días seguidos practicando! Seguí así.'
+  },
+  {
+    id: 'launch-cohort-date-range',
+    title: 'Cohorte por fecha',
+    description: 'Cuentas personales registradas dentro de un período concreto y sin membresía otorgada.',
+    name: 'Cohorte de lanzamiento · sin membresía',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'CREATED_AT', operator: 'GTE', value: '2026-09-01T00:00:00+00:00' },
+      { field: 'CREATED_AT', operator: 'LTE', value: '2026-09-15T23:59:59+00:00' },
+      { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: false }
+    ],
+    priority: 75,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Tenemos un beneficio especial para esta cohorte de usuarios.'
+  },
+  {
+    id: 'onboarding-platform-never-started',
+    title: 'Onboarding sin primera clase',
+    description: 'Usuarios de Plataforma con hasta 14 días desde el registro que todavía nunca completaron una clase.',
+    name: 'Empujón inicial · Plataforma sin primera clase',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'DAYS_SINCE_CREATED', operator: 'LTE', value: 14 },
+      { field: 'SERVICE_SOURCE', operator: 'EQ', value: 'PLATFORM' },
+      { field: 'NEVER_STUDIED', operator: 'EQ', value: true }
+    ],
+    priority: 65,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Queremos ayudarte a completar tu primera práctica.'
+  },
+  {
+    id: 'active-service-churn-prevention',
+    title: 'Prevención de abandono',
+    description: 'Usuarios con membresía vigente que llevan al menos 21 días sin completar una clase.',
+    name: 'Prevención de abandono · membresía vigente',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: true },
+      { field: 'DAYS_SINCE_LAST_ACTIVITY', operator: 'GTE', value: 21 }
+    ],
+    priority: 45,
+    stackable: true,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Vimos que hace un tiempo no practicás. Tenemos un incentivo para ayudarte a retomar.'
+  },
+  {
+    id: 'steady-low-volume-streak',
+    title: 'Constancia sin alto volumen',
+    description: 'Racha de al menos 21 días con un promedio máximo de 1,5 clases por día en esa ventana.',
+    name: 'Premio por hábito sostenido',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'STUDY_STREAK_DAYS', operator: 'GTE', value: 21 },
+      { field: 'AVERAGE_CLASSES_PER_DAY', operator: 'LTE', value: 1.5, windowDays: 21 }
+    ],
+    priority: 50,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Tu hábito sostenido merece un reconocimiento.'
+  },
+  {
+    id: 'successful-return-after-expiry',
+    title: 'Regreso exitoso',
+    description: 'Usuarios que tuvieron un servicio vencido, hoy vuelven a tener membresía y completaron al menos 10 clases en 14 días.',
+    name: 'Premio por regreso exitoso',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: true },
+      { field: 'DAYS_SINCE_SERVICE_EXPIRED', operator: 'GTE', value: 30 },
+      { field: 'CLASSES_COMPLETED', operator: 'GTE', value: 10, windowDays: 14 }
+    ],
+    priority: 50,
+    stackable: true,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Volviste y recuperaste el ritmo. Queremos reconocer ese regreso.'
+  },
+  {
+    id: 'engaged-byok-platform-trial',
+    title: 'Prueba de Plataforma para BYOK activo',
+    description: 'Usuarios BYOK sin membresía otorgada, con al menos 12 días activos y 25 clases en los últimos 30 días.',
+    name: 'Conversión · BYOK activo a prueba de Plataforma',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: false },
+      { field: 'SERVICE_SOURCE', operator: 'EQ', value: 'BYOK' },
+      { field: 'ACTIVE_STUDY_DAYS', operator: 'GTE', value: 12, windowDays: 30 },
+      { field: 'CLASSES_COMPLETED', operator: 'GTE', value: 25, windowDays: 30 }
+    ],
+    priority: 60,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Por tu constancia, queremos que pruebes una modalidad con IA de Librería Inglés.'
   }
 ];
