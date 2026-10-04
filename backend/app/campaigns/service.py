@@ -8,7 +8,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from math import ceil
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.accounts.models import Account, AccountStatus, AccountType, PlatformRole
@@ -30,6 +30,7 @@ from app.campaigns.models import (
     CampaignTrigger,
 )
 from app.core.config import settings
+from app.exams.models import LevelCertificate
 from app.learning.models import (
     Attempt,
     ClassSession,
@@ -646,6 +647,26 @@ def _current_level(db: Session, account: Account) -> str | None:
     return profile.operational_level or profile.selected_level or profile.estimated_level
 
 
+def _certificate_level(
+    db: Session,
+    account: Account,
+    *,
+    level: str,
+) -> str | None:
+    linked_profile_ids = select(AccountStudyProfile.study_profile_id).where(
+        AccountStudyProfile.account_id == account.id
+    )
+    return db.scalar(
+        select(LevelCertificate.level).where(
+            LevelCertificate.level == level,
+            or_(
+                LevelCertificate.account_id == account.id,
+                LevelCertificate.study_profile_id.in_(linked_profile_ids),
+            ),
+        )
+    )
+
+
 def _active_study_profile(db: Session, account: Account) -> tuple[AccountStudyProfile, StudyProfile] | None:
     row = db.execute(
         select(AccountStudyProfile, StudyProfile)
@@ -902,6 +923,10 @@ def rule_evaluation(
     elif field == "CURRENT_LEVEL":
         actual = _current_level(db, account)
         matched = operator == "EQ" and actual == str(expected).upper()
+    elif field == "CERTIFICATE_ISSUED":
+        expected_level = str(expected).upper()
+        actual = _certificate_level(db, account, level=expected_level)
+        matched = operator == "EQ" and actual == expected_level
     elif field in {
         "SKILL_STATUS",
         "SKILL_SCORE",
