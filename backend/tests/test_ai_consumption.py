@@ -139,6 +139,10 @@ def test_mock_usage_is_persisted_with_subject_and_visible_in_my_consumption(clie
         assert event.subject_id == 77
         assert event.subject_route == "/app/clase/77"
         assert event.service_source == "BYOK"
+        assert event.diagnostic_snapshot is not None
+        assert event.diagnostic_snapshot["requestKind"] == "TEXT_JSON"
+        assert event.diagnostic_snapshot["systemChars"] == len("test")
+        assert event.diagnostic_snapshot["userChars"] == len("test")
 
     response = client.get(f"{API}/ai/usage", headers=headers)
     assert response.status_code == 200, response.text
@@ -224,6 +228,106 @@ def test_platform_owner_can_use_global_consumption_scope(client) -> None:
     assert student_row["model"] == "gemini-2.5-flash"
     assert student_row["totalTokens"] == 130
 
+
+
+def test_consumption_diagnostic_detects_outlier_against_comparable_calls(client) -> None:
+    headers = login(client, "student@example.com")
+
+    with SessionLocal() as db:
+        account = _account(db, "student@example.com")
+        totals = [100, 110, 120, 400]
+        input_tokens = [80, 90, 95, 320]
+        user_chars = [500, 520, 530, 2200]
+        conversation_chars = [100, 110, 120, 900]
+        events = []
+        for total, input_count, user_count, conversation_count in zip(
+            totals, input_tokens, user_chars, conversation_chars
+        ):
+            event = AIUsageEvent(
+                connection_id=None,
+                connection_name="Mock personal",
+                owner_type=AIConnectionOwnerType.ACCOUNT,
+                provider="MOCK",
+                model="mock",
+                account_id=account.id,
+                service_source="BYOK",
+                operation="evaluate_answer",
+                subject_type="EXERCISE",
+                subject_label="Corrección de prueba",
+                input_tokens=input_count,
+                reasoning_tokens=5,
+                output_tokens=total - input_count - 5,
+                total_tokens=total,
+                diagnostic_snapshot={
+                    "version": 1,
+                    "requestKind": "TEXT_JSON",
+                    "systemChars": 1000,
+                    "userChars": user_count,
+                    "details": {
+                        "exerciseType": "conversation",
+                        "presentationMode": "LISTEN",
+                        "responseMode": "SPEAK",
+                        "conversationTurns": 2,
+                        "conversationChars": conversation_count,
+                    },
+                },
+                success=True,
+            )
+            db.add(event)
+            events.append(event)
+        db.commit()
+        outlier_id = events[-1].id
+
+    response = client.get(f"{API}/ai/usage/{outlier_id}/diagnostic", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    diagnostic = body["diagnostic"]
+    assert diagnostic["tokens"]["total"] == 400
+    assert diagnostic["snapshot"]["userChars"] == 2200
+    assert diagnostic["comparison"]["sampleSize"] == 4
+    assert diagnostic["comparison"]["enoughSample"] is True
+    assert diagnostic["comparison"]["medianTotalTokens"] == 115.0
+    assert diagnostic["comparison"]["totalVsMedian"] > 3
+    signal_keys = {item["key"] for item in diagnostic["comparison"]["signals"]}
+    assert {"inputTokens", "userChars", "conversationChars"} <= signal_keys
+    assert "no atribuyen causalidad" in diagnostic["note"]
+
+
+def test_personal_diagnostic_keeps_platform_provider_and_model_private(client) -> None:
+    headers = login(client, "student@example.com")
+
+    with SessionLocal() as db:
+        account = _account(db, "student@example.com")
+        event = AIUsageEvent(
+            connection_id=None,
+            connection_name="Interna",
+            owner_type=AIConnectionOwnerType.PLATFORM,
+            provider="OPENAI",
+            model="gpt-interno",
+            account_id=account.id,
+            service_source="PLATFORM",
+            operation="evaluate_answer",
+            subject_type="EXERCISE",
+            input_tokens=20,
+            output_tokens=5,
+            total_tokens=25,
+            diagnostic_snapshot={
+                "version": 1,
+                "requestKind": "TEXT_JSON",
+                "systemChars": 100,
+                "userChars": 50,
+            },
+            success=True,
+        )
+        db.add(event)
+        db.commit()
+        event_id = event.id
+
+    response = client.get(f"{API}/ai/usage/{event_id}/diagnostic", headers=headers)
+    assert response.status_code == 200, response.text
+    cohort = response.json()["diagnostic"]["comparison"]["cohort"]
+    assert cohort["provider"] == "PLATFORM"
+    assert cohort["model"] is None
 
 
 def test_failover_attempts_share_execution_and_report_recovery(client) -> None:
