@@ -1,7 +1,8 @@
 import {
   CampaignNotification,
   CampaignRule,
-  CampaignTrigger
+  CampaignTrigger,
+  PlatformCampaignCapabilities
 } from '../../core/models';
 
 export interface CampaignTemplate {
@@ -18,6 +19,83 @@ export interface CampaignTemplate {
   endsAt?: string;
   notification: CampaignNotification;
   message: string;
+}
+
+
+export function campaignTemplateIssues(
+  template: CampaignTemplate,
+  capabilities: PlatformCampaignCapabilities
+): string[] {
+  const issues: string[] = [];
+  const trigger = capabilities.triggers.find((item) => item.key === template.trigger);
+  if (!trigger?.available) {
+    issues.push(`Trigger no disponible: ${template.trigger}`);
+  }
+
+  const grantAction = capabilities.actions.find((item) => item.key === 'GRANT_BENEFIT');
+  if (!grantAction?.available) {
+    issues.push('La acción GRANT_BENEFIT no está disponible.');
+  }
+
+  for (const rule of template.rules) {
+    const capability = capabilities.rules.find((item) => item.key === rule.field);
+    if (!capability?.available) {
+      issues.push(`Condición no disponible: ${rule.field}`);
+      continue;
+    }
+    if (!capability.operators.includes(rule.operator)) {
+      issues.push(`Operador ${rule.operator} no válido para ${rule.field}`);
+    }
+    if (capability.subjectOptions.length > 0) {
+      if (!rule.subject) {
+        issues.push(`${rule.field} requiere ${capability.subjectLabel ?? 'sujeto'}`);
+      } else if (!capability.subjectOptions.some((option) => option.value === rule.subject)) {
+        issues.push(`Sujeto no válido para ${rule.field}: ${rule.subject}`);
+      }
+    }
+    for (const filter of capability.filters) {
+      const value = rule.filters?.[filter.key];
+      if (filter.required && !value) {
+        issues.push(`${rule.field} requiere filtro ${filter.label}`);
+      }
+      if (
+        value &&
+        filter.valueType === 'enum' &&
+        !filter.options.some((option) => option.value === value)
+      ) {
+        issues.push(`Filtro ${filter.label} no válido para ${rule.field}`);
+      }
+    }
+    if (capability.requiresWindow && (!rule.windowDays || rule.windowDays <= 0)) {
+      issues.push(`${rule.field} requiere una ventana de días`);
+    }
+    if (
+      capability.valueType === 'enum' &&
+      capability.options.length > 0 &&
+      !capability.options.some((option) => option.value === String(rule.value))
+    ) {
+      issues.push(`Valor no válido para ${rule.field}: ${rule.value}`);
+    }
+  }
+
+  if (template.maxRecipients !== null && template.maxRecipients <= 0) {
+    issues.push('El máximo de beneficiarios debe ser mayor que cero.');
+  }
+  if (template.startsAt && Number.isNaN(new Date(template.startsAt).getTime())) {
+    issues.push('Fecha de inicio inválida.');
+  }
+  if (template.endsAt && Number.isNaN(new Date(template.endsAt).getTime())) {
+    issues.push('Fecha de fin inválida.');
+  }
+  if (
+    template.startsAt &&
+    template.endsAt &&
+    new Date(template.endsAt).getTime() <= new Date(template.startsAt).getTime()
+  ) {
+    issues.push('La fecha de fin debe ser posterior a la fecha de inicio.');
+  }
+
+  return issues;
 }
 
 export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
