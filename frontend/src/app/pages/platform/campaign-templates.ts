@@ -447,6 +447,22 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     message: 'Queremos acompañarte para que puedas volver a intentarlo con más práctica.'
   },
   {
+    id: 'certificate-a1-reward',
+    title: 'Premio por certificado A1',
+    description: 'Usuarios que ya obtuvieron un certificado real de nivel A1. Se evalúa cuando vuelven a ingresar.',
+    name: 'Fidelización · certificado A1 obtenido',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'CERTIFICATE_ISSUED', operator: 'EQ', value: 'A1' }
+    ],
+    priority: 50,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: '¡Felicitaciones por tu certificado A1! Queremos reconocer tu progreso.'
+  },
+  {
     id: 'started-not-completed-classes',
     title: 'Dificultad para completar clases',
     description: 'Usuarios que iniciaron al menos 5 clases en 7 días pero completaron como máximo 1.',
