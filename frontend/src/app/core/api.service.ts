@@ -6,6 +6,7 @@ import { environment } from '../../environments/environment';
 import {
   ActiveAiConnections,
   AiConnection,
+  AiUsageDiagnosticResponse,
   AiUsageReference,
   AiUsageReport,
   AiUsageScope,
@@ -126,6 +127,10 @@ export class ApiService {
     return this.http.get<AiUsageReference>(`${this.base}/ai/usage/${eventId}/reference`, {
       params: { view }
     });
+  }
+
+  aiUsageDiagnostic(eventId: number): Observable<AiUsageDiagnosticResponse> {
+    return this.http.get<AiUsageDiagnosticResponse>(`${this.base}/ai/usage/${eventId}/diagnostic`);
   }
 
   createConnection(body: ConnectionDraft): Observable<AiConnection> {
