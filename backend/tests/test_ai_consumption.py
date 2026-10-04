@@ -392,9 +392,9 @@ def test_consumption_reference_includes_class_and_exercise(client) -> None:
             .order_by(AIUsageEvent.id.desc())
         )
         assert event is not None
-        from app.classes import service as class_service
+        from app.classes.reference import exercise_display_number
 
-        number = class_service.exercise_display_number(db, exercise)
+        number = exercise_display_number(db, exercise)
         event_id = event.id
         assert event.subject_label == f"Clase #{klass['id']} · Ejercicio {number}"
         assert event.subject_route == f"/app/clase/{klass['id']}"
