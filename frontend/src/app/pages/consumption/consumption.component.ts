@@ -207,6 +207,47 @@ import {
                 @if (exercise.area) {
                   <p class="muted small">{{ exercise.area }}</p>
                 }
+
+                @if (exercise.executionContext; as context) {
+                  <section class="execution-context">
+                    <h3>Cómo se ejecutó</h3>
+                    <div class="context-grid">
+                      <div><span>Operación IA</span><strong>{{ operationName(context.operation) }}</strong></div>
+                      <div><span>Presentación</span><strong>{{ presentationLabel(context.presentationMode) }}</strong></div>
+                      <div><span>Respuesta</span><strong>{{ responseLabel(context.responseMode) }}</strong></div>
+                      <div><span>Evaluación configurada</span><strong>{{ evaluationModeLabel(context.evaluationMode) }}</strong></div>
+                      <div><span>Evaluación efectiva</span><strong>{{ evaluationSourceLabel(context.evaluationSource) }}</strong></div>
+                      <div><span>Audio de respuesta</span><strong>{{ durationLabel(context.audioDurationMs) }}</strong></div>
+                      <div><span>Escuchas</span><strong>{{ context.listenPlays }}</strong></div>
+                      <div><span>Escuchas lentas</span><strong>{{ context.listenSlowPlays }}</strong></div>
+                      <div><span>Regrabaciones</span><strong>{{ context.speakRetakes }}</strong></div>
+                      <div>
+                        <span>Prácticas pronunciación</span>
+                        <strong>{{ context.pronunciationPracticeScores.length }}</strong>
+                      </div>
+                      <div><span>Evaluación fonética</span><strong>{{ context.pronunciationEvaluated ? 'Sí' : 'No' }}</strong></div>
+                      <div><span>Ayuda utilizada</span><strong>{{ assistanceLabel(context.assistance) }}</strong></div>
+                    </div>
+                    @if (context.pronunciationPracticeScores.length) {
+                      <p class="muted small">
+                        Puntajes de práctica: {{ context.pronunciationPracticeScores.join(' · ') }}
+                      </p>
+                    }
+                    <div class="context-size">
+                      <strong>Contexto observable</strong>
+                      <span class="muted tiny">Tamaño en caracteres; sirve para comparar, no equivale a tokens.</span>
+                      <div class="context-size-values">
+                        <span>Consigna {{ context.contextStats.instructionChars }}</span>
+                        <span>Pregunta {{ context.contextStats.questionChars }}</span>
+                        <span>Texto {{ context.contextStats.passageChars }}</span>
+                        <span>Respuesta {{ context.contextStats.answerChars }}</span>
+                        <span>Opciones {{ context.contextStats.options }}</span>
+                        <span>Conceptos esperados {{ context.contextStats.expectedConcepts }}</span>
+                      </div>
+                    </div>
+                  </section>
+                }
+
                 @if (exercise.instruction) {
                   <p><strong>Consigna:</strong> {{ exercise.instruction }}</p>
                 }
@@ -231,6 +272,21 @@ import {
               <p class="muted small">
                 Vista resumida de la clase generada para analizar el contenido asociado al consumo.
               </p>
+              @if (preview.generationSummary; as summary) {
+                <section class="execution-context">
+                  <h3>Composición generada</h3>
+                  <div class="context-grid">
+                    <div><span>Actividades visibles</span><strong>{{ summary.logicalExercises }}</strong></div>
+                    <div><span>Filas internas</span><strong>{{ summary.storedExerciseRows }}</strong></div>
+                    <div><span>Presentación</span><strong>{{ distributionLabel(summary.presentationModes, 'presentation') }}</strong></div>
+                    <div><span>Respuesta</span><strong>{{ distributionLabel(summary.responseModes, 'response') }}</strong></div>
+                  </div>
+                  <div class="context-size">
+                    <strong>Tipos de ejercicio</strong>
+                    <span>{{ distributionLabel(summary.types, 'type') }}</span>
+                  </div>
+                </section>
+              }
               <div class="class-preview-list">
                 @for (exercise of exercises; track exercise.id) {
                   <article class="preview-box">
@@ -241,6 +297,10 @@ import {
                       }
                       · {{ exercise.type }}
                     </strong>
+                    <p class="muted tiny">
+                      {{ presentationLabel(exercise.presentation || 'READ') }}
+                      · {{ responseLabel(exercise.responseMode || 'WRITE') }}
+                    </p>
                     @if (exercise.instruction) { <p>{{ exercise.instruction }}</p> }
                     <p>{{ exercise.question }}</p>
                     @if (exercise.answer) {
@@ -421,6 +481,50 @@ import {
       cursor: pointer;
     }
     .eyebrow { font-weight: 700; margin: 0 0 0.25rem; }
+    .execution-context {
+      margin: 0.8rem 0 1rem;
+      padding: 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      background: var(--surface);
+    }
+    .execution-context h3 {
+      margin: 0 0 0.65rem;
+      font-size: 0.95rem;
+    }
+    .context-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.55rem;
+    }
+    .context-grid > div {
+      display: grid;
+      gap: 0.12rem;
+      min-width: 0;
+    }
+    .context-grid span {
+      color: var(--muted);
+      font-size: 0.72rem;
+    }
+    .context-grid strong {
+      font-size: 0.82rem;
+      overflow-wrap: anywhere;
+    }
+    .context-size {
+      display: grid;
+      gap: 0.3rem;
+      margin-top: 0.65rem;
+      padding-top: 0.65rem;
+      border-top: 1px dashed var(--border);
+      font-size: 0.82rem;
+    }
+    .context-size-values {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 0.7rem;
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
     .preview-box, .preview-result {
       border: 1px solid var(--border);
       border-radius: 0.55rem;
@@ -453,6 +557,7 @@ import {
     }
     @media (max-width: 640px) {
       .page-header { align-items: stretch; flex-direction: column; }
+      .context-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .summary { grid-template-columns: repeat(2, 1fr); }
       .scope-picker { min-width: 0; }
     }
@@ -522,6 +627,75 @@ export class ConsumptionComponent implements OnInit {
 
   openFullClass(route: string): void {
     window.open(route, '_blank', 'noopener');
+  }
+
+  operationName(operation: string): string {
+    const labels: Record<string, string> = {
+      generate_class: 'Generación de clase',
+      evaluate_answer: 'Corrección de ejercicio',
+      transcribe_audio: 'Transcripción / análisis de audio',
+      campaign_assist: 'Asistente de campaña'
+    };
+    return labels[operation] ?? operation.replaceAll('_', ' ');
+  }
+
+  presentationLabel(mode: string): string {
+    return mode === 'LISTEN' ? 'Escuchada' : mode === 'READ' ? 'Leída / visual' : mode;
+  }
+
+  responseLabel(mode: string): string {
+    if (mode === 'SPEAK') return 'Hablada';
+    if (mode === 'SELECT') return 'Selección';
+    if (mode === 'WRITE') return 'Escrita';
+    return mode;
+  }
+
+  evaluationModeLabel(mode: string): string {
+    if (mode === 'AI') return 'IA';
+    if (mode === 'HYBRID') return 'Híbrida';
+    if (mode === 'DETERMINISTIC') return 'Reglas';
+    return mode;
+  }
+
+  evaluationSourceLabel(source: string | null): string {
+    if (!source) return 'Todavía sin resultado';
+    if (source === 'AI') return 'IA';
+    if (source === 'RULE_MATCH') return 'Regla determinística';
+    if (source === 'COMMON_ERROR_MATCH') return 'Error conocido';
+    return source;
+  }
+
+  assistanceLabel(value: string): string {
+    if (value === 'LESSON') return 'Lección';
+    if (value === 'HINT') return 'Pista';
+    return 'Ninguna';
+  }
+
+  durationLabel(milliseconds: number | null): string {
+    if (milliseconds === null) return '—';
+    return `${(milliseconds / 1000).toLocaleString('es-AR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    })} s`;
+  }
+
+  distributionLabel(
+    values: Record<string, number>,
+    kind: 'presentation' | 'response' | 'type'
+  ): string {
+    const items = Object.entries(values);
+    if (!items.length) return '—';
+    return items
+      .map(([key, count]) => {
+        const label =
+          kind === 'presentation'
+            ? this.presentationLabel(key)
+            : kind === 'response'
+              ? this.responseLabel(key)
+              : key;
+        return `${label}: ${count}`;
+      })
+      .join(' · ');
   }
 
   operationLabel(operation: string, row: AiUsageRow): string {
