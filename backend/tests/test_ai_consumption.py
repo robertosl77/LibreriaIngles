@@ -477,3 +477,18 @@ def test_consumption_reference_includes_class_and_exercise(client) -> None:
     )
     assert class_detail["generationSummary"]["presentationModes"]
     assert class_detail["generationSummary"]["responseModes"]
+
+    # PLATFORM_OWNER puede auditar la clase completa desde el mismo evento,
+    # pero no recibe una ruta editable hacia la clase de otra cuenta.
+    owner_headers = login(client, "owner@example.com")
+    owner_full = client.get(
+        f"{API}/ai/usage/{event_id}/reference",
+        headers=owner_headers,
+        params={"view": "CLASS"},
+    )
+    assert owner_full.status_code == 200, owner_full.text
+    owner_detail = owner_full.json()
+    assert owner_detail["kind"] == "CLASS"
+    assert owner_detail["class"]["id"] == klass["id"]
+    assert owner_detail["exercises"]
+    assert owner_detail["fullClassRoute"] is None
