@@ -41,6 +41,7 @@ def _listen_version(example: dict) -> dict:
 class MockProvider:
     def __init__(self, model: str = "mock"):
         self.model = model
+        self.last_usage_payload: dict | None = None
 
     def _maybe_fail(self) -> None:
         if self.model in _FAILURES:
@@ -59,6 +60,10 @@ class MockProvider:
 
     def complete_json(self, system: str, user: str, task: dict) -> dict:
         self._maybe_fail()
+        # Usage determinístico para desarrollo/tests: simula el contrato de un proveedor real.
+        self.last_usage_payload = {
+            "usage": {"input_tokens": 120, "output_tokens": 40, "total_tokens": 160}
+        }
         if task.get("kind") == "generate_class":
             return self._generate(task)
         if task.get("kind") == "evaluate_answer":
@@ -81,6 +86,9 @@ class MockProvider:
         from app.ai.providers import SpeechAnalysis
 
         text = self.transcribe_audio(audio, mime_type)
+        self.last_usage_payload = {
+            "usage": {"input_tokens": 80, "output_tokens": 20, "total_tokens": 100}
+        }
         words = [w.strip(".,!?") for w in text.split() if w.strip(".,!?")]
         return SpeechAnalysis(
             text,
