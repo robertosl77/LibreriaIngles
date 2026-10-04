@@ -28,6 +28,8 @@ class AIUsageContext:
     subject_id: int | None = None
     subject_label: str | None = None
     subject_route: str | None = None
+    # Métricas estructuradas del dominio para explicar consumo sin persistir contenido sensible.
+    diagnostic: dict | None = None
 
 
 def _value_at_path(payload: dict | None, path: str | None):
@@ -114,6 +116,7 @@ def build_usage_event(
     model: str | None = None,
     execution_id: str | None = None,
     attempt_index: int | None = None,
+    diagnostic_snapshot: dict | None = None,
 ) -> AIUsageEvent:
     """Construye el snapshot auditable de una llamada sin guardar prompt/respuesta."""
 
@@ -142,6 +145,7 @@ def build_usage_event(
         reasoning_tokens=reasoning_tokens,
         output_tokens=output_tokens,
         total_tokens=total_tokens,
+        diagnostic_snapshot=diagnostic_snapshot,
         success=success,
         error_code=error_code,
     )
