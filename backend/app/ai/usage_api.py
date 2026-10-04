@@ -156,10 +156,29 @@ def _human_subject(db, event: AIUsageEvent) -> dict | None:
 
 
 def _attempt_for_event(db, event: AIUsageEvent, exercise_id: int) -> Attempt | None:
+    """Busca el intento asociado temporalmente al evento, no simplemente el último.
+
+    Corrección IA ocurre después de crear Attempt. Transcripción ocurre antes de
+    enviar la clase, por eso en ese caso se toma el primer intento posterior.
+    """
     query = select(Attempt).where(Attempt.exercise_id == exercise_id)
     if event.account_id is not None:
         query = query.where(Attempt.account_id == event.account_id)
-    return db.scalar(query.order_by(Attempt.attempt_number.desc(), Attempt.id.desc()))
+
+    if event.operation == "transcribe_audio":
+        candidate = db.scalar(
+            query.where(Attempt.created_at >= event.created_at).order_by(
+                Attempt.created_at.asc(), Attempt.id.asc()
+            )
+        )
+        if candidate is not None:
+            return candidate
+
+    return db.scalar(
+        query.where(Attempt.created_at <= event.created_at).order_by(
+            Attempt.created_at.desc(), Attempt.id.desc()
+        )
+    )
 
 
 def _execution_context(
