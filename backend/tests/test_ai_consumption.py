@@ -1,3 +1,6 @@
+import random
+
+import pytest
 from sqlalchemy import select
 
 from app.accounts.models import Account
@@ -16,6 +19,16 @@ from conftest import login
 
 
 API = "/api/v1"
+
+
+@pytest.fixture(autouse=True)
+def _preserve_random_state():
+    """Los escenarios de Consumo no deben alterar la generación aleatoria de tests posteriores."""
+    state = random.getstate()
+    try:
+        yield
+    finally:
+        random.setstate(state)
 
 
 def _account(db, email: str) -> Account:
@@ -359,14 +372,7 @@ def test_consumption_reference_includes_class_and_exercise(client) -> None:
         headers=headers,
     ).status_code == 201
 
-    # La generación usa random global; preservar su estado evita contaminar tests posteriores.
-    import random
-
-    random_state = random.getstate()
-    try:
-        created = client.post(f"{API}/classes", headers=headers)
-    finally:
-        random.setstate(random_state)
+    created = client.post(f"{API}/classes", headers=headers)
     assert created.status_code == 201, created.text
     klass = created.json()
 
