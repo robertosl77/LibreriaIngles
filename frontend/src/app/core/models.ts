@@ -609,6 +609,7 @@ export interface AiUsageDiagnosticSnapshot {
   userChars?: number;
   systemFingerprint?: string;
   responseJsonChars?: number;
+  transcriptChars?: number;
   audioBytes?: number;
   mimeType?: string;
   details?: Record<string, unknown>;
