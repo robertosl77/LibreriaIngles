@@ -541,6 +541,8 @@ def transcribe_audio(
             db.commit()
             continue
         _mark_success(connection)
+        success_diagnostic = dict(diagnostic_snapshot)
+        success_diagnostic["transcriptChars"] = len(text)
         record_usage(
             db,
             connection,
@@ -550,7 +552,7 @@ def transcribe_audio(
             usage_context=usage_context,
             execution_id=execution_id,
             attempt_index=attempt_index,
-            diagnostic_snapshot=diagnostic_snapshot,
+            diagnostic_snapshot=success_diagnostic,
         )
         db.commit()
         return AudioTranscriptionResult(
