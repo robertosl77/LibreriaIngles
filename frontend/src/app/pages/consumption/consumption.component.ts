@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import {
+  AiUsageReference,
   AiUsageReport,
   AiUsageRow,
   AiUsageScope,
@@ -92,7 +93,9 @@ import {
                 <thead>
                   <tr>
                     <th>Fecha</th>
-                    <th>Usuario</th>
+                    @if (data.scope !== 'ME') {
+                      <th>Usuario</th>
+                    }
                     <th>Operación</th>
                     <th>Ejecución</th>
                     <th>Referencia</th>
@@ -108,12 +111,14 @@ import {
                   @for (row of data.rows; track row.id) {
                     <tr>
                       <td class="nowrap">{{ row.createdAt | date:'dd/MM/yyyy HH:mm:ss' }}</td>
-                      <td>
-                        <div>{{ row.accountName || row.accountEmail || '—' }}</div>
-                        @if (row.accountName && row.accountEmail) {
-                          <div class="muted tiny">{{ row.accountEmail }}</div>
-                        }
-                      </td>
+                      @if (data.scope !== 'ME') {
+                        <td>
+                          <div>{{ row.accountName || row.accountEmail || '—' }}</div>
+                          @if (row.accountName && row.accountEmail) {
+                            <div class="muted tiny">{{ row.accountEmail }}</div>
+                          }
+                        </td>
+                      }
                       <td>{{ operationLabel(row.operation, row) }}</td>
                       <td>
                         @if (row.execution; as execution) {
@@ -133,10 +138,10 @@ import {
                         }
                       </td>
                       <td>
-                        @if (row.subject?.route) {
-                          <a [href]="row.subject!.route!" target="_blank" rel="noopener">
+                        @if (row.subject?.previewable) {
+                          <button class="reference-link" type="button" (click)="openReference(row)">
                             {{ row.subject?.label || subjectFallback(row) }}
-                          </a>
+                          </button>
                         } @else {
                           {{ row.subject?.label || subjectFallback(row) }}
                         }
@@ -163,6 +168,96 @@ import {
             </div>
           }
         </section>
+      }
+
+      @if (referenceLoading()) {
+        <div class="modal-backdrop" (click)="closeReference()">
+          <section class="reference-modal card" (click)="$event.stopPropagation()">
+            <p>Cargando referencia…</p>
+          </section>
+        </div>
+      } @else if (referencePreview(); as preview) {
+        <div class="modal-backdrop" (click)="closeReference()">
+          <section class="reference-modal card" (click)="$event.stopPropagation()">
+            <header class="modal-head">
+              <div>
+                <h2>{{ preview.class.label }}</h2>
+                @if (preview.class.title) {
+                  <p class="muted small">{{ preview.class.title }}</p>
+                }
+              </div>
+              <button class="modal-close" type="button" (click)="closeReference()" aria-label="Cerrar">×</button>
+            </header>
+
+            @if (preview.kind === 'EXERCISE' && preview.exercise; as exercise) {
+              <div class="exercise-preview">
+                <p class="eyebrow">
+                  Ejercicio {{ exercise.number }}
+                  @if (exercise.conversation?.turn) {
+                    · Turno {{ exercise.conversation?.turn }}/{{ exercise.conversation?.total || '?' }}
+                  }
+                  · {{ exercise.type }}
+                </p>
+                @if (exercise.area) {
+                  <p class="muted small">{{ exercise.area }}</p>
+                }
+                @if (exercise.instruction) {
+                  <p><strong>Consigna:</strong> {{ exercise.instruction }}</p>
+                }
+                @if (exercise.passage) {
+                  <div class="preview-box"><strong>Texto:</strong><br>{{ exercise.passage }}</div>
+                }
+                <div class="preview-box"><strong>Pregunta / contenido:</strong><br>{{ exercise.question }}</div>
+                @if (exercise.answer) {
+                  <div class="preview-box"><strong>Respuesta:</strong><br>{{ exercise.answer }}</div>
+                }
+                @if (exercise.score !== null || exercise.feedback) {
+                  <div class="preview-result">
+                    @if (exercise.score !== null) { <strong>Resultado: {{ exercise.score }}%</strong> }
+                    @if (exercise.feedback) { <p>{{ exercise.feedback }}</p> }
+                    @if (exercise.correctAnswer) {
+                      <p><span class="muted">Respuesta correcta:</span> {{ exercise.correctAnswer }}</p>
+                    }
+                  </div>
+                }
+              </div>
+            } @else if (preview.exercises; as exercises) {
+              <p class="muted small">
+                Vista resumida de la clase generada para analizar el contenido asociado al consumo.
+              </p>
+              <div class="class-preview-list">
+                @for (exercise of exercises; track exercise.id) {
+                  <article class="preview-box">
+                    <strong>
+                      Ejercicio {{ exercise.number }}
+                      @if (exercise.conversation?.turn) {
+                        · Turno {{ exercise.conversation?.turn }}/{{ exercise.conversation?.total || '?' }}
+                      }
+                      · {{ exercise.type }}
+                    </strong>
+                    @if (exercise.instruction) { <p>{{ exercise.instruction }}</p> }
+                    <p>{{ exercise.question }}</p>
+                    @if (exercise.answer) {
+                      <p><span class="muted">Respuesta:</span> {{ exercise.answer }}</p>
+                    }
+                    @if (exercise.score !== null) {
+                      <p><span class="muted">Resultado:</span> {{ exercise.score }}%</p>
+                    }
+                  </article>
+                }
+              </div>
+            }
+
+            <footer class="modal-actions">
+              @if (preview.fullClassRoute) {
+                <button class="open-class" type="button" (click)="openFullClass(preview.fullClassRoute)">
+                  Abrir clase completa
+                </button>
+              }
+              <button type="button" (click)="closeReference()">Cerrar</button>
+            </footer>
+          </section>
+        </div>
       }
     </main>
   `,
@@ -276,6 +371,77 @@ import {
       border-radius: 0.6rem;
       background: var(--danger-bg, #fdecec);
     }
+    .reference-link {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgb(0 0 0 / 0.42);
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+    .reference-modal {
+      width: min(860px, 96vw);
+      max-height: 88vh;
+      overflow: auto;
+      padding: 1.15rem;
+      box-shadow: 0 18px 55px rgb(0 0 0 / 0.25);
+    }
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem;
+      margin-bottom: 0.9rem;
+    }
+    .modal-head p { margin: 0.3rem 0 0; }
+    .modal-close {
+      border: 0;
+      background: transparent;
+      font-size: 1.7rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .eyebrow { font-weight: 700; margin: 0 0 0.25rem; }
+    .preview-box, .preview-result {
+      border: 1px solid var(--border);
+      border-radius: 0.55rem;
+      padding: 0.75rem;
+      margin-top: 0.65rem;
+      white-space: pre-wrap;
+    }
+    .preview-result { background: var(--surface); }
+    .preview-result p, .preview-box p { margin: 0.35rem 0 0; }
+    .class-preview-list { display: grid; gap: 0.55rem; }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.55rem;
+      margin-top: 1rem;
+      padding-top: 0.8rem;
+      border-top: 1px solid var(--border);
+    }
+    .modal-actions button {
+      min-height: 2.2rem;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      background: var(--surface);
+      padding: 0.35rem 0.75rem;
+      cursor: pointer;
+    }
+    .modal-actions .open-class { font-weight: 700; }
     @media (max-width: 900px) {
       .summary { grid-template-columns: repeat(3, 1fr); }
     }
@@ -294,6 +460,8 @@ export class ConsumptionComponent implements OnInit {
   readonly report = signal<AiUsageReport | null>(null);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
+  readonly referencePreview = signal<AiUsageReference | null>(null);
+  readonly referenceLoading = signal(false);
 
   async ngOnInit(): Promise<void> {
     try {
@@ -326,6 +494,28 @@ export class ConsumptionComponent implements OnInit {
     if (!scope) return;
     this.selectedKey.set(key);
     await this.load(scope);
+  }
+
+  async openReference(row: AiUsageRow): Promise<void> {
+    if (!row.subject?.previewable) return;
+    this.referenceLoading.set(true);
+    this.referencePreview.set(null);
+    try {
+      this.referencePreview.set(await firstValueFrom(this.api.aiUsageReference(row.id)));
+    } catch (err) {
+      this.error.set(errorMessage(err, 'No se pudo abrir la referencia.'));
+    } finally {
+      this.referenceLoading.set(false);
+    }
+  }
+
+  closeReference(): void {
+    this.referencePreview.set(null);
+    this.referenceLoading.set(false);
+  }
+
+  openFullClass(route: string): void {
+    window.open(route, '_blank', 'noopener');
   }
 
   operationLabel(operation: string, row: AiUsageRow): string {
