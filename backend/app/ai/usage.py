@@ -63,7 +63,7 @@ def normalize_usage(
     db: Session,
     provider: str,
     payload: dict | None,
-) -> tuple[int | None, int | None, int | None]:
+) -> tuple[int | None, int | None, int | None, int | None]:
     """Convierte el usage externo al contrato común usando configuración de BD.
 
     No hay condicionales por proveedor. Si no existe mapping o el proveedor no
@@ -72,7 +72,7 @@ def normalize_usage(
 
     mapping = db.get(AIProviderUsageMapping, provider.upper())
     if mapping is None or not mapping.active:
-        return None, None, None
+        return None, None, None, None
 
     input_tokens = _as_non_negative_int(
         _value_at_path(payload, mapping.input_tokens_path)
@@ -80,12 +80,15 @@ def normalize_usage(
     output_tokens = _as_non_negative_int(
         _value_at_path(payload, mapping.output_tokens_path)
     )
+    reasoning_tokens = _as_non_negative_int(
+        _value_at_path(payload, mapping.reasoning_tokens_path)
+    )
     total_tokens = _as_non_negative_int(
         _value_at_path(payload, mapping.total_tokens_path)
     )
     if total_tokens is None and input_tokens is not None and output_tokens is not None:
-        total_tokens = input_tokens + output_tokens
-    return input_tokens, output_tokens, total_tokens
+        total_tokens = input_tokens + output_tokens + (reasoning_tokens or 0)
+    return input_tokens, reasoning_tokens, output_tokens, total_tokens
 
 
 def _service_source(db: Session, account: Account | None, connection: AIConnection) -> str | None:
@@ -114,7 +117,7 @@ def build_usage_event(
 ) -> AIUsageEvent:
     """Construye el snapshot auditable de una llamada sin guardar prompt/respuesta."""
 
-    input_tokens, output_tokens, total_tokens = normalize_usage(
+    input_tokens, reasoning_tokens, output_tokens, total_tokens = normalize_usage(
         db, connection.provider, usage_payload
     )
     context = context or AIUsageContext()
@@ -136,6 +139,7 @@ def build_usage_event(
         subject_label=context.subject_label,
         subject_route=context.subject_route,
         input_tokens=input_tokens,
+        reasoning_tokens=reasoning_tokens,
         output_tokens=output_tokens,
         total_tokens=total_tokens,
         success=success,
