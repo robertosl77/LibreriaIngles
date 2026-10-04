@@ -244,6 +244,48 @@ def _mark_success(connection: AIConnection, *, used: bool = True) -> None:
 # ------------------------------------------------------------------ consumo
 
 
+def _with_domain_diagnostics(base: dict, usage_context: AIUsageContext | None) -> dict:
+    details = dict(usage_context.diagnostic or {}) if usage_context else {}
+    if details:
+        base["details"] = details
+    return base
+
+
+def _text_diagnostic_snapshot(
+    system: str,
+    user: str,
+    usage_context: AIUsageContext | None,
+) -> dict:
+    """Huella de la llamada real, sin conservar el contenido de los prompts."""
+    return _with_domain_diagnostics(
+        {
+            "version": 1,
+            "requestKind": "TEXT_JSON",
+            "systemChars": len(system),
+            "userChars": len(user),
+        },
+        usage_context,
+    )
+
+
+def _audio_diagnostic_snapshot(
+    audio: bytes,
+    mime_type: str,
+    usage_context: AIUsageContext | None,
+) -> dict:
+    """Huella de audio sin persistir audio ni transcripción."""
+    return _with_domain_diagnostics(
+        {
+            "version": 1,
+            "requestKind": "AUDIO",
+            "audioBytes": len(audio),
+            "mimeType": mime_type[:80],
+        },
+        usage_context,
+    )
+
+
+
 def record_usage(
     db: Session,
     connection: AIConnection,
@@ -255,6 +297,7 @@ def record_usage(
     usage_context: AIUsageContext | None = None,
     execution_id: str | None = None,
     attempt_index: int | None = None,
+    diagnostic_snapshot: dict | None = None,
 ) -> None:
     info = PROVIDERS.get(connection.provider.upper())
     actual_model = connection.model or (info.default_model if info else None)
@@ -271,6 +314,7 @@ def record_usage(
             model=actual_model,
             execution_id=execution_id,
             attempt_index=attempt_index,
+            diagnostic_snapshot=diagnostic_snapshot,
         )
     )
 
@@ -344,6 +388,7 @@ def _run_json_task_with_connections(
     operation = str(task.get("kind") or "unknown")[:80]
     execution_id = uuid4().hex
     attempt_index = 0
+    diagnostic_snapshot = _text_diagnostic_snapshot(system, user, usage_context)
     for connection in connections:
         reason = limit_reason(db, connection, account)
         if reason:
@@ -367,6 +412,7 @@ def _run_json_task_with_connections(
                 usage_context=usage_context,
                 execution_id=execution_id,
                 attempt_index=attempt_index,
+                diagnostic_snapshot=diagnostic_snapshot,
             )
             failed.append(connection.name)
             errors.append(f"{connection_label(connection, account)}: {exc.message}")
@@ -382,6 +428,7 @@ def _run_json_task_with_connections(
             usage_context=usage_context,
             execution_id=execution_id,
             attempt_index=attempt_index,
+            diagnostic_snapshot=diagnostic_snapshot,
         )
         db.commit()
         return AIResult(data=data, connection=connection, failed_connections=failed)
@@ -454,6 +501,7 @@ def transcribe_audio(
     failed: list[str] = []
     execution_id = uuid4().hex
     attempt_index = 0
+    diagnostic_snapshot = _audio_diagnostic_snapshot(audio, mime_type, usage_context)
     for connection in audio_connections(db, account):
         reason = limit_reason(db, connection, account)
         if reason:
@@ -479,6 +527,7 @@ def transcribe_audio(
                 usage_context=usage_context,
                 execution_id=execution_id,
                 attempt_index=attempt_index,
+                diagnostic_snapshot=diagnostic_snapshot,
             )
             failed.append(connection.name)
             errors.append(f"{connection_label(connection, account)}: {exc.message}")
@@ -494,6 +543,7 @@ def transcribe_audio(
             usage_context=usage_context,
             execution_id=execution_id,
             attempt_index=attempt_index,
+            diagnostic_snapshot=diagnostic_snapshot,
         )
         db.commit()
         return AudioTranscriptionResult(
