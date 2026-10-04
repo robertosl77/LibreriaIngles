@@ -6,6 +6,7 @@ T-059 agregará el scheduler para CampaignTrigger.SCHEDULED sin cambiar este con
 
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from math import ceil
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -346,6 +347,13 @@ def _days_since(value: datetime | None, now: datetime) -> int | None:
     return max(0, int((now - value).total_seconds() // 86400))
 
 
+def _days_until(value: datetime | None, now: datetime) -> int | None:
+    value = _as_utc(value)
+    if value is None or value <= now:
+        return None
+    return max(1, ceil((value - now).total_seconds() / 86400))
+
+
 def _last_activity_at(db: Session, account: Account) -> datetime | None:
     return db.scalar(
         select(func.max(ClassSession.evaluated_at)).where(
@@ -497,6 +505,9 @@ def rule_evaluation(
     elif field == "EMAIL_DOMAIN":
         actual = account.email.rsplit("@", 1)[-1].lower() if "@" in account.email else ""
         matched = operator == "EQ" and actual == str(expected).strip().lower()
+    elif field == "DOCUMENT_COUNTRY":
+        actual = account.document_country.upper() if account.document_country else None
+        matched = operator == "EQ" and actual == str(expected).strip().upper()
     elif field == "DAYS_SINCE_CREATED":
         actual = _days_since(account.created_at, now)
         try:
@@ -532,6 +543,17 @@ def rule_evaluation(
             matched = actual is not None and _compare_number(actual, operator, int(expected))
         except (TypeError, ValueError):
             matched = False
+    elif field == "DAYS_UNTIL_SERVICE_EXPIRES":
+        service = effective_service(db, account)
+        actual = _days_until(service.expires_at, now) if service.granted else None
+        try:
+            matched = actual is not None and _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
+    elif field == "SUBSCRIPTION_ORIGIN":
+        service = effective_service(db, account)
+        actual = service.origin.value if service.granted and service.origin is not None else None
+        matched = operator == "EQ" and actual == str(expected).strip().upper()
     elif field == "CURRENT_LEVEL":
         actual = _current_level(db, account)
         matched = operator == "EQ" and actual == str(expected).upper()
