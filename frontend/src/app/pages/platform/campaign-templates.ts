@@ -77,7 +77,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: true }
     ],
     priority: 100,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: ''
@@ -141,7 +141,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'DAYS_SINCE_CREATED', operator: 'GTE', value: 365 }
     ],
     priority: 100,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Gracias por seguir aprendiendo con Librería Inglés.'
@@ -237,7 +237,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'DAYS_UNTIL_SERVICE_EXPIRES', operator: 'LTE', value: 7 }
     ],
     priority: 65,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Tu servicio está próximo a vencer. Tenemos un beneficio para acompañarte.'
@@ -270,7 +270,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'SUBSCRIPTION_ORIGIN', operator: 'EQ', value: 'INVITATION' }
     ],
     priority: 70,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Gracias por seguir aprendiendo con el servicio que recibiste mediante una invitación.'
@@ -327,7 +327,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'writing-needs-review-active',
     title: 'Writing necesita repaso',
-    description: 'Usuarios activos cuyo progreso agregado de Writing está en NEEDS_REVIEW.',
+    description: 'Usuarios con al menos 5 días de actividad en los últimos 14 días cuyo progreso agregado de Writing está en NEEDS_REVIEW.',
     name: 'Recuperación · Writing necesita repaso',
     trigger: 'LOGIN',
     rules: [
@@ -465,7 +465,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'started-not-completed-classes',
     title: 'Dificultad para completar clases',
-    description: 'Usuarios que iniciaron al menos 5 clases en 7 días pero completaron como máximo 1.',
+    description: 'Usuarios que iniciaron al menos 5 clases en 7 días, completaron como máximo 1 y mantienen al menos 4 clases generadas sin completar.',
     name: 'Acompañamiento · clases iniciadas sin completar',
     trigger: 'LOGIN',
     rules: [
@@ -501,7 +501,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'launch-cohort-date-range',
     title: 'Cohorte por fecha',
-    description: 'Cuentas personales registradas dentro de un período concreto y sin membresía otorgada.',
+    description: 'Cuentas personales registradas entre el 1 y el 15 de septiembre de 2026 y sin membresía otorgada.',
     name: 'Cohorte de lanzamiento · sin membresía',
     trigger: 'LOGIN',
     rules: [
@@ -546,7 +546,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'DAYS_SINCE_LAST_ACTIVITY', operator: 'GTE', value: 21 }
     ],
     priority: 45,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Vimos que hace un tiempo no practicás. Tenemos un incentivo para ayudarte a retomar.'
@@ -571,7 +571,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'successful-return-after-expiry',
     title: 'Regreso exitoso',
-    description: 'Usuarios que tuvieron un servicio vencido, hoy vuelven a tener membresía y completaron al menos 10 clases en 14 días.',
+    description: 'Usuarios cuyo servicio anterior venció hace al menos 30 días, hoy vuelven a tener membresía y completaron al menos 10 clases en los últimos 14 días.',
     name: 'Premio por regreso exitoso',
     trigger: 'LOGIN',
     rules: [
@@ -581,7 +581,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'CLASSES_COMPLETED', operator: 'GTE', value: 10, windowDays: 14 }
     ],
     priority: 50,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Volviste y recuperaste el ritmo. Queremos reconocer ese regreso.'
@@ -589,7 +589,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'seasonal-summer-window',
     title: 'Campaña estacional',
-    description: 'Promoción para cuentas personales durante una ventana estacional concreta. Las fechas quedan precargadas y son editables.',
+    description: 'Promoción para cuentas personales entre el 15 de diciembre de 2026 y el 15 de enero de 2027. Las fechas quedan precargadas y son editables.',
     name: 'Estacional · verano 2026/2027',
     trigger: 'LOGIN',
     rules: [
