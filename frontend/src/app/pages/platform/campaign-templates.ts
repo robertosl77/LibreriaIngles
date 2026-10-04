@@ -14,6 +14,8 @@ export interface CampaignTemplate {
   priority: number;
   stackable: boolean;
   maxRecipients: number | null;
+  startsAt?: string;
+  endsAt?: string;
   notification: CampaignNotification;
   message: string;
 }
@@ -375,6 +377,23 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Volviste y recuperaste el ritmo. Queremos reconocer ese regreso.'
+  },
+  {
+    id: 'seasonal-summer-window',
+    title: 'Campaña estacional',
+    description: 'Promoción para cuentas personales durante una ventana estacional concreta. Las fechas quedan precargadas y son editables.',
+    name: 'Estacional · verano 2026/2027',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' }
+    ],
+    priority: 55,
+    stackable: false,
+    maxRecipients: null,
+    startsAt: '2026-12-15T00:00',
+    endsAt: '2027-01-15T23:59',
+    notification: 'IN_APP',
+    message: 'Tenemos una propuesta especial para acompañarte durante esta temporada.'
   },
   {
     id: 'engaged-byok-platform-trial',
