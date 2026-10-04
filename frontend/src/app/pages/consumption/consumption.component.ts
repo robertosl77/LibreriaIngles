@@ -106,11 +106,7 @@ import {
                     <th>Referencia</th>
                     <th>Proveedor / modelo</th>
                     <th>Origen</th>
-                    <th class="number">Entrada</th>
-                    <th class="number">Pensamiento</th>
-                    <th class="number">Salida</th>
-                    <th class="number">Total</th>
-                    <th>Diagnóstico</th>
+                    <th class="number">Tokens</th>
                     <th>Estado</th>
                   </tr>
                 </thead>
@@ -160,12 +156,19 @@ import {
                         </div>
                       </td>
                       <td>{{ sourceLabel(row) }}</td>
-                      <td class="number">{{ tokenValue(row.inputTokens) }}</td>
-                      <td class="number">{{ tokenValue(row.reasoningTokens) }}</td>
-                      <td class="number">{{ tokenValue(row.outputTokens) }}</td>
-                      <td class="number total">{{ tokenValue(row.totalTokens) }}</td>
-                      <td>
-                        <button class="reference-link" type="button" (click)="openDiagnostic(row)">Analizar</button>
+                      <td class="number total">
+                        @if (row.totalTokens !== null) {
+                          <button
+                            class="token-link"
+                            type="button"
+                            (click)="openConsumptionDetail(row)"
+                            [attr.aria-label]="'Ver detalle de consumo: ' + tokenValue(row.totalTokens) + ' tokens'"
+                          >
+                            {{ tokenValue(row.totalTokens) }}
+                          </button>
+                        } @else {
+                          <span class="muted">—</span>
+                        }
                       </td>
                       <td>
                         <span class="status" [class.ok]="row.success" [class.fail]="!row.success">
@@ -177,6 +180,25 @@ import {
                 </tbody>
               </table>
             </div>
+            <nav class="pagination" aria-label="Paginación de consumo">
+              <span class="muted small">
+                Mostrando {{ pageStart(data) | number }}–{{ pageEnd(data) | number }}
+                de {{ data.total | number }}
+                · página {{ pageNumber(data) | number }} de {{ pageCount(data) | number }}
+              </span>
+              <div class="pagination-actions">
+                <button type="button" (click)="previousPage()" [disabled]="data.offset === 0">
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  (click)="nextPage()"
+                  [disabled]="data.offset + data.rows.length >= data.total"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </nav>
           }
         </section>
       }
@@ -184,7 +206,7 @@ import {
       @if (diagnosticLoading()) {
         <div class="modal-backdrop" (click)="closeDiagnostic()">
           <section class="reference-modal card" (click)="$event.stopPropagation()">
-            <p>Cargando diagnóstico…</p>
+            <p>Cargando detalle de consumo…</p>
           </section>
         </div>
       } @else if (diagnosticPreview(); as report) {
@@ -192,14 +214,14 @@ import {
           <section class="reference-modal card" (click)="$event.stopPropagation()">
             <header class="modal-head">
               <div>
-                <h2>Diagnóstico de consumo</h2>
+                <h2>Detalle de consumo</h2>
                 <p class="muted small">{{ diagnosticOperationName(report) }} · evento #{{ report.eventId }}</p>
               </div>
               <button class="modal-close" type="button" (click)="closeDiagnostic()" aria-label="Cerrar">×</button>
             </header>
 
             <section class="execution-context">
-              <h3>Qué consumió</h3>
+              <h3>Desglose de tokens</h3>
               <div class="context-grid">
                 <div><span>Entrada</span><strong>{{ tokenValue(report.diagnostic.tokens.input) }}</strong></div>
                 <div><span>Pensamiento</span><strong>{{ tokenValue(report.diagnostic.tokens.reasoning) }}</strong></div>
@@ -241,7 +263,7 @@ import {
             }
 
             <section class="execution-context">
-              <h3>Qué fue distinto</h3>
+              <h3>Comparación con operaciones equivalentes</h3>
               @if (report.diagnostic.comparison.enoughSample) {
                 <div class="context-grid">
                   <div><span>Muestra comparable</span><strong>{{ report.diagnostic.comparison.sampleSize }}</strong></div>
@@ -497,7 +519,7 @@ import {
     .table-wrap { overflow: auto; }
     table {
       width: 100%;
-      min-width: 1340px;
+      min-width: 1040px;
       border-collapse: collapse;
       font-size: 0.88rem;
     }
@@ -560,6 +582,42 @@ import {
       cursor: pointer;
       font: inherit;
       text-align: left;
+    }
+    .token-link {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 750;
+      font-variant-numeric: tabular-nums;
+    }
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.8rem 1rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .pagination-actions {
+      display: flex;
+      gap: 0.45rem;
+    }
+    .pagination-actions button {
+      min-height: 2.1rem;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      background: var(--surface);
+      padding: 0.3rem 0.7rem;
+      cursor: pointer;
+    }
+    .pagination-actions button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
     .modal-backdrop {
       position: fixed;
@@ -689,6 +747,8 @@ import {
     }
     @media (max-width: 640px) {
       .page-header { align-items: stretch; flex-direction: column; }
+      .pagination { align-items: stretch; flex-direction: column; }
+      .pagination-actions { justify-content: space-between; }
       .context-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .summary { grid-template-columns: repeat(2, 1fr); }
       .scope-picker { min-width: 0; }
@@ -701,6 +761,8 @@ export class ConsumptionComponent implements OnInit {
   readonly scopes = signal<AiUsageScope[]>([]);
   readonly selectedKey = signal('ME');
   readonly report = signal<AiUsageReport | null>(null);
+  readonly pageSize = 50;
+  readonly pageOffset = signal(0);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly referencePreview = signal<AiUsageReference | null>(null);
@@ -740,16 +802,17 @@ export class ConsumptionComponent implements OnInit {
     const scope = this.scopes().find((item) => this.scopeKey(item) === key);
     if (!scope) return;
     this.selectedKey.set(key);
-    await this.load(scope);
+    this.pageOffset.set(0);
+    await this.load(scope, 0);
   }
 
-  async openDiagnostic(row: AiUsageRow): Promise<void> {
+  async openConsumptionDetail(row: AiUsageRow): Promise<void> {
     this.diagnosticLoading.set(true);
     this.diagnosticPreview.set(null);
     try {
       this.diagnosticPreview.set(await firstValueFrom(this.api.aiUsageDiagnostic(row.id)));
     } catch (err) {
-      this.error.set(errorMessage(err, 'No se pudo abrir el diagnóstico.'));
+      this.error.set(errorMessage(err, 'No se pudo abrir el detalle de consumo.'));
     } finally {
       this.diagnosticLoading.set(false);
     }
@@ -978,6 +1041,41 @@ export class ConsumptionComponent implements OnInit {
     return 'API propia';
   }
 
+  pageStart(data: AiUsageReport): number {
+    return data.total === 0 ? 0 : data.offset + 1;
+  }
+
+  pageEnd(data: AiUsageReport): number {
+    return Math.min(data.offset + data.rows.length, data.total);
+  }
+
+  pageNumber(data: AiUsageReport): number {
+    return Math.floor(data.offset / data.limit) + 1;
+  }
+
+  pageCount(data: AiUsageReport): number {
+    return Math.max(1, Math.ceil(data.total / data.limit));
+  }
+
+  async previousPage(): Promise<void> {
+    const data = this.report();
+    const scope = this.currentScope();
+    if (!data || !scope || data.offset === 0) return;
+    const offset = Math.max(0, data.offset - data.limit);
+    await this.load(scope, offset);
+  }
+
+  async nextPage(): Promise<void> {
+    const data = this.report();
+    const scope = this.currentScope();
+    if (!data || !scope || data.offset + data.rows.length >= data.total) return;
+    await this.load(scope, data.offset + data.limit);
+  }
+
+  private currentScope(): AiUsageScope | null {
+    return this.scopes().find((item) => this.scopeKey(item) === this.selectedKey()) ?? null;
+  }
+
   subjectFallback(row: AiUsageRow): string {
     return row.subject?.type || '—';
   }
@@ -986,14 +1084,17 @@ export class ConsumptionComponent implements OnInit {
     return value === null ? '—' : value.toLocaleString('es-AR');
   }
 
-  private async load(scope: AiUsageScope): Promise<void> {
+  private async load(scope: AiUsageScope, offset = this.pageOffset()): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
       const data = await firstValueFrom(
-        this.api.aiUsage(scope.kind as AiUsageScopeKind, scope.id, 200, 0)
+        this.api.aiUsage(scope.kind as AiUsageScopeKind, scope.id, this.pageSize, offset)
       );
       this.report.set(data ?? null);
+      if (data) {
+        this.pageOffset.set(data.offset);
+      }
     } catch (err) {
       this.report.set(null);
       this.error.set(errorMessage(err, 'No se pudo cargar el consumo.'));
