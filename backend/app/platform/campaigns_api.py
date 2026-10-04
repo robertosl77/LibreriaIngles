@@ -79,6 +79,8 @@ Devolvé SOLO JSON con esta forma:
   "draft": {
     "name": "nombre claro",
     "benefitId": 123 o null,
+    "action": "acción disponible",
+    "actionConfig": {},
     "trigger": "trigger disponible",
     "rules": [{"field":"...", "operator":"...", "value":..., "windowDays": null o número}],
     "priority": 100,
@@ -89,9 +91,24 @@ Devolvé SOLO JSON con esta forma:
     "notification": "NONE" | "IN_APP" | "EMAIL" | "IN_APP_EMAIL",
     "message": null o texto
   },
-  "warnings": ["limitación o dato que debe revisar el usuario"],
+  "requirements": [
+    {
+      "text": "requisito material expresado por el usuario",
+      "kind": "RULE" | "TRIGGER" | "ACTION" | "DELIVERY" | "BENEFIT" | "LIMIT" | "DATE",
+      "status": "REPRESENTED" | "UNSUPPORTED",
+      "capability": "clave exacta del catálogo o null"
+    }
+  ],
+  "warnings": ["advertencia informativa que no cambia la intención"],
   "summary": "resumen breve de lo interpretado"
 }
+
+requirements es obligatorio y debe enumerar TODOS los requisitos materiales de la intención:
+audiencia/condiciones, trigger, acción, delivery, beneficio, límites y fechas que el usuario haya
+pedido explícitamente. Si un requisito no puede expresarse exactamente con el catálogo actual,
+marcalo UNSUPPORTED y no lo sustituyas por otra capacidad parecida. Un requisito REPRESENTED debe
+apuntar mediante capability a la capacidad exacta que realmente aparece en draft. No ocultes una
+limitación solo para producir un borrador válido.
 
 El motor actual ejecuta GRANT_BENEFIT sobre un beneficio existente. No inventes descuentos,
 precios, pagos, renovaciones ni otras acciones todavía no disponibles. Si una intención requiere
@@ -115,13 +132,28 @@ si no, devolvé null. El resultado es siempre un BORRADOR: nunca actives ni guar
 
 
 
-def _assist_datetime(value, warnings: list[str], label: str) -> str | None:
+def _append_blocking_issue(blocking_issues: list[str], message: str) -> None:
+    message = message.strip()[:400]
+    if message and message not in blocking_issues and len(blocking_issues) < 12:
+        blocking_issues.append(message)
+
+
+def _assist_datetime(
+    value,
+    warnings: list[str],
+    blocking_issues: list[str],
+    label: str,
+) -> str | None:
     if not value:
         return None
     try:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except (TypeError, ValueError):
         warnings.append(f"La IA propuso una {label} inválida; se dejó vacía.")
+        _append_blocking_issue(
+            blocking_issues,
+            f"La {label} pedida no pudo representarse con una fecha válida.",
+        )
         return None
     return _as_utc(parsed).isoformat()
 
@@ -133,19 +165,41 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
         for item in (data.get("warnings") or [])
         if isinstance(item, (str, int, float))
     ][:8]
+    blocking_issues: list[str] = []
 
     benefit_id = raw.get("benefitId")
     try:
         benefit_id = int(benefit_id) if benefit_id is not None else None
     except (TypeError, ValueError):
         benefit_id = None
+        _append_blocking_issue(
+            blocking_issues,
+            "El beneficio propuesto por IA no pudo validarse.",
+        )
     if benefit_id is not None and benefit_id not in benefit_ids:
         warnings.append("La IA eligió un beneficio no disponible; seleccioná uno manualmente.")
+        _append_blocking_issue(
+            blocking_issues,
+            "El beneficio elegido no pertenece al catálogo activo.",
+        )
         benefit_id = None
+
+    action = str(raw.get("action") or CampaignAction.GRANT_BENEFIT.value).upper()
+    if action not in available_action_values():
+        warnings.append("La acción propuesta todavía no está disponible; se conservó solo la parte representable.")
+        _append_blocking_issue(
+            blocking_issues,
+            f"La acción {action} no está disponible en el motor actual.",
+        )
+        action = CampaignAction.GRANT_BENEFIT.value
 
     trigger = str(raw.get("trigger") or "LOGIN").upper()
     if trigger not in available_trigger_values():
-        warnings.append("El disparador propuesto no está disponible; se usó Cada login.")
+        warnings.append("El disparador propuesto no está disponible; se usó Cada login solo como referencia editable.")
+        _append_blocking_issue(
+            blocking_issues,
+            f"El disparador {trigger} no está disponible en el motor actual.",
+        )
         trigger = "LOGIN"
 
     rules: list[dict] = []
@@ -155,7 +209,12 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
         try:
             rules.append(_validate_rule(CampaignRuleIn.model_validate(item)))
         except (HTTPException, ValueError, TypeError):
+            field = str(item.get("field") or "desconocida").upper()
             warnings.append("Se omitió una condición propuesta por IA porque no es compatible.")
+            _append_blocking_issue(
+                blocking_issues,
+                f"La condición {field} propuesta por IA no puede representarse con el catálogo actual.",
+            )
     if not any(rule["field"] == "ACCOUNT_TYPE" for rule in rules):
         rules.insert(0, {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"})
 
@@ -173,16 +232,32 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
         except (TypeError, ValueError):
             max_recipients = None
             warnings.append("El máximo de beneficiarios propuesto no era válido; se dejó sin límite.")
+            _append_blocking_issue(
+                blocking_issues,
+                "El límite de beneficiarios pedido no pudo representarse de forma válida.",
+            )
 
-    starts_at = _assist_datetime(raw.get("startsAt"), warnings, "fecha de inicio")
-    ends_at = _assist_datetime(raw.get("endsAt"), warnings, "fecha de fin")
+    starts_at = _assist_datetime(
+        raw.get("startsAt"), warnings, blocking_issues, "fecha de inicio"
+    )
+    ends_at = _assist_datetime(
+        raw.get("endsAt"), warnings, blocking_issues, "fecha de fin"
+    )
     if starts_at and ends_at and datetime.fromisoformat(ends_at) <= datetime.fromisoformat(starts_at):
         ends_at = None
         warnings.append("La fecha de fin no era posterior al inicio; se dejó vacía.")
+        _append_blocking_issue(
+            blocking_issues,
+            "La ventana temporal propuesta es inválida.",
+        )
 
     notification = str(raw.get("notification") or "IN_APP").upper()
     allowed_notifications = {item.value for item in CampaignNotification}
     if notification not in allowed_notifications:
+        _append_blocking_issue(
+            blocking_issues,
+            f"El delivery {notification} no está disponible.",
+        )
         notification = "IN_APP"
 
     name = str(raw.get("name") or "Campaña sugerida por IA").strip()[:120]
@@ -195,8 +270,8 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
         "draft": {
             "name": name,
             "benefitId": benefit_id,
-            "action": CampaignAction.GRANT_BENEFIT.value,
-            "actionConfig": {},
+            "action": action,
+            "actionConfig": raw.get("actionConfig") if isinstance(raw.get("actionConfig"), dict) else {},
             "trigger": trigger,
             "rules": rules,
             "priority": priority,
@@ -207,15 +282,138 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
             "notification": notification,
             "message": message,
         },
+        "requirements": [],
         "warnings": warnings,
+        "blockingIssues": blocking_issues,
+        "executable": False,
         "summary": str(data.get("summary") or "Borrador generado por IA. Revisalo antes de guardar.")[:500],
     }
+
+
+def _apply_requirement_coverage(data: dict, normalized: dict) -> dict:
+    """Verifica que cada requisito material declarado por IA exista realmente en el draft."""
+    raw_requirements = data.get("requirements")
+    blocking_issues = normalized["blockingIssues"]
+    draft = normalized["draft"]
+    catalog = capabilities_payload()
+    available_rules = {
+        item["key"] for item in catalog["rules"] if item.get("available")
+    }
+    available_triggers = {
+        item["key"] for item in catalog["triggers"] if item.get("available")
+    }
+    available_actions = {
+        item["key"] for item in catalog["actions"] if item.get("available")
+    }
+    available_deliveries = {
+        item["key"] for item in catalog["deliveries"] if item.get("available")
+    }
+
+    if not isinstance(raw_requirements, list) or not raw_requirements:
+        _append_blocking_issue(
+            blocking_issues,
+            "La IA no declaró la cobertura de requisitos de la intención; el borrador no puede considerarse completo.",
+        )
+        normalized["executable"] = False
+        return normalized
+
+    requirements: list[dict] = []
+    rule_fields = {rule.get("field") for rule in draft["rules"]}
+    allowed_kinds = {
+        "RULE",
+        "TRIGGER",
+        "ACTION",
+        "DELIVERY",
+        "BENEFIT",
+        "LIMIT",
+        "DATE",
+    }
+
+    for raw in raw_requirements[:30]:
+        if not isinstance(raw, dict):
+            _append_blocking_issue(
+                blocking_issues,
+                "La IA devolvió un requisito de cobertura inválido.",
+            )
+            continue
+
+        text = str(raw.get("text") or "").strip()[:300]
+        kind = str(raw.get("kind") or "").strip().upper()
+        status_value = str(raw.get("status") or "").strip().upper()
+        capability_raw = raw.get("capability")
+        capability = (
+            str(capability_raw).strip().upper()
+            if capability_raw not in (None, "")
+            else None
+        )
+        verified = False
+        reason = ""
+
+        if not text or kind not in allowed_kinds or status_value not in {"REPRESENTED", "UNSUPPORTED"}:
+            reason = "Declaración de requisito inválida."
+            _append_blocking_issue(
+                blocking_issues,
+                "La IA devolvió una declaración de cobertura inválida; revisá la intención.",
+            )
+        elif status_value == "UNSUPPORTED":
+            reason = "El requisito no tiene una capacidad exacta disponible."
+            _append_blocking_issue(
+                blocking_issues,
+                f"Requisito no soportado: {text}",
+            )
+        elif kind == "RULE":
+            verified = capability in available_rules and capability in rule_fields
+            reason = "" if verified else "La condición declarada no está presente en el draft."
+        elif kind == "TRIGGER":
+            verified = capability in available_triggers and capability == draft["trigger"]
+            reason = "" if verified else "El trigger declarado no coincide con el draft."
+        elif kind == "ACTION":
+            verified = capability in available_actions and capability == draft["action"]
+            reason = "" if verified else "La acción declarada no coincide con una acción disponible."
+        elif kind == "DELIVERY":
+            verified = capability in available_deliveries and capability == draft["notification"]
+            reason = "" if verified else "El delivery declarado no coincide con el draft."
+        elif kind == "BENEFIT":
+            verified = draft["benefitId"] is not None
+            reason = "" if verified else "El requisito exige un Benefit y el draft no tiene uno válido."
+        elif kind == "LIMIT":
+            verified = capability == "MAX_RECIPIENTS" and draft["maxRecipients"] is not None
+            reason = "" if verified else "El límite declarado no está representado en el draft."
+        elif kind == "DATE":
+            verified = (
+                capability == "STARTS_AT" and draft["startsAt"] is not None
+            ) or (
+                capability == "ENDS_AT" and draft["endsAt"] is not None
+            )
+            reason = "" if verified else "La fecha declarada no está representada en el draft."
+
+        if status_value == "REPRESENTED" and not verified:
+            _append_blocking_issue(
+                blocking_issues,
+                f"Requisito declarado como representado pero no verificado: {text}",
+            )
+
+        requirements.append(
+            {
+                "text": text or "Requisito sin descripción",
+                "kind": kind or "UNKNOWN",
+                "status": status_value or "INVALID",
+                "capability": capability,
+                "verified": verified,
+                "reason": reason or None,
+            }
+        )
+
+    normalized["requirements"] = requirements
+    normalized["executable"] = not blocking_issues
+    return normalized
 
 
 def _apply_description_capability_guards(description: str, normalized: dict) -> dict:
     """Evita que una buena intención de la IA se convierta en una regla de negocio falsa."""
     lower = description.lower()
     warnings = normalized["warnings"]
+    blocking_issues = normalized["blockingIssues"]
     rules = normalized["draft"]["rules"]
 
     mentions_discount = "%" in description or any(
@@ -229,6 +427,10 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
                 "El motor actual no administra descuentos, precios ni porcentajes; "
                 "no se sustituyó el descuento por un beneficio de servicio."
             )
+        _append_blocking_issue(
+            blocking_issues,
+            "La intención requiere un descuento/precio que el motor actual no puede ejecutar.",
+        )
 
     # "Promedio de N clases diarias" debe incluir los días sin actividad en el denominador.
     # Se corrige de forma determinística para no depender de una interpretación variable del LLM.
@@ -335,6 +537,7 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
         if term in lower and not any(warning.lower() == item.lower() for item in warnings):
             warnings.append(warning)
             normalized["draft"]["benefitId"] = None
+            _append_blocking_issue(blocking_issues, warning)
             break
 
     mentions_payment_tenure = any(
@@ -370,8 +573,14 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
             warnings.append(
                 "Todavía no existe una condición por antigüedad de pago o suscripción; no se la reemplazó por antigüedad de la cuenta."
             )
+        _append_blocking_issue(
+            blocking_issues,
+            "La intención requiere antigüedad de pago/suscripción, una condición todavía inexistente.",
+        )
 
     normalized["warnings"] = warnings[:8]
+    normalized["blockingIssues"] = blocking_issues[:12]
+    normalized["executable"] = not normalized["blockingIssues"]
     return normalized
 
 
@@ -595,7 +804,8 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
     if not isinstance(result.data, dict):
         raise HTTPException(502, "La IA devolvió un borrador inválido.")
     normalized = _normalize_assist(result.data, {item["id"] for item in benefit_options})
-    return _apply_description_capability_guards(payload.description.strip(), normalized)
+    normalized = _apply_description_capability_guards(payload.description.strip(), normalized)
+    return _apply_requirement_coverage(result.data, normalized)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
