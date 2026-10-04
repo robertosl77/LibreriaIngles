@@ -43,11 +43,15 @@ import {
       } @else if (report(); as data) {
         <section class="summary" aria-label="Resumen de consumo">
           <article class="card metric">
-            <span class="muted">Operaciones</span>
+            <span class="muted">Ejecuciones</span>
+            <strong>{{ data.summary.executions | number }}</strong>
+          </article>
+          <article class="card metric">
+            <span class="muted">Llamadas IA</span>
             <strong>{{ data.summary.requests | number }}</strong>
           </article>
           <article class="card metric">
-            <span class="muted">Con tokens medidos</span>
+            <span class="muted">Llamadas medidas</span>
             <strong>{{ data.summary.measuredRequests | number }}</strong>
           </article>
           <article class="card metric">
@@ -63,7 +67,7 @@ import {
             <strong>{{ data.summary.totalTokens | number }}</strong>
           </article>
           <article class="card metric">
-            <span class="muted">Errores</span>
+            <span class="muted">Intentos con error</span>
             <strong>{{ data.summary.errors | number }}</strong>
           </article>
         </section>
@@ -73,8 +77,8 @@ import {
             <div>
               <h2>Detalle</h2>
               <p class="muted small">
-                Cada fila corresponde a una llamada real a un proveedor. Sin precios ni costos en
-                esta etapa.
+                Cada fila corresponde a un intento real contra un proveedor. Los intentos de una
+                misma ejecución comparten identificador. Sin precios ni costos en esta etapa.
               </p>
             </div>
             <span class="muted small">{{ data.total | number }} registros</span>
@@ -90,7 +94,8 @@ import {
                     <th>Fecha</th>
                     <th>Usuario</th>
                     <th>Operación</th>
-                    <th>Objeto</th>
+                    <th>Ejecución</th>
+                    <th>Referencia</th>
                     <th>Proveedor / modelo</th>
                     <th>Origen</th>
                     <th class="number">Entrada</th>
@@ -110,6 +115,23 @@ import {
                         }
                       </td>
                       <td>{{ operationLabel(row.operation, row) }}</td>
+                      <td>
+                        @if (row.execution; as execution) {
+                          <div class="nowrap">
+                            <strong>#{{ execution.id.slice(0, 8) }}</strong>
+                            <span class="muted tiny"> · intento {{ execution.attempt }}/{{ execution.attempts }}</span>
+                          </div>
+                          <span
+                            class="execution-status"
+                            [class.recovered]="execution.status === 'RECOVERED_BY_FAILOVER'"
+                            [class.interrupted]="execution.status === 'INTERRUPTED'"
+                          >
+                            {{ executionStatusLabel(execution.status) }}
+                          </span>
+                        } @else {
+                          <span class="muted">—</span>
+                        }
+                      </td>
                       <td>
                         @if (row.subject?.route) {
                           <a [href]="row.subject!.route!" target="_blank" rel="noopener">
@@ -176,7 +198,7 @@ import {
     }
     .summary {
       display: grid;
-      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      grid-template-columns: repeat(7, minmax(120px, 1fr));
       gap: 0.7rem;
       margin-bottom: 1rem;
     }
@@ -200,7 +222,7 @@ import {
     .table-wrap { overflow: auto; }
     table {
       width: 100%;
-      min-width: 1080px;
+      min-width: 1240px;
       border-collapse: collapse;
       font-size: 0.88rem;
     }
@@ -227,6 +249,18 @@ import {
     .small { font-size: 0.85rem; }
     .muted { color: var(--muted); }
     .empty { padding: 1rem; margin: 0; }
+    .execution-status {
+      display: inline-block;
+      margin-top: 0.2rem;
+      border-radius: 999px;
+      padding: 0.1rem 0.42rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      background: var(--success-bg, #e8f5e9);
+      white-space: nowrap;
+    }
+    .execution-status.recovered { background: var(--warning-bg, #fff4dc); }
+    .execution-status.interrupted { background: var(--danger-bg, #fdecec); }
     .status {
       display: inline-block;
       border-radius: 999px;
@@ -302,6 +336,12 @@ export class ConsumptionComponent implements OnInit {
       campaign_assist: 'Asistente de campaña'
     };
     return labels[operation] ?? operation.replaceAll('_', ' ');
+  }
+
+  executionStatusLabel(status: 'OK' | 'RECOVERED_BY_FAILOVER' | 'INTERRUPTED'): string {
+    if (status === 'RECOVERED_BY_FAILOVER') return 'Recuperada por failover';
+    if (status === 'INTERRUPTED') return 'Interrumpida';
+    return 'OK';
   }
 
   sourceLabel(row: AiUsageRow): string {
