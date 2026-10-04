@@ -567,6 +567,72 @@ def test_campaign_assist_uses_platform_ai_only_and_does_not_create_campaign(clie
         assert len(events) == 1
         assert events[0].owner_type == AIConnectionOwnerType.PLATFORM
         assert events[0].connection_id == platform.json()["id"]
+        assert events[0].execution_id
+        assert events[0].attempt_index == 1
+
+
+def test_campaign_assist_failover_uses_same_execution_contract(client) -> None:
+    from app.accounts.models import Account
+    from app.ai.models import (
+        AIConnection,
+        AIConnectionOwnerType,
+        AIConnectionStatus,
+        AIUsageEvent,
+    )
+    from app.db import SessionLocal
+
+    owner, _ = _owner_and_services(client)
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == OWNER))
+        assert account is not None
+        db.add_all(
+            [
+                AIConnection(
+                    owner_type=AIConnectionOwnerType.PLATFORM,
+                    owner_id=None,
+                    provider="MOCK",
+                    name="Campaign primaria caída",
+                    model="mock-fail-down",
+                    priority=1,
+                    active=True,
+                    status=AIConnectionStatus.AVAILABLE,
+                ),
+                AIConnection(
+                    owner_type=AIConnectionOwnerType.PLATFORM,
+                    owner_id=None,
+                    provider="MOCK",
+                    name="Campaign backup",
+                    model="mock",
+                    priority=2,
+                    active=True,
+                    status=AIConnectionStatus.AVAILABLE,
+                ),
+            ]
+        )
+        db.commit()
+
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={"description": "Usuarios nuevos: preparar una campaña de bienvenida al ingresar."},
+    )
+    assert response.status_code == 200, response.text
+
+    with SessionLocal() as db:
+        events = list(
+            db.scalars(
+                select(AIUsageEvent)
+                .where(AIUsageEvent.operation == "campaign_assist")
+                .order_by(AIUsageEvent.attempt_index, AIUsageEvent.id)
+            ).all()
+        )
+        assert len(events) == 2
+        assert events[0].execution_id
+        assert events[0].execution_id == events[1].execution_id
+        assert [event.attempt_index for event in events] == [1, 2]
+        assert [event.success for event in events] == [False, True]
+        assert events[0].error_code == "PROVIDER_DOWN"
 
 
 def test_campaign_assist_is_owner_only(client) -> None:
