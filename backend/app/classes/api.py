@@ -12,6 +12,7 @@ from app.ai.service import (
 )
 from app.ai.usage import AIUsageContext
 from app.classes import generation, service
+from app.classes.reference import exercise_display_number
 from app.pronunciation import normalize_ai_pronunciation
 from app.core.deps import CurrentStudy, DbSession
 from app.curriculum.lessons import get_lesson
@@ -347,7 +348,7 @@ async def transcribe_answer_audio(
                 subject_id=exercise.id,
                 subject_label=(
                     f"{'Examen' if session.kind == SessionKind.EXAM else 'Clase'} "
-                    f"#{session.id} · Ejercicio {service.exercise_display_number(db, exercise)}"
+                    f"#{session.id} · Ejercicio {exercise_display_number(db, exercise)}"
                 ),
                 subject_route=f"/app/clase/{session.id}",
             ),
