@@ -1,5 +1,6 @@
 """API única de Consumo para persona, organización y PLATFORM_OWNER (T-049/T-053)."""
 
+from statistics import median
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -381,6 +382,190 @@ def _execution_summaries(db, execution_ids: set[str]) -> dict[str, dict]:
     return summaries
 
 
+_DIAGNOSTIC_LABELS = {
+    "systemChars": "Prompt base / instrucciones del sistema",
+    "userChars": "Contexto dinámico enviado",
+    "audioBytes": "Tamaño del audio",
+    "instructionChars": "Consigna",
+    "questionChars": "Pregunta",
+    "passageChars": "Texto / pasaje",
+    "stimulusChars": "Estímulo de escucha",
+    "answerChars": "Respuesta del alumno",
+    "optionsChars": "Opciones",
+    "referenceAnswersChars": "Respuestas de referencia",
+    "objectivesChars": "Objetivos curriculares",
+    "conversationChars": "Historial conversacional",
+    "conversationTurns": "Turnos de conversación",
+    "slotCount": "Slots solicitados",
+    "conversationSlots": "Slots conversacionales",
+    "descriptionChars": "Descripción del asistente",
+    "benefitCount": "Beneficios disponibles",
+    "capabilityCount": "Capacidades disponibles",
+}
+
+
+def _diagnostic_numbers(snapshot: dict | None) -> dict[str, float]:
+    if not isinstance(snapshot, dict):
+        return {}
+    values: dict[str, float] = {}
+    for key in ("systemChars", "userChars", "audioBytes"):
+        value = snapshot.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            values[key] = float(value)
+    details = snapshot.get("details")
+    if isinstance(details, dict):
+        for key, value in details.items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                values[key] = float(value)
+    return values
+
+
+def _median(values: list[int | float]) -> float | None:
+    return float(median(values)) if values else None
+
+
+def _ratio(value: int | float | None, baseline: float | None) -> float | None:
+    if value is None or baseline is None or baseline <= 0:
+        return None
+    return round(float(value) / baseline, 2)
+
+
+def _diagnostic_payload(db, event: AIUsageEvent, viewer: Account) -> dict:
+    """Explica el consumo con hechos observables; no inventa causalidad."""
+    query = select(AIUsageEvent).where(
+        AIUsageEvent.operation == event.operation,
+        AIUsageEvent.provider == event.provider,
+        AIUsageEvent.model == event.model,
+        AIUsageEvent.success.is_(True),
+        AIUsageEvent.total_tokens.is_not(None),
+        AIUsageEvent.operation != HEALTH_CHECK,
+    )
+    if event.subject_type is not None:
+        query = query.where(AIUsageEvent.subject_type == event.subject_type)
+
+    if not _is_owner(viewer):
+        if event.account_id == viewer.id:
+            query = query.where(AIUsageEvent.account_id == viewer.id)
+        elif event.organization_id is not None:
+            query = query.where(AIUsageEvent.organization_id == event.organization_id)
+
+    comparable = list(
+        db.scalars(query.order_by(AIUsageEvent.created_at.desc()).limit(500)).all()
+    )
+
+    current_details = (
+        event.diagnostic_snapshot.get("details")
+        if isinstance(event.diagnostic_snapshot, dict)
+        and isinstance(event.diagnostic_snapshot.get("details"), dict)
+        else {}
+    )
+    exercise_type = current_details.get("exerciseType")
+    if exercise_type:
+        same_type = [
+            item
+            for item in comparable
+            if isinstance(item.diagnostic_snapshot, dict)
+            and isinstance(item.diagnostic_snapshot.get("details"), dict)
+            and item.diagnostic_snapshot["details"].get("exerciseType") == exercise_type
+        ]
+        if len(same_type) >= 3:
+            comparable = same_type
+
+    totals = [item.total_tokens for item in comparable if item.total_tokens is not None]
+    sorted_totals = sorted(totals)
+    total_median = _median(totals)
+    p90 = (
+        float(sorted_totals[int(round((len(sorted_totals) - 1) * 0.9))])
+        if sorted_totals
+        else None
+    )
+
+    metrics: list[dict] = []
+    token_fields = [
+        ("inputTokens", "Tokens de entrada", "input_tokens"),
+        ("reasoningTokens", "Tokens de pensamiento", "reasoning_tokens"),
+        ("outputTokens", "Tokens de salida", "output_tokens"),
+    ]
+    for key, label, attr in token_fields:
+        current = getattr(event, attr)
+        values = [getattr(item, attr) for item in comparable if getattr(item, attr) is not None]
+        baseline = _median(values)
+        if current is not None and baseline is not None:
+            metrics.append(
+                {
+                    "key": key,
+                    "label": label,
+                    "value": float(current),
+                    "median": baseline,
+                    "ratio": _ratio(current, baseline),
+                    "sampleSize": len(values),
+                }
+            )
+
+    current_numbers = _diagnostic_numbers(event.diagnostic_snapshot)
+    for key, current in current_numbers.items():
+        values = [
+            numbers[key]
+            for item in comparable
+            if key in (numbers := _diagnostic_numbers(item.diagnostic_snapshot))
+        ]
+        baseline = _median(values)
+        if baseline is None:
+            continue
+        metrics.append(
+            {
+                "key": key,
+                "label": _DIAGNOSTIC_LABELS.get(key, key),
+                "value": current,
+                "median": baseline,
+                "ratio": _ratio(current, baseline),
+                "sampleSize": len(values),
+            }
+        )
+
+    signals = sorted(
+        [
+            metric
+            for metric in metrics
+            if metric["sampleSize"] >= 3
+            and metric["ratio"] is not None
+            and metric["ratio"] >= 1.5
+        ],
+        key=lambda metric: metric["ratio"],
+        reverse=True,
+    )[:8]
+
+    cohort = {
+        "operation": event.operation,
+        "subjectType": event.subject_type,
+        "provider": event.provider,
+        "model": event.model,
+        "exerciseType": exercise_type if exercise_type and len(comparable) >= 3 else None,
+    }
+    return {
+        "tokens": {
+            "input": event.input_tokens,
+            "reasoning": event.reasoning_tokens,
+            "output": event.output_tokens,
+            "total": event.total_tokens,
+        },
+        "snapshot": event.diagnostic_snapshot,
+        "comparison": {
+            "sampleSize": len(totals),
+            "enoughSample": len(totals) >= 3,
+            "medianTotalTokens": total_median,
+            "p90TotalTokens": p90,
+            "totalVsMedian": _ratio(event.total_tokens, total_median),
+            "cohort": cohort,
+            "metrics": metrics,
+            "signals": signals,
+        },
+        "note": (
+            "Las diferencias son señales comparativas; no atribuyen causalidad ni tokens exactos a cada componente."
+        ),
+    }
+
+
 def _serialize_event(
     db,
     event: AIUsageEvent,
@@ -440,6 +625,40 @@ def _serialize_event(
 def usage_scopes(account: CurrentAccount, db: DbSession) -> list[dict]:
     """Scopes que el usuario autenticado puede consultar con el mismo motor."""
     return _available_scopes(db, account)
+
+
+@router.get("/{event_id}/diagnostic")
+def usage_diagnostic(
+    event_id: int,
+    account: CurrentAccount,
+    db: DbSession,
+) -> dict:
+    """Diagnóstico auditable de cualquier llamada IA, tenga o no referencia visual."""
+    event = db.get(AIUsageEvent, event_id)
+    if event is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evento de consumo inexistente.")
+    if not _can_view_event(db, account, event):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés acceso a este consumo.")
+
+    execution = None
+    if event.execution_id:
+        execution = _execution_summaries(db, {event.execution_id}).get(event.execution_id)
+
+    return {
+        "eventId": event.id,
+        "operation": event.operation,
+        "createdAt": event.created_at,
+        "subject": _human_subject(db, event),
+        "execution": {
+            "id": event.execution_id,
+            "attempt": event.attempt_index,
+            "attempts": execution["attempts"],
+            "status": execution["status"],
+        }
+        if event.execution_id and execution
+        else None,
+        "diagnostic": _diagnostic_payload(db, event, account),
+    }
 
 
 @router.get("/{event_id}/reference")
