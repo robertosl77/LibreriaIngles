@@ -109,6 +109,8 @@ def build_usage_event(
     usage_payload: dict | None = None,
     context: AIUsageContext | None = None,
     model: str | None = None,
+    execution_id: str | None = None,
+    attempt_index: int | None = None,
 ) -> AIUsageEvent:
     """Construye el snapshot auditable de una llamada sin guardar prompt/respuesta."""
 
@@ -126,6 +128,8 @@ def build_usage_event(
         organization_id=context.organization_id,
         membership_id=context.membership_id,
         service_source=_service_source(db, account, connection),
+        execution_id=execution_id,
+        attempt_index=attempt_index,
         operation=operation,
         subject_type=context.subject_type,
         subject_id=context.subject_id,
