@@ -12,6 +12,7 @@ import { HomeComponent } from './pages/home/home.component';
 import { LandingComponent } from './pages/landing/landing.component';
 import { LevelComponent } from './pages/level/level.component';
 import { LoginComponent } from './pages/login/login.component';
+import { CampaignsAdminComponent } from './pages/platform/campaigns-admin.component';
 import { PlatformConfigComponent } from './pages/platform/platform-config.component';
 import { PlatformOverviewComponent } from './pages/platform/platform-overview.component';
 import { PlatformComponent } from './pages/platform/platform.component';
@@ -49,6 +50,11 @@ export const routes: Routes = [
             path: 'configuracion',
             component: PlatformConfigComponent,
             title: 'Configuración de plataforma · Librería Inglés'
+          },
+          {
+            path: 'campanas',
+            component: CampaignsAdminComponent,
+            title: 'Campañas · Librería Inglés'
           }
         ]
       }
