@@ -1,0 +1,123 @@
+name: Campaign Template AI Audit
+
+on:
+  push:
+    branches:
+      - feat/campaigns-workspace-template-audit
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: python -m pip install -e ".[dev]"
+
+      - name: Export all Campaign templates
+        working-directory: frontend
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const ts = require('typescript');
+          const source = fs.readFileSync('src/app/pages/platform/campaign-templates.ts', 'utf8');
+          const js = ts.transpileModule(source, {
+            compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+          }).outputText;
+          const module = { exports: {} };
+          const fakeRequire = () => ({});
+          new Function('require', 'module', 'exports', js)(fakeRequire, module, module.exports);
+          const templates = module.exports.CAMPAIGN_TEMPLATES;
+          if (!Array.isArray(templates) || templates.length !== 36) {
+            throw new Error('Expected 36 Campaign templates, got ' + (templates?.length ?? 'invalid'));
+          }
+          fs.writeFileSync('/tmp/campaign-templates.json', JSON.stringify(templates, null, 2));
+          console.log('Exported templates:', templates.length);
+          NODE
+
+      - name: Validate all templates against Campaigns catalog and simulate AI
+        working-directory: backend
+        env:
+          MOCK_AI_ENABLED: "true"
+        run: |
+          python <<'PY'
+          import json
+          from collections import Counter
+          from app.ai.mock import MockProvider
+          from app.campaigns.capabilities import validate_rule
+
+          templates = json.load(open('/tmp/campaign-templates.json', encoding='utf-8'))
+          provider = MockProvider('mock')
+          mismatches = []
+
+          for template in templates:
+              for rule in template['rules']:
+                  validate_rule(
+                      rule['field'],
+                      rule.get('operator', 'EQ'),
+                      rule.get('value'),
+                      rule.get('windowDays'),
+                      rule.get('subject'),
+                      rule.get('filters'),
+                  )
+
+              prompt = (
+                  template['description']
+                  + ' Cuando corresponda, otorgar un beneficio existente. '
+                  + ('Evaluarla en el primer login.' if template['trigger'] == 'FIRST_LOGIN'
+                     else 'Evaluarla cuando la persona vuelva a ingresar.')
+              )
+              result = provider._campaign_assist({
+                  'description': prompt,
+                  'benefits': [{'id': 1, 'name': 'Beneficio auditado'}],
+              })
+              expected = Counter(rule['field'] for rule in template['rules'])
+              actual = Counter(rule['field'] for rule in result['draft']['rules'])
+              trigger_ok = result['draft']['trigger'] == template['trigger']
+              rules_ok = actual == expected
+              if not rules_ok or not trigger_ok:
+                  mismatches.append({
+                      'id': template['id'],
+                      'expected': dict(expected),
+                      'actual': dict(actual),
+                      'expectedTrigger': template['trigger'],
+                      'actualTrigger': result['draft']['trigger'],
+                  })
+
+          print(f'CATALOG_OK={len(templates)}/36')
+          print(f'MOCK_AI_EXACT={len(templates)-len(mismatches)}/36')
+          for item in mismatches:
+              print('MOCK_MISMATCH', json.dumps(item, ensure_ascii=False))
+
+          # The catalog check is authoritative for Campaigns. The MOCK parser is intentionally
+          # diagnostic only because it belongs to the generic AI test provider, not Campaigns.
+          assert len(templates) == 36
+          PY
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Backend tests
+        working-directory: backend
+        run: pytest
