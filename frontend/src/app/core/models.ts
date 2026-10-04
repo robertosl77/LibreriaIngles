@@ -185,9 +185,21 @@ export interface CampaignAssistDraft {
   message: string | null;
 }
 
+export interface CampaignAssistRequirement {
+  text: string;
+  kind: 'RULE' | 'TRIGGER' | 'ACTION' | 'DELIVERY' | 'BENEFIT' | 'LIMIT' | 'DATE' | 'UNKNOWN';
+  status: 'REPRESENTED' | 'UNSUPPORTED' | 'INVALID';
+  capability: string | null;
+  verified: boolean;
+  reason: string | null;
+}
+
 export interface CampaignAssistResult {
   draft: CampaignAssistDraft;
+  requirements: CampaignAssistRequirement[];
   warnings: string[];
+  blockingIssues: string[];
+  executable: boolean;
   summary: string;
 }
 

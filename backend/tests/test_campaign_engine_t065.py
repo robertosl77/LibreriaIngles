@@ -364,6 +364,8 @@ def test_campaign_assist_understands_daily_classes_and_keeps_discount_as_warning
     warnings = " ".join(body["warnings"]).lower()
     assert "30 días" in warnings
     assert "descuento" in warnings or "precio" in warnings
+    assert body["executable"] is False
+    assert body["blockingIssues"]
 
 
 
@@ -688,14 +690,16 @@ def test_fifteen_fidelity_campaigns_are_simulated_and_supported_ones_can_be_crea
                 "name": scenario["name"],
                 "draft": draft,
                 "warnings": body["warnings"],
+                "blockingIssues": body["blockingIssues"],
             }
         )
+        assert body["executable"] is scenario["executable"], (scenario["name"], body)
 
         if not scenario["executable"]:
             warning_text = " ".join(body["warnings"]).lower()
             assert scenario["warning"] in warning_text, (scenario["name"], body)
-            assert draft["benefitId"] is None, (
-                f"{scenario['name']} no debe quedar listo para guardar automáticamente"
+            assert body["blockingIssues"], (
+                f"{scenario['name']} debe quedar explícitamente bloqueada"
             )
             continue
 
