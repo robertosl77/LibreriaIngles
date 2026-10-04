@@ -588,6 +588,8 @@ export interface AiUsageRow {
   provider: string;
   model: string | null;
   connectionName: string | null;
+  connectionRoute: string | null;
+  connectionId: number | null;
   connectionOwnerType: 'ACCOUNT' | 'PLATFORM' | 'ORGANIZATION';
   serviceSource: AiSource | 'OWNER' | null;
   actualSource: 'BYOK' | 'PLATFORM' | 'ORGANIZATION';
