@@ -192,6 +192,11 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
             f"La acción {action} no está disponible en el motor actual.",
         )
         action = CampaignAction.GRANT_BENEFIT.value
+    if action == CampaignAction.GRANT_BENEFIT.value and benefit_id is None:
+        _append_blocking_issue(
+            blocking_issues,
+            "La acción GRANT_BENEFIT requiere seleccionar un beneficio válido antes de guardar.",
+        )
 
     trigger = str(raw.get("trigger") or "LOGIN").upper()
     if trigger not in available_trigger_values():
