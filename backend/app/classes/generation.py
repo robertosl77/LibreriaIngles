@@ -18,6 +18,7 @@ from app.ai.service import (
     has_audio_connection,
     run_json_task,
 )
+from app.ai.usage import AIUsageContext
 from app.classes.normalize import BLANK, normalize_answer, normalize_blank
 from app.classes.prompts import GENERATION_SYSTEM, generation_user_prompt
 from app.core.deps import StudyContext
@@ -545,6 +546,18 @@ def generate_content(
                 request.get("level", ""), public_slots, purpose=request.get("purpose", "class")
             ),
             task={"kind": "generate_class", "level": request.get("level"), "slots": slots},
+            usage_context=AIUsageContext(
+                organization_id=session.organization_id,
+                membership_id=session.membership_id,
+                subject_type=session.kind.value,
+                subject_id=session.id,
+                subject_label=(
+                    f"Examen #{session.id}"
+                    if session.kind == SessionKind.EXAM
+                    else f"Clase #{session.id}"
+                ),
+                subject_route=f"/app/clase/{session.id}",
+            ),
         )
     except NoAIAvailable as exc:
         session.status = ClassSessionStatus.GENERATION_FAILED
