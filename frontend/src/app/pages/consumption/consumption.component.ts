@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import {
@@ -262,7 +263,7 @@ export class ConsumptionComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const scopes = await this.api.aiUsageScopes().toPromise();
+      const scopes = await firstValueFrom(this.api.aiUsageScopes());
       const available = scopes ?? [];
       this.scopes.set(available);
       const preferred =
@@ -324,9 +325,9 @@ export class ConsumptionComponent implements OnInit {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const data = await this.api
-        .aiUsage(scope.kind as AiUsageScopeKind, scope.id, 200, 0)
-        .toPromise();
+      const data = await firstValueFrom(
+        this.api.aiUsage(scope.kind as AiUsageScopeKind, scope.id, 200, 0)
+      );
       this.report.set(data ?? null);
     } catch (err) {
       this.report.set(null);
