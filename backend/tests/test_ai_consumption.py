@@ -232,6 +232,59 @@ def test_platform_owner_can_use_global_consumption_scope(client) -> None:
 
 
 
+
+def test_consumption_defaults_to_fifty_rows_and_keeps_full_summary(client) -> None:
+    headers = login(client, "paged@example.com")
+
+    with SessionLocal() as db:
+        account = _account(db, "paged@example.com")
+        db.add_all(
+            [
+                AIUsageEvent(
+                    connection_id=None,
+                    connection_name="Mock paged",
+                    owner_type=AIConnectionOwnerType.ACCOUNT,
+                    provider="MOCK",
+                    model="mock",
+                    account_id=account.id,
+                    service_source="BYOK",
+                    operation="evaluate_answer",
+                    input_tokens=7,
+                    output_tokens=3,
+                    total_tokens=10,
+                    success=True,
+                )
+                for _ in range(55)
+            ]
+        )
+        db.commit()
+
+    first = client.get(f"{API}/ai/usage", headers=headers)
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert first_body["limit"] == 50
+    assert first_body["offset"] == 0
+    assert first_body["total"] == 55
+    assert len(first_body["rows"]) == 50
+    assert first_body["summary"]["requests"] == 55
+    assert first_body["summary"]["measuredRequests"] == 55
+    assert first_body["summary"]["totalTokens"] == 550
+
+    second = client.get(
+        f"{API}/ai/usage",
+        headers=headers,
+        params={"limit": 50, "offset": 50},
+    )
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert second_body["limit"] == 50
+    assert second_body["offset"] == 50
+    assert second_body["total"] == 55
+    assert len(second_body["rows"]) == 5
+    assert second_body["summary"]["requests"] == 55
+    assert second_body["summary"]["totalTokens"] == 550
+
+
 def test_consumption_diagnostic_detects_outlier_against_comparable_calls(client) -> None:
     headers = login(client, "student@example.com")
 
