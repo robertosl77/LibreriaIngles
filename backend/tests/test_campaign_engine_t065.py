@@ -10,7 +10,7 @@ from app.campaigns.models import CampaignGrant
 from app.db import SessionLocal
 from app.learning.models import ClassSession, ClassSessionStatus, SessionKind
 from app.study_profiles.models import AccountStudyProfile
-from app.subscriptions.models import Subscription, SubscriptionStatus
+from app.subscriptions.models import Subscription, SubscriptionOrigin, SubscriptionStatus
 
 API = "/api/v1"
 OWNER = "owner@example.com"
@@ -61,6 +61,15 @@ def test_campaign_capabilities_are_single_owner_catalog(client) -> None:
     rules = {rule["key"]: rule for rule in body["rules"]}
     assert rules["DAYS_SINCE_LAST_ACTIVITY"]["operators"] == ["EQ", "GTE", "LTE"]
     assert rules["DAYS_SINCE_SERVICE_EXPIRED"]["valueType"] == "integer"
+    assert rules["DAYS_UNTIL_SERVICE_EXPIRES"]["valueType"] == "integer"
+    assert rules["DOCUMENT_COUNTRY"]["valueType"] == "string"
+    assert rules["SUBSCRIPTION_ORIGIN"]["valueType"] == "enum"
+    assert {option["value"] for option in rules["SUBSCRIPTION_ORIGIN"]["options"]} == {
+        "MANUAL",
+        "CAMPAIGN",
+        "INVITATION",
+        "PAYMENT",
+    }
     assert rules["NEVER_STUDIED"]["valueType"] == "boolean"
     assert rules["CURRENT_LEVEL"]["valueType"] == "enum"
 
@@ -184,6 +193,115 @@ def test_preview_can_segment_by_expired_service_without_confusing_payment(client
     )
     assert response.status_code == 200, response.text
     assert response.json()["eligibleCount"] == 1
+
+
+def test_preview_can_segment_by_days_until_active_service_expires(client) -> None:
+    login(client, "expiring-service@example.com")
+    owner = _owner(client)
+    services = client.get(f"{API}/platform/services", headers=owner).json()
+    plan = next(row for row in services if row["code"] == "INDIVIDUAL_PLATFORM")
+    benefit_id = _welcome_benefit_id(client, owner)
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "expiring-service@example.com"))
+        assert account is not None
+        now = datetime.now(timezone.utc)
+        db.add(
+            Subscription(
+                plan_id=plan["id"],
+                account_id=account.id,
+                status=SubscriptionStatus.ACTIVE,
+                origin=SubscriptionOrigin.MANUAL,
+                started_at=now - timedelta(days=10),
+                expires_at=now + timedelta(days=6, hours=12),
+            )
+        )
+        db.commit()
+
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "DAYS_UNTIL_SERVICE_EXPIRES", "operator": "LTE", "value": 7}],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["field"] == "DAYS_UNTIL_SERVICE_EXPIRES"
+    assert result["actual"] == 7
+    assert result["matched"] is True
+
+
+def test_preview_can_segment_by_document_country(client) -> None:
+    login(client, "argentina-document@example.com")
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "argentina-document@example.com"))
+        assert account is not None
+        account.document_country = "AR"
+        db.commit()
+
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "DOCUMENT_COUNTRY", "operator": "EQ", "value": "ar"}],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] == "AR"
+    assert result["expected"] == "AR"
+    assert result["matched"] is True
+
+    invalid = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "DOCUMENT_COUNTRY", "operator": "EQ", "value": "ARG"}],
+    )
+    assert invalid.status_code == 422
+
+
+def test_preview_can_segment_by_active_subscription_origin(client) -> None:
+    login(client, "invitation-origin@example.com")
+    owner = _owner(client)
+    services = client.get(f"{API}/platform/services", headers=owner).json()
+    plan = next(row for row in services if row["code"] == "INDIVIDUAL_PLATFORM")
+    benefit_id = _welcome_benefit_id(client, owner)
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "invitation-origin@example.com"))
+        assert account is not None
+        now = datetime.now(timezone.utc)
+        db.add(
+            Subscription(
+                plan_id=plan["id"],
+                account_id=account.id,
+                status=SubscriptionStatus.ACTIVE,
+                origin=SubscriptionOrigin.INVITATION,
+                started_at=now - timedelta(days=3),
+                expires_at=now + timedelta(days=20),
+            )
+        )
+        db.commit()
+
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "SUBSCRIPTION_ORIGIN", "operator": "EQ", "value": "INVITATION"}],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] == "INVITATION"
+    assert result["matched"] is True
 
 
 def test_unavailable_action_is_rejected_instead_of_faked(client) -> None:

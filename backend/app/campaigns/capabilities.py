@@ -83,6 +83,13 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         "Dominio del correo de la cuenta, sin @.",
     ),
     RuleCapability(
+        "DOCUMENT_COUNTRY",
+        "País documental",
+        "string",
+        ("EQ",),
+        "Código ISO de 2 letras del país del documento declarado en la cuenta. No representa residencia ni ubicación actual.",
+    ),
+    RuleCapability(
         "DAYS_SINCE_CREATED",
         "Días desde registro",
         "integer",
@@ -117,6 +124,26 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         "integer",
         ("EQ", "GTE", "LTE"),
         "Días desde el último servicio vencido. No equivale a antigüedad de pago.",
+    ),
+    RuleCapability(
+        "DAYS_UNTIL_SERVICE_EXPIRES",
+        "Días hasta vencimiento de servicio",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Días restantes hasta el vencimiento del servicio otorgado vigente. Requiere un vencimiento real.",
+    ),
+    RuleCapability(
+        "SUBSCRIPTION_ORIGIN",
+        "Origen de la suscripción vigente",
+        "enum",
+        ("EQ",),
+        "Origen real del servicio otorgado que rige actualmente.",
+        (
+            ("MANUAL", "Manual"),
+            ("CAMPAIGN", "Campaña"),
+            ("INVITATION", "Invitación"),
+            ("PAYMENT", "Pago"),
+        ),
     ),
     RuleCapability(
         "CURRENT_LEVEL",
@@ -333,6 +360,10 @@ def validate_rule(field: str, operator: str, value: Any, window_days: Any = None
             value = value.lower()
             if "@" not in value or "." not in value.rsplit("@", 1)[-1]:
                 raise CampaignCapabilityError("Email inválido.")
+        elif field == "DOCUMENT_COUNTRY":
+            value = value.upper()
+            if len(value) != 2 or not value.isalpha():
+                raise CampaignCapabilityError("País documental inválido: usá un código ISO de 2 letras.")
         elif not value:
             raise CampaignCapabilityError(f"{field} no puede quedar vacío.")
 

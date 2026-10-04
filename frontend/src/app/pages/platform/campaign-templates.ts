@@ -226,6 +226,56 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     message: 'Tenemos una propuesta para que vuelvas a practicar inglés.'
   },
   {
+    id: 'service-expiring-soon',
+    title: 'Servicio próximo a vencer',
+    description: 'Cuentas personales con servicio vigente que vence dentro de los próximos 7 días.',
+    name: 'Retención · servicio próximo a vencer',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: true },
+      { field: 'DAYS_UNTIL_SERVICE_EXPIRES', operator: 'LTE', value: 7 }
+    ],
+    priority: 65,
+    stackable: true,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Tu servicio está próximo a vencer. Tenemos un beneficio para acompañarte.'
+  },
+  {
+    id: 'document-country-ar',
+    title: 'País documental · Argentina',
+    description: 'Ejemplo de segmentación por país documental declarado. AR no implica residencia ni ubicación actual.',
+    name: 'Segmentación · documento Argentina',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'DOCUMENT_COUNTRY', operator: 'EQ', value: 'AR' }
+    ],
+    priority: 100,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: ''
+  },
+  {
+    id: 'subscription-origin-invitation',
+    title: 'Origen · invitación',
+    description: 'Cuentas cuyo servicio vigente fue otorgado mediante una invitación.',
+    name: 'Fidelización · origen invitación',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: true },
+      { field: 'SUBSCRIPTION_ORIGIN', operator: 'EQ', value: 'INVITATION' }
+    ],
+    priority: 70,
+    stackable: true,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Gracias por seguir aprendiendo con el servicio que recibiste mediante una invitación.'
+  },
+  {
     id: 'never-studied',
     title: 'Registrado pero nunca practicó',
     description: 'Detecta cuentas que todavía no completaron ninguna clase.',
