@@ -341,6 +341,58 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     message: '¡Siete días seguidos practicando! Seguí así.'
   },
   {
+    id: 'failed-exams-follow-up',
+    title: 'Acompañamiento tras exámenes desaprobados',
+    description: 'Usuarios que desaprobaron al menos 2 exámenes de nivel durante los últimos 30 días.',
+    name: 'Acompañamiento · exámenes desaprobados',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'EXAMS_FAILED', operator: 'GTE', value: 2, windowDays: 30 }
+    ],
+    priority: 45,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Queremos acompañarte para que puedas volver a intentarlo con más práctica.'
+  },
+  {
+    id: 'started-not-completed-classes',
+    title: 'Dificultad para completar clases',
+    description: 'Usuarios que iniciaron al menos 5 clases en 7 días pero completaron como máximo 1.',
+    name: 'Acompañamiento · clases iniciadas sin completar',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'CLASSES_STARTED', operator: 'GTE', value: 5, windowDays: 7 },
+      { field: 'CLASSES_COMPLETED', operator: 'LTE', value: 1, windowDays: 7 },
+      { field: 'CLASSES_NOT_COMPLETED', operator: 'GTE', value: 4, windowDays: 7 }
+    ],
+    priority: 45,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Vimos que estás intentando practicar. Queremos darte un impulso para completar tus clases.'
+  },
+  {
+    id: 'recover-broken-streak',
+    title: 'Recuperar racha interrumpida',
+    description: 'Usuarios cuya última racha duró al menos 30 días y se cortó hace entre 2 y 5 días.',
+    name: 'Recuperación · racha de 30 días interrumpida',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'LAST_ENDED_STREAK_DAYS', operator: 'GTE', value: 30 },
+      { field: 'DAYS_SINCE_STREAK_BROKEN', operator: 'GTE', value: 2 },
+      { field: 'DAYS_SINCE_STREAK_BROKEN', operator: 'LTE', value: 5 }
+    ],
+    priority: 50,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Tu racha fue muy buena. Te damos un incentivo para ayudarte a retomarla.'
+  },
+  {
     id: 'launch-cohort-date-range',
     title: 'Cohorte por fecha',
     description: 'Cuentas personales registradas dentro de un período concreto y sin membresía otorgada.',

@@ -72,6 +72,13 @@ def test_campaign_capabilities_are_single_owner_catalog(client) -> None:
     }
     assert rules["NEVER_STUDIED"]["valueType"] == "boolean"
     assert rules["CURRENT_LEVEL"]["valueType"] == "enum"
+    assert rules["EXAMS_FAILED"]["requiresWindow"] is True
+    assert rules["CLASSES_GENERATED"]["requiresWindow"] is True
+    assert rules["CLASSES_STARTED"]["requiresWindow"] is True
+    assert rules["CLASSES_GENERATION_FAILED"]["requiresWindow"] is True
+    assert rules["CLASSES_NOT_COMPLETED"]["requiresWindow"] is True
+    assert rules["LAST_ENDED_STREAK_DAYS"]["valueType"] == "integer"
+    assert rules["DAYS_SINCE_STREAK_BROKEN"]["valueType"] == "integer"
 
     actions = {action["key"]: action for action in body["actions"]}
     assert actions["GRANT_BENEFIT"]["available"] is True
@@ -302,6 +309,192 @@ def test_preview_can_segment_by_active_subscription_origin(client) -> None:
     result = body["sample"][0]["rules"][0]
     assert result["actual"] == "INVITATION"
     assert result["matched"] is True
+
+
+def test_preview_can_segment_by_failed_exam_count(client) -> None:
+    user = login(client, "exam-metrics@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "exam-metrics@example.com"))
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert account is not None and link is not None
+        now = datetime.now(timezone.utc)
+        for index, passed in enumerate((False, False, True), start=1):
+            db.add(
+                ClassSession(
+                    study_profile_id=link.study_profile_id,
+                    account_id=account.id,
+                    status=ClassSessionStatus.COMPLETED,
+                    kind=SessionKind.EXAM,
+                    target_level="A1",
+                    score=55 if not passed else 85,
+                    exam_result={"passed": passed},
+                    evaluated_at=now - timedelta(days=index * 3),
+                )
+            )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {"field": "EXAMS_COMPLETED", "operator": "GTE", "value": 3, "windowDays": 30},
+            {"field": "EXAMS_FAILED", "operator": "GTE", "value": 2, "windowDays": 30},
+            {"field": "EXAMS_PASSED", "operator": "EQ", "value": 1, "windowDays": 30},
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = {row["field"]: row["actual"] for row in body["sample"][0]["rules"]}
+    assert values["EXAMS_COMPLETED"] == 3
+    assert values["EXAMS_FAILED"] == 2
+    assert values["EXAMS_PASSED"] == 1
+
+
+def test_preview_can_segment_by_class_lifecycle_metrics(client) -> None:
+    user = login(client, "class-lifecycle@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "class-lifecycle@example.com"))
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert account is not None and link is not None
+        now = datetime.now(timezone.utc)
+
+        rows = [
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.COMPLETED,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=1),
+                generated_at=now - timedelta(days=1),
+                submitted_at=now - timedelta(days=1),
+                evaluated_at=now - timedelta(days=1),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.IN_PROGRESS,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=2),
+                generated_at=now - timedelta(days=2),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.READY,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=3),
+                generated_at=now - timedelta(days=3),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.READY,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=4),
+                generated_at=now - timedelta(days=4),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.READY,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=5),
+                generated_at=now - timedelta(days=5),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.GENERATION_FAILED,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=2),
+                generation_error="fallo simulado",
+            ),
+        ]
+        db.add_all(rows)
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {"field": "CLASSES_GENERATED", "operator": "GTE", "value": 5, "windowDays": 7},
+            {"field": "CLASSES_STARTED", "operator": "GTE", "value": 2, "windowDays": 7},
+            {
+                "field": "CLASSES_GENERATION_FAILED",
+                "operator": "GTE",
+                "value": 1,
+                "windowDays": 7,
+            },
+            {"field": "CLASSES_NOT_COMPLETED", "operator": "GTE", "value": 4, "windowDays": 7},
+            {"field": "CLASSES_COMPLETED", "operator": "LTE", "value": 1, "windowDays": 7},
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = {row["field"]: row["actual"] for row in body["sample"][0]["rules"]}
+    assert values["CLASSES_GENERATED"] == 5
+    assert values["CLASSES_STARTED"] == 2
+    assert values["CLASSES_GENERATION_FAILED"] == 1
+    assert values["CLASSES_NOT_COMPLETED"] == 4
+    assert values["CLASSES_COMPLETED"] == 1
+
+
+def test_preview_uses_real_broken_streak_history(client) -> None:
+    user = login(client, "broken-streak@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+    _add_completed_classes(
+        "broken-streak@example.com",
+        day_offsets=[4, 5, 6, 7],
+        classes_per_day=[1, 1, 1, 1],
+    )
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {"field": "STUDY_STREAK_DAYS", "operator": "EQ", "value": 0},
+            {"field": "LAST_ENDED_STREAK_DAYS", "operator": "GTE", "value": 4},
+            {"field": "DAYS_SINCE_STREAK_BROKEN", "operator": "GTE", "value": 2},
+            {"field": "DAYS_SINCE_STREAK_BROKEN", "operator": "LTE", "value": 5},
+            {"field": "DAYS_SINCE_LAST_ACTIVITY", "operator": "EQ", "value": 4},
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = [row for row in body["sample"][0]["rules"]]
+    by_field = {}
+    for row in values:
+        by_field.setdefault(row["field"], []).append(row["actual"])
+    assert by_field["STUDY_STREAK_DAYS"] == [0]
+    assert by_field["LAST_ENDED_STREAK_DAYS"] == [4]
+    assert by_field["DAYS_SINCE_STREAK_BROKEN"] == [3, 3]
+    assert by_field["DAYS_SINCE_LAST_ACTIVITY"] == [4]
 
 
 def test_unavailable_action_is_rejected_instead_of_faked(client) -> None:

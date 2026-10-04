@@ -383,6 +383,143 @@ def _completed_activity_times(
     return [value for value in (_as_utc(item) for item in values) if value is not None]
 
 
+def _streak_history(db: Session, account: Account, *, now: datetime) -> tuple[int, int | None]:
+    days = sorted({value.date() for value in _completed_activity_times(db, account)})
+    if not days:
+        return 0, None
+
+    runs: list[tuple[object, object, int]] = []
+    start = previous = days[0]
+    length = 1
+    for day in days[1:]:
+        if day == previous + timedelta(days=1):
+            length += 1
+        else:
+            runs.append((start, previous, length))
+            start = day
+            length = 1
+        previous = day
+    runs.append((start, previous, length))
+
+    # Una racha que terminó hoy o ayer todavía se considera vigente: aún no hubo un
+    # día calendario completo sin actividad que pruebe que se cortó.
+    ended = [run for run in runs if run[1] < now.date() - timedelta(days=1)]
+    if not ended:
+        return 0, None
+
+    _, ended_at, ended_length = ended[-1]
+    broken_on = ended_at + timedelta(days=1)
+    return ended_length, max(0, (now.date() - broken_on).days)
+
+
+def _exam_metric(
+    db: Session,
+    account: Account,
+    *,
+    field: str,
+    window_days: int | None,
+    now: datetime,
+) -> int | None:
+    if window_days is None:
+        return None
+    since = now - timedelta(days=window_days)
+    rows = db.scalars(
+        select(ClassSession).where(
+            ClassSession.account_id == account.id,
+            ClassSession.kind == SessionKind.EXAM,
+            ClassSession.status == ClassSessionStatus.COMPLETED,
+            ClassSession.evaluated_at.is_not(None),
+            ClassSession.evaluated_at >= since,
+        )
+    ).all()
+    if field == "EXAMS_COMPLETED":
+        return len(rows)
+    if field == "EXAMS_PASSED":
+        return sum(1 for row in rows if (row.exam_result or {}).get("passed") is True)
+    if field == "EXAMS_FAILED":
+        return sum(1 for row in rows if (row.exam_result or {}).get("passed") is False)
+    return None
+
+
+def _class_lifecycle_metric(
+    db: Session,
+    account: Account,
+    *,
+    field: str,
+    window_days: int | None,
+    now: datetime,
+) -> int | None:
+    if window_days is None:
+        return None
+    since = now - timedelta(days=window_days)
+
+    if field == "CLASSES_GENERATED":
+        return int(
+            db.scalar(
+                select(func.count(ClassSession.id)).where(
+                    ClassSession.account_id == account.id,
+                    ClassSession.kind == SessionKind.CLASS,
+                    ClassSession.generated_at.is_not(None),
+                    ClassSession.generated_at >= since,
+                )
+            )
+            or 0
+        )
+
+    if field == "CLASSES_GENERATION_FAILED":
+        # Hoy ClassSession no conserva failed_at; el fallo ocurre en el mismo flujo
+        # inmediato de generación, por lo que created_at es la marca persistente disponible.
+        return int(
+            db.scalar(
+                select(func.count(ClassSession.id)).where(
+                    ClassSession.account_id == account.id,
+                    ClassSession.kind == SessionKind.CLASS,
+                    ClassSession.status == ClassSessionStatus.GENERATION_FAILED,
+                    ClassSession.created_at >= since,
+                )
+            )
+            or 0
+        )
+
+    if field == "CLASSES_NOT_COMPLETED":
+        return int(
+            db.scalar(
+                select(func.count(ClassSession.id)).where(
+                    ClassSession.account_id == account.id,
+                    ClassSession.kind == SessionKind.CLASS,
+                    ClassSession.generated_at.is_not(None),
+                    ClassSession.generated_at >= since,
+                    ClassSession.status != ClassSessionStatus.COMPLETED,
+                )
+            )
+            or 0
+        )
+
+    if field == "CLASSES_STARTED":
+        rows = db.scalars(
+            select(ClassSession).where(
+                ClassSession.account_id == account.id,
+                ClassSession.kind == SessionKind.CLASS,
+                ClassSession.created_at >= since,
+            )
+        ).all()
+        started_statuses = {
+            ClassSessionStatus.IN_PROGRESS,
+            ClassSessionStatus.AWAITING_EVALUATION,
+            ClassSessionStatus.COMPLETED,
+        }
+        return sum(
+            1
+            for row in rows
+            if row.status in started_statuses
+            or row.current_attempt > 1
+            or row.submitted_at is not None
+            or row.evaluated_at is not None
+        )
+
+    return None
+
+
 def _activity_day_counts(
     db: Session,
     account: Account,
@@ -423,6 +560,30 @@ def _activity_metric(
 ) -> int | float | None:
     if field == "STUDY_STREAK_DAYS":
         return _study_streak_days(db, account, now=now)
+    if field in {"LAST_ENDED_STREAK_DAYS", "DAYS_SINCE_STREAK_BROKEN"}:
+        ended_length, days_since_broken = _streak_history(db, account, now=now)
+        return ended_length if field == "LAST_ENDED_STREAK_DAYS" else days_since_broken
+    if field in {"EXAMS_COMPLETED", "EXAMS_PASSED", "EXAMS_FAILED"}:
+        return _exam_metric(
+            db,
+            account,
+            field=field,
+            window_days=window_days,
+            now=now,
+        )
+    if field in {
+        "CLASSES_GENERATED",
+        "CLASSES_STARTED",
+        "CLASSES_GENERATION_FAILED",
+        "CLASSES_NOT_COMPLETED",
+    }:
+        return _class_lifecycle_metric(
+            db,
+            account,
+            field=field,
+            window_days=window_days,
+            now=now,
+        )
     if window_days is None:
         return None
 
@@ -559,11 +720,20 @@ def rule_evaluation(
         matched = operator == "EQ" and actual == str(expected).upper()
     elif field in {
         "CLASSES_COMPLETED",
+        "CLASSES_GENERATED",
+        "CLASSES_STARTED",
+        "CLASSES_GENERATION_FAILED",
+        "CLASSES_NOT_COMPLETED",
+        "EXAMS_COMPLETED",
+        "EXAMS_PASSED",
+        "EXAMS_FAILED",
         "ACTIVE_STUDY_DAYS",
         "MIN_CLASSES_PER_ACTIVE_DAY",
         "AVERAGE_CLASSES_PER_ACTIVE_DAY",
         "AVERAGE_CLASSES_PER_DAY",
         "STUDY_STREAK_DAYS",
+        "LAST_ENDED_STREAK_DAYS",
+        "DAYS_SINCE_STREAK_BROKEN",
     }:
         window_days = rule.get("windowDays")
         try:
