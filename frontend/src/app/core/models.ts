@@ -607,6 +607,8 @@ export interface AiUsageDiagnosticSnapshot {
   requestKind: 'TEXT_JSON' | 'AUDIO' | string;
   systemChars?: number;
   userChars?: number;
+  systemFingerprint?: string;
+  responseJsonChars?: number;
   audioBytes?: number;
   mimeType?: string;
   details?: Record<string, unknown>;
@@ -647,6 +649,7 @@ export interface AiUsageDiagnosticResponse {
         provider: string;
         model: string | null;
         exerciseType: string | null;
+        promptFingerprint: string | null;
       };
       metrics: AiUsageDiagnosticMetric[];
       signals: AiUsageDiagnosticMetric[];
