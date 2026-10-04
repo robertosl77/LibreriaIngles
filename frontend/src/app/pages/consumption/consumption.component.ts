@@ -315,9 +315,18 @@ import {
             }
 
             <footer class="modal-actions">
+              @if (referenceCanReturnToExercise()) {
+                <button type="button" (click)="showExerciseInModal()">
+                  Volver al ejercicio
+                </button>
+              } @else if (preview.kind === 'EXERCISE') {
+                <button class="open-class" type="button" (click)="showFullClassInModal()">
+                  Ver clase completa
+                </button>
+              }
               @if (preview.fullClassRoute) {
                 <button class="open-class" type="button" (click)="openFullClass(preview.fullClassRoute)">
-                  Abrir clase completa
+                  Abrir clase en la aplicación
                 </button>
               }
               <button type="button" (click)="closeReference()">Cerrar</button>
@@ -573,6 +582,8 @@ export class ConsumptionComponent implements OnInit {
   readonly error = signal<string | null>(null);
   readonly referencePreview = signal<AiUsageReference | null>(null);
   readonly referenceLoading = signal(false);
+  readonly referenceEventId = signal<number | null>(null);
+  readonly referenceCanReturnToExercise = signal(false);
 
   async ngOnInit(): Promise<void> {
     try {
@@ -611,6 +622,8 @@ export class ConsumptionComponent implements OnInit {
     if (!row.subject?.previewable) return;
     this.referenceLoading.set(true);
     this.referencePreview.set(null);
+    this.referenceEventId.set(row.id);
+    this.referenceCanReturnToExercise.set(false);
     try {
       this.referencePreview.set(await firstValueFrom(this.api.aiUsageReference(row.id)));
     } catch (err) {
@@ -620,9 +633,43 @@ export class ConsumptionComponent implements OnInit {
     }
   }
 
+  async showFullClassInModal(): Promise<void> {
+    const eventId = this.referenceEventId();
+    if (eventId === null) return;
+    this.referenceLoading.set(true);
+    try {
+      this.referencePreview.set(
+        await firstValueFrom(this.api.aiUsageReference(eventId, 'CLASS'))
+      );
+      this.referenceCanReturnToExercise.set(true);
+    } catch (err) {
+      this.error.set(errorMessage(err, 'No se pudo abrir la clase completa.'));
+    } finally {
+      this.referenceLoading.set(false);
+    }
+  }
+
+  async showExerciseInModal(): Promise<void> {
+    const eventId = this.referenceEventId();
+    if (eventId === null) return;
+    this.referenceLoading.set(true);
+    try {
+      this.referencePreview.set(
+        await firstValueFrom(this.api.aiUsageReference(eventId, 'REFERENCE'))
+      );
+      this.referenceCanReturnToExercise.set(false);
+    } catch (err) {
+      this.error.set(errorMessage(err, 'No se pudo volver al ejercicio.'));
+    } finally {
+      this.referenceLoading.set(false);
+    }
+  }
+
   closeReference(): void {
     this.referencePreview.set(null);
     this.referenceLoading.set(false);
+    this.referenceEventId.set(null);
+    this.referenceCanReturnToExercise.set(false);
   }
 
   openFullClass(route: string): void {
