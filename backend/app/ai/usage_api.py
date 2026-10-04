@@ -8,9 +8,11 @@ from sqlalchemy import case, func, select
 from app.accounts.models import Account, PlatformRole
 from app.ai.models import AIConnectionOwnerType, AIUsageEvent
 from app.ai.service import HEALTH_CHECK, PLATFORM_LABEL
+from app.classes import service as class_service
 from app.core.deps import CurrentAccount, DbSession
 from app.memberships.models import Membership, MembershipRole, MembershipStatus
 from app.organizations.models import Organization
+from app.learning.models import Attempt, ClassSession, DraftAnswer, Exercise, SessionKind
 
 
 router = APIRouter(prefix="/ai/usage", tags=["ai-consumption"])
@@ -100,6 +102,142 @@ def _actual_source(owner_type: AIConnectionOwnerType) -> str:
     return "BYOK"
 
 
+def _can_view_event(db, viewer: Account, event: AIUsageEvent) -> bool:
+    if _is_owner(viewer) or event.account_id == viewer.id:
+        return True
+    return bool(
+        event.organization_id is not None
+        and _organization_admin(db, viewer, event.organization_id) is not None
+    )
+
+
+def _human_subject(db, event: AIUsageEvent) -> dict | None:
+    if not event.subject_type and not event.subject_label:
+        return None
+
+    if event.subject_type == "EXERCISE" and event.subject_id is not None:
+        exercise = db.get(Exercise, event.subject_id)
+        if exercise is not None:
+            session = db.get(ClassSession, exercise.class_session_id)
+            if session is not None:
+                number = class_service.exercise_display_number(db, exercise)
+                kind = "Examen" if session.kind == SessionKind.EXAM else "Clase"
+                return {
+                    "type": event.subject_type,
+                    "id": event.subject_id,
+                    "label": f"{kind} #{session.id} · Ejercicio {number}",
+                    "classId": session.id,
+                    "exerciseNumber": number,
+                    "previewable": True,
+                }
+
+    if event.subject_type in {"CLASS", "EXAM"} and event.subject_id is not None:
+        session = db.get(ClassSession, event.subject_id)
+        if session is not None:
+            kind = "Examen" if session.kind == SessionKind.EXAM else "Clase"
+            return {
+                "type": event.subject_type,
+                "id": event.subject_id,
+                "label": f"{kind} #{session.id}",
+                "classId": session.id,
+                "exerciseNumber": None,
+                "previewable": True,
+            }
+
+    return {
+        "type": event.subject_type,
+        "id": event.subject_id,
+        "label": event.subject_label,
+        "classId": None,
+        "exerciseNumber": None,
+        "previewable": False,
+    }
+
+
+def _attempt_for_event(db, event: AIUsageEvent, exercise_id: int) -> Attempt | None:
+    query = select(Attempt).where(Attempt.exercise_id == exercise_id)
+    if event.account_id is not None:
+        query = query.where(Attempt.account_id == event.account_id)
+    return db.scalar(query.order_by(Attempt.attempt_number.desc(), Attempt.id.desc()))
+
+
+def _exercise_preview(db, event: AIUsageEvent, exercise: Exercise) -> dict:
+    session = db.get(ClassSession, exercise.class_session_id)
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Clase asociada inexistente.")
+
+    attempt = _attempt_for_event(db, event, exercise.id)
+    draft = db.scalar(select(DraftAnswer).where(DraftAnswer.exercise_id == exercise.id))
+    conversation = (exercise.content or {}).get("conversation") or None
+    result = attempt.evaluation_result or {} if attempt else {}
+
+    return {
+        "kind": "EXERCISE",
+        "class": {
+            "id": session.id,
+            "kind": session.kind.value,
+            "label": f"{'Examen' if session.kind == SessionKind.EXAM else 'Clase'} #{session.id}",
+            "title": session.title,
+            "targetLevel": session.target_level,
+        },
+        "exercise": {
+            "id": exercise.id,
+            "number": class_service.exercise_display_number(db, exercise),
+            "type": exercise.exercise_type,
+            "area": exercise.area,
+            "skillKey": exercise.skill_key,
+            "instruction": exercise.instruction,
+            "question": exercise.prompt,
+            "passage": (exercise.content or {}).get("passage"),
+            "options": (exercise.content or {}).get("options"),
+            "conversation": conversation,
+            "presentation": exercise.presentation_mode.value,
+            "responseMode": exercise.response_mode.value,
+            "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else None),
+            "score": attempt.score if attempt else None,
+            "result": result.get("result") if result else None,
+            "feedback": result.get("feedback") if result else None,
+            "correctAnswer": result.get("correctAnswer") if result else None,
+        },
+    }
+
+
+def _class_preview(db, event: AIUsageEvent, session: ClassSession) -> dict:
+    items = []
+    for exercise in class_service.exercises_of(db, session):
+        attempt = _attempt_for_event(db, event, exercise.id)
+        draft = db.scalar(select(DraftAnswer).where(DraftAnswer.exercise_id == exercise.id))
+        result = attempt.evaluation_result or {} if attempt else {}
+        items.append(
+            {
+                "id": exercise.id,
+                "number": class_service.exercise_display_number(db, exercise),
+                "type": exercise.exercise_type,
+                "area": exercise.area,
+                "instruction": exercise.instruction,
+                "question": exercise.prompt,
+                "passage": (exercise.content or {}).get("passage"),
+                "conversation": (exercise.content or {}).get("conversation"),
+                "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else None),
+                "score": attempt.score if attempt else None,
+                "feedback": result.get("feedback") if result else None,
+            }
+        )
+    return {
+        "kind": "CLASS",
+        "class": {
+            "id": session.id,
+            "kind": session.kind.value,
+            "label": f"{'Examen' if session.kind == SessionKind.EXAM else 'Clase'} #{session.id}",
+            "title": session.title,
+            "targetLevel": session.target_level,
+            "status": session.status.value,
+            "score": session.score,
+        },
+        "exercises": items,
+    }
+
+
 def _execution_summaries(db, execution_ids: set[str]) -> dict[str, dict]:
     """Resumen de una ejecución lógica, incluyendo todos sus intentos de failover."""
     if not execution_ids:
@@ -133,6 +271,7 @@ def _execution_summaries(db, execution_ids: set[str]) -> dict[str, dict]:
 
 
 def _serialize_event(
+    db,
     event: AIUsageEvent,
     event_account: Account | None,
     viewer: Account,
@@ -172,16 +311,16 @@ def _serialize_event(
         }
         if event.execution_id and execution_summary
         else None,
-        "subject": {
-            "type": event.subject_type,
-            "id": event.subject_id,
-            "label": event.subject_label,
-            # Una ruta solo se entrega cuando el visor puede abrir razonablemente ese objeto
-            # con los permisos actuales. El portal ADMIN definirá navegación corporativa en T-010.
-            "route": event.subject_route if own_event or _is_owner(viewer) and event.account_id is None else None,
-        }
-        if event.subject_type or event.subject_label
-        else None,
+        "subject": (
+            {
+                **subject,
+                # La clase completa sigue siendo navegable solo desde la propia cuenta.
+                # ADMIN/OWNER auditan mediante el modal de solo lectura.
+                "route": event.subject_route if own_event else None,
+            }
+            if (subject := _human_subject(db, event))
+            else None
+        ),
     }
 
 
@@ -189,6 +328,40 @@ def _serialize_event(
 def usage_scopes(account: CurrentAccount, db: DbSession) -> list[dict]:
     """Scopes que el usuario autenticado puede consultar con el mismo motor."""
     return _available_scopes(db, account)
+
+
+@router.get("/{event_id}/reference")
+def usage_reference(event_id: int, account: CurrentAccount, db: DbSession) -> dict:
+    """Visor de solo lectura del trabajo asociado al evento de consumo."""
+    event = db.get(AIUsageEvent, event_id)
+    if event is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Evento de consumo inexistente.")
+    if not _can_view_event(db, account, event):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés acceso a esta referencia.")
+
+    if event.subject_type == "EXERCISE" and event.subject_id is not None:
+        exercise = db.get(Exercise, event.subject_id)
+        if exercise is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ejercicio asociado inexistente.")
+        preview = _exercise_preview(db, event, exercise)
+    elif event.subject_type in {"CLASS", "EXAM"} and event.subject_id is not None:
+        session = db.get(ClassSession, event.subject_id)
+        if session is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Clase asociada inexistente.")
+        preview = _class_preview(db, event, session)
+    else:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Este evento no tiene una referencia visualizable.",
+        )
+
+    preview["eventId"] = event.id
+    preview["fullClassRoute"] = (
+        f"/app/clase/{preview['class']['id']}"
+        if event.account_id == account.id
+        else None
+    )
+    return preview
 
 
 @router.get("")
@@ -279,6 +452,7 @@ def usage(
         "total": int(total),
         "rows": [
             _serialize_event(
+                db,
                 event,
                 event_account,
                 account,
