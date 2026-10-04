@@ -325,6 +325,56 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     message: 'Gracias por mantener una práctica tan constante.'
   },
   {
+    id: 'writing-needs-review-active',
+    title: 'Writing necesita repaso',
+    description: 'Usuarios activos cuyo progreso agregado de Writing está en NEEDS_REVIEW.',
+    name: 'Recuperación · Writing necesita repaso',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'ABILITY_STATUS', subject: 'WRITING', operator: 'EQ', value: 'NEEDS_REVIEW' },
+      { field: 'ACTIVE_STUDY_DAYS', operator: 'GTE', value: 5, windowDays: 14 }
+    ],
+    priority: 45,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Vemos que seguís practicando. Te damos un impulso para reforzar Writing.'
+  },
+  {
+    id: 'frequent-appeals',
+    title: 'Apelaciones frecuentes',
+    description: 'Usuarios que apelaron al menos 3 correcciones durante los últimos 14 días.',
+    name: 'Acompañamiento · apelaciones frecuentes',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'APPEALS_COUNT', operator: 'GTE', value: 3, windowDays: 14 }
+    ],
+    priority: 40,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Queremos acompañarte para revisar cómo está funcionando tu experiencia de corrección.'
+  },
+  {
+    id: 'speaking-never-used',
+    title: 'Probar Speaking',
+    description: 'Usuarios con al menos 20 clases completadas en 30 días que todavía nunca respondieron hablando.',
+    name: 'Adopción · primera experiencia con Speaking',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'CLASSES_COMPLETED', operator: 'GTE', value: 20, windowDays: 30 },
+      { field: 'SPEAKING_RESPONSES', operator: 'EQ', value: 0 }
+    ],
+    priority: 55,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Ya venís practicando con constancia. Te invitamos a probar una actividad hablando.'
+  },
+  {
     id: 'study-streak',
     title: 'Racha de estudio',
     description: 'Usuarios con una racha actual de al menos 7 días consecutivos.',
