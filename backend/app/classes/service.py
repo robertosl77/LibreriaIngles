@@ -45,30 +45,6 @@ def exercises_of(db: Session, session: ClassSession) -> list[Exercise]:
     )
 
 
-def exercise_display_number(db: Session, exercise: Exercise) -> int:
-    """Número humano dentro de la clase.
-
-    Una conversación multi-turno es una sola actividad visible: sus turnos comparten
-    número. Esto evita exponer el PK interno de Exercise en auditorías/Consumo.
-    """
-    session = db.get(ClassSession, exercise.class_session_id)
-    if session is None:
-        return max(1, exercise.position + 1)
-
-    number = 0
-    for item in exercises_of(db, session):
-        conversation = (item.content or {}).get("conversation") or {}
-        is_continuation = (
-            item.exercise_type == "conversation"
-            and int(conversation.get("turn") or 1) > 1
-        )
-        if not is_continuation:
-            number += 1
-        if item.id == exercise.id:
-            return max(1, number)
-    return max(1, exercise.position + 1)
-
-
 def drafts_of(db: Session, session: ClassSession) -> dict[int, DraftAnswer]:
     rows = db.scalars(select(DraftAnswer).where(DraftAnswer.class_session_id == session.id))
     return {row.exercise_id: row for row in rows}
