@@ -592,6 +592,7 @@ export interface AiUsageRow {
   serviceSource: AiSource | 'OWNER' | null;
   actualSource: 'BYOK' | 'PLATFORM' | 'ORGANIZATION';
   inputTokens: number | null;
+  reasoningTokens: number | null;
   outputTokens: number | null;
   totalTokens: number | null;
   success: boolean;
@@ -648,6 +649,7 @@ export interface AiUsageReport {
     errors: number;
     measuredRequests: number;
     inputTokens: number;
+    reasoningTokens: number;
     outputTokens: number;
     totalTokens: number;
   };
