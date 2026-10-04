@@ -601,6 +601,29 @@ export interface AiUsageRow {
   subject: AiUsageSubject | null;
 }
 
+export interface AiUsageExecutionContext {
+  operation: string;
+  presentationMode: string;
+  responseMode: string;
+  evaluationMode: string;
+  evaluationSource: string | null;
+  audioDurationMs: number | null;
+  listenPlays: number;
+  listenSlowPlays: number;
+  speakRetakes: number;
+  pronunciationPracticeScores: number[];
+  pronunciationEvaluated: boolean;
+  assistance: string;
+  contextStats: {
+    instructionChars: number;
+    questionChars: number;
+    passageChars: number;
+    answerChars: number;
+    options: number;
+    expectedConcepts: number;
+  };
+}
+
 export interface AiUsageReferenceExercise {
   id: number;
   number: number;
@@ -619,11 +642,13 @@ export interface AiUsageReferenceExercise {
   result?: string | null;
   feedback: string | null;
   correctAnswer?: string | null;
+  executionContext?: AiUsageExecutionContext;
 }
 
 export interface AiUsageReference {
   eventId: number;
   kind: 'EXERCISE' | 'CLASS';
+  operation?: string;
   class: {
     id: number;
     kind: 'CLASS' | 'EXAM';
@@ -635,6 +660,13 @@ export interface AiUsageReference {
   };
   exercise?: AiUsageReferenceExercise;
   exercises?: AiUsageReferenceExercise[];
+  generationSummary?: {
+    logicalExercises: number;
+    storedExerciseRows: number;
+    types: Record<string, number>;
+    presentationModes: Record<string, number>;
+    responseModes: Record<string, number>;
+  };
   fullClassRoute: string | null;
 }
 
