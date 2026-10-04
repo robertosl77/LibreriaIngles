@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import {
+  AiUsageDiagnosticResponse,
   AiUsageReference,
   AiUsageReport,
   AiUsageRow,
@@ -109,6 +110,7 @@ import {
                     <th class="number">Pensamiento</th>
                     <th class="number">Salida</th>
                     <th class="number">Total</th>
+                    <th>Diagnóstico</th>
                     <th>Estado</th>
                   </tr>
                 </thead>
@@ -163,6 +165,9 @@ import {
                       <td class="number">{{ tokenValue(row.outputTokens) }}</td>
                       <td class="number total">{{ tokenValue(row.totalTokens) }}</td>
                       <td>
+                        <button class="reference-link" type="button" (click)="openDiagnostic(row)">Analizar</button>
+                      </td>
+                      <td>
                         <span class="status" [class.ok]="row.success" [class.fail]="!row.success">
                           {{ row.success ? 'OK' : (row.errorCode || 'Error') }}
                         </span>
@@ -174,6 +179,97 @@ import {
             </div>
           }
         </section>
+      }
+
+      @if (diagnosticLoading()) {
+        <div class="modal-backdrop" (click)="closeDiagnostic()">
+          <section class="reference-modal card" (click)="$event.stopPropagation()">
+            <p>Cargando diagnóstico…</p>
+          </section>
+        </div>
+      } @else if (diagnosticPreview(); as report) {
+        <div class="modal-backdrop" (click)="closeDiagnostic()">
+          <section class="reference-modal card" (click)="$event.stopPropagation()">
+            <header class="modal-head">
+              <div>
+                <h2>Diagnóstico de consumo</h2>
+                <p class="muted small">{{ operationName(report.operation) }} · evento #{{ report.eventId }}</p>
+              </div>
+              <button class="modal-close" type="button" (click)="closeDiagnostic()" aria-label="Cerrar">×</button>
+            </header>
+
+            <section class="execution-context">
+              <h3>Qué consumió</h3>
+              <div class="context-grid">
+                <div><span>Entrada</span><strong>{{ tokenValue(report.diagnostic.tokens.input) }}</strong></div>
+                <div><span>Pensamiento</span><strong>{{ tokenValue(report.diagnostic.tokens.reasoning) }}</strong></div>
+                <div><span>Salida</span><strong>{{ tokenValue(report.diagnostic.tokens.output) }}</strong></div>
+                <div><span>Total</span><strong>{{ tokenValue(report.diagnostic.tokens.total) }}</strong></div>
+              </div>
+            </section>
+
+            @if (report.diagnostic.snapshot; as snapshot) {
+              <section class="execution-context">
+                <h3>Qué contexto participó</h3>
+                <p class="muted tiny">Huella estructurada de la llamada real. No se guardan prompts ni respuestas completas.</p>
+                <div class="context-grid">
+                  @if (snapshot.systemChars !== undefined) {
+                    <div><span>Prompt base</span><strong>{{ snapshot.systemChars | number }} caracteres</strong></div>
+                  }
+                  @if (snapshot.userChars !== undefined) {
+                    <div><span>Contexto dinámico</span><strong>{{ snapshot.userChars | number }} caracteres</strong></div>
+                  }
+                  @if (snapshot.audioBytes !== undefined) {
+                    <div><span>Audio</span><strong>{{ snapshot.audioBytes | number }} bytes</strong></div>
+                  }
+                  @for (detail of diagnosticDetails(snapshot); track detail.key) {
+                    <div><span>{{ detail.label }}</span><strong>{{ detail.value }}</strong></div>
+                  }
+                </div>
+              </section>
+            } @else {
+              <p class="muted small">Este evento es anterior a la instrumentación diagnóstica.</p>
+            }
+
+            <section class="execution-context">
+              <h3>Qué fue distinto</h3>
+              @if (report.diagnostic.comparison.enoughSample) {
+                <div class="context-grid">
+                  <div><span>Muestra comparable</span><strong>{{ report.diagnostic.comparison.sampleSize }}</strong></div>
+                  <div><span>Mediana total</span><strong>{{ tokenValue(report.diagnostic.comparison.medianTotalTokens) }}</strong></div>
+                  <div><span>Percentil 90</span><strong>{{ tokenValue(report.diagnostic.comparison.p90TotalTokens) }}</strong></div>
+                  <div>
+                    <span>Esta llamada / mediana</span>
+                    <strong>{{ ratioLabel(report.diagnostic.comparison.totalVsMedian) }}</strong>
+                  </div>
+                </div>
+                @if (report.diagnostic.comparison.signals.length) {
+                  <div class="diagnostic-signals">
+                    <strong>Señales para revisar</strong>
+                    @for (signal of report.diagnostic.comparison.signals; track signal.key) {
+                      <div class="diagnostic-signal">
+                        <span>{{ signal.label }}</span>
+                        <strong>{{ diagnosticNumber(signal.value) }} vs mediana {{ diagnosticNumber(signal.median) }} · {{ ratioLabel(signal.ratio) }}</strong>
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <p class="muted small">No aparece ninguna dimensión medida al menos 1,5× por encima de su mediana.</p>
+                }
+              } @else {
+                <p class="muted small">
+                  Todavía no hay suficientes operaciones equivalentes para una comparación confiable
+                  (muestra actual: {{ report.diagnostic.comparison.sampleSize }}).
+                </p>
+              }
+              <p class="muted tiny">{{ report.diagnostic.note }}</p>
+            </section>
+
+            <div class="modal-actions">
+              <button type="button" (click)="closeDiagnostic()">Cerrar</button>
+            </div>
+          </section>
+        </div>
       }
 
       @if (referenceLoading()) {
@@ -534,6 +630,20 @@ import {
       color: var(--muted);
       font-size: 0.75rem;
     }
+    .diagnostic-signals {
+      display: grid;
+      gap: 0.45rem;
+      margin-top: 0.8rem;
+      padding-top: 0.7rem;
+      border-top: 1px dashed var(--border);
+    }
+    .diagnostic-signal {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      font-size: 0.82rem;
+    }
+    .diagnostic-signal strong { text-align: right; }
     .preview-box, .preview-result {
       border: 1px solid var(--border);
       border-radius: 0.55rem;
@@ -585,6 +695,8 @@ export class ConsumptionComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly referencePreview = signal<AiUsageReference | null>(null);
+  readonly diagnosticPreview = signal<AiUsageDiagnosticResponse | null>(null);
+  readonly diagnosticLoading = signal(false);
   readonly referenceLoading = signal(false);
   readonly referenceEventId = signal<number | null>(null);
   readonly referenceCanReturnToExercise = signal(false);
@@ -620,6 +732,23 @@ export class ConsumptionComponent implements OnInit {
     if (!scope) return;
     this.selectedKey.set(key);
     await this.load(scope);
+  }
+
+  async openDiagnostic(row: AiUsageRow): Promise<void> {
+    this.diagnosticLoading.set(true);
+    this.diagnosticPreview.set(null);
+    try {
+      this.diagnosticPreview.set(await firstValueFrom(this.api.aiUsageDiagnostic(row.id)));
+    } catch (err) {
+      this.error.set(errorMessage(err, 'No se pudo abrir el diagnóstico.'));
+    } finally {
+      this.diagnosticLoading.set(false);
+    }
+  }
+
+  closeDiagnostic(): void {
+    this.diagnosticPreview.set(null);
+    this.diagnosticLoading.set(false);
   }
 
   async openReference(row: AiUsageRow): Promise<void> {
