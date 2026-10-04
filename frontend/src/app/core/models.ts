@@ -567,6 +567,13 @@ export interface AiUsageSubject {
   route: string | null;
 }
 
+export interface AiUsageExecution {
+  id: string;
+  attempt: number | null;
+  attempts: number;
+  status: 'OK' | 'RECOVERED_BY_FAILOVER' | 'INTERRUPTED';
+}
+
 export interface AiUsageRow {
   id: number;
   createdAt: string;
@@ -586,6 +593,7 @@ export interface AiUsageRow {
   totalTokens: number | null;
   success: boolean;
   errorCode: string | null;
+  execution: AiUsageExecution | null;
   subject: AiUsageSubject | null;
 }
 
@@ -594,6 +602,7 @@ export interface AiUsageReport {
   organizationId: number | null;
   scopes: AiUsageScope[];
   summary: {
+    executions: number;
     requests: number;
     successful: number;
     errors: number;
