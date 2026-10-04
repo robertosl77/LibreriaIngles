@@ -15,6 +15,7 @@ Reglas (documento funcional §24–§29):
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+from uuid import uuid4
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -252,6 +253,8 @@ def record_usage(
     error: ProviderError | None = None,
     usage_payload: dict | None = None,
     usage_context: AIUsageContext | None = None,
+    execution_id: str | None = None,
+    attempt_index: int | None = None,
 ) -> None:
     info = PROVIDERS.get(connection.provider.upper())
     actual_model = connection.model or (info.default_model if info else None)
@@ -266,6 +269,8 @@ def record_usage(
             usage_payload=usage_payload,
             context=usage_context,
             model=actual_model,
+            execution_id=execution_id,
+            attempt_index=attempt_index,
         )
     )
 
@@ -337,12 +342,15 @@ def _run_json_task_with_connections(
     errors: list[str] = []
     failed: list[str] = []
     operation = str(task.get("kind") or "unknown")[:80]
+    execution_id = uuid4().hex
+    attempt_index = 0
     for connection in connections:
         reason = limit_reason(db, connection, account)
         if reason:
             # Límite de consumo: se saltea sin marcarla como caída.
             errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
+        attempt_index += 1
         provider = None
         try:
             provider = provider_for(connection)
@@ -357,6 +365,8 @@ def _run_json_task_with_connections(
                 error=exc,
                 usage_payload=getattr(provider, "last_usage_payload", None),
                 usage_context=usage_context,
+                execution_id=execution_id,
+                attempt_index=attempt_index,
             )
             failed.append(connection.name)
             errors.append(f"{connection_label(connection, account)}: {exc.message}")
@@ -370,6 +380,8 @@ def _run_json_task_with_connections(
             operation=operation,
             usage_payload=getattr(provider, "last_usage_payload", None),
             usage_context=usage_context,
+            execution_id=execution_id,
+            attempt_index=attempt_index,
         )
         db.commit()
         return AIResult(data=data, connection=connection, failed_connections=failed)
@@ -440,11 +452,14 @@ def transcribe_audio(
     """Transcribe sin persistir el audio y con el mismo failover/límites del router de IA."""
     errors: list[str] = []
     failed: list[str] = []
+    execution_id = uuid4().hex
+    attempt_index = 0
     for connection in audio_connections(db, account):
         reason = limit_reason(db, connection, account)
         if reason:
             errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
+        attempt_index += 1
         provider = None
         try:
             provider = provider_for(connection)
@@ -462,6 +477,8 @@ def transcribe_audio(
                 error=exc,
                 usage_payload=getattr(provider, "last_usage_payload", None),
                 usage_context=usage_context,
+                execution_id=execution_id,
+                attempt_index=attempt_index,
             )
             failed.append(connection.name)
             errors.append(f"{connection_label(connection, account)}: {exc.message}")
@@ -475,6 +492,8 @@ def transcribe_audio(
             operation="transcribe_audio",
             usage_payload=getattr(provider, "last_usage_payload", None),
             usage_context=usage_context,
+            execution_id=execution_id,
+            attempt_index=attempt_index,
         )
         db.commit()
         return AudioTranscriptionResult(
