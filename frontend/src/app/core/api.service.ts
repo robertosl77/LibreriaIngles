@@ -122,8 +122,10 @@ export class ApiService {
     return this.http.get<AiUsageReport>(`${this.base}/ai/usage`, { params });
   }
 
-  aiUsageReference(eventId: number): Observable<AiUsageReference> {
-    return this.http.get<AiUsageReference>(`${this.base}/ai/usage/${eventId}/reference`);
+  aiUsageReference(eventId: number, view: 'REFERENCE' | 'CLASS' = 'REFERENCE'): Observable<AiUsageReference> {
+    return this.http.get<AiUsageReference>(`${this.base}/ai/usage/${eventId}/reference`, {
+      params: { view }
+    });
   }
 
   createConnection(body: ConnectionDraft): Observable<AiConnection> {
