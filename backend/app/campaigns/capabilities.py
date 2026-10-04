@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.campaigns.models import CampaignNotification, CampaignTrigger
+from app.curriculum.service import available_levels, get_level
 
 
 class CampaignCapabilityError(ValueError):
@@ -23,6 +24,8 @@ class RuleCapability:
     operators: tuple[str, ...]
     description: str
     options: tuple[tuple[str, str], ...] = ()
+    subject_label: str | None = None
+    subject_options: tuple[tuple[str, str], ...] = ()
     available: bool = True
     requires_window: bool = False
     window_min_days: int = 1
@@ -36,11 +39,56 @@ class RuleCapability:
             "operators": list(self.operators),
             "description": self.description,
             "options": [{"value": value, "label": label} for value, label in self.options],
+            "subjectLabel": self.subject_label,
+            "subjectOptions": [
+                {"value": value, "label": label} for value, label in self.subject_options
+            ],
             "available": self.available,
             "requiresWindow": self.requires_window,
             "windowMinDays": self.window_min_days if self.requires_window else None,
             "windowMaxDays": self.window_max_days if self.requires_window else None,
         }
+
+
+ABILITY_OPTIONS = (
+    ("GRAMMAR", "Grammar"),
+    ("VOCABULARY", "Vocabulary"),
+    ("LISTENING", "Listening"),
+    ("SPEAKING", "Speaking"),
+    ("PRONUNCIATION", "Pronunciation"),
+    ("READING", "Reading"),
+    ("WRITING", "Writing"),
+)
+
+PROGRESS_STATUS_OPTIONS = (
+    ("NOT_STARTED", "Sin empezar"),
+    ("LEARNING", "Aprendiendo"),
+    ("MASTERED", "Dominada"),
+    ("NEEDS_REVIEW", "Necesita repaso"),
+)
+
+PROGRESS_TREND_OPTIONS = (
+    ("UP", "Mejorando"),
+    ("STABLE", "Estable"),
+    ("DOWN", "Bajando"),
+)
+
+
+def _skill_options() -> tuple[tuple[str, str], ...]:
+    found: dict[str, str] = {}
+    for level in available_levels():
+        curriculum = get_level(level)
+        if curriculum is None:
+            continue
+        for skill in curriculum.skills:
+            found.setdefault(
+                skill.key,
+                f"{level} · {skill.area_name} · {skill.topic_name} · {skill.name}",
+            )
+    return tuple(sorted(found.items(), key=lambda item: item[1]))
+
+
+SKILL_OPTIONS = _skill_options()
 
 
 RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
@@ -152,6 +200,64 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         ("EQ",),
         "Nivel operativo/seleccionado del perfil de estudio vinculado a la cuenta.",
         tuple((level, level) for level in ("A1", "A2", "B1", "B2", "C1", "C2")),
+    ),
+    RuleCapability(
+        "SKILL_STATUS",
+        "Estado de skill",
+        "enum",
+        ("EQ",),
+        "Estado ya calculado por el dominio de progreso para una skill concreta.",
+        PROGRESS_STATUS_OPTIONS,
+        subject_label="Skill",
+        subject_options=SKILL_OPTIONS,
+    ),
+    RuleCapability(
+        "SKILL_SCORE",
+        "Puntaje de skill",
+        "number",
+        ("EQ", "GTE", "LTE"),
+        "Puntaje ya calculado por el dominio de progreso para una skill concreta.",
+        subject_label="Skill",
+        subject_options=SKILL_OPTIONS,
+    ),
+    RuleCapability(
+        "SKILL_TREND",
+        "Tendencia de skill",
+        "enum",
+        ("EQ",),
+        "Tendencia ya calculada por el dominio de progreso para una skill concreta.",
+        PROGRESS_TREND_OPTIONS,
+        subject_label="Skill",
+        subject_options=SKILL_OPTIONS,
+    ),
+    RuleCapability(
+        "ABILITY_STATUS",
+        "Estado de habilidad",
+        "enum",
+        ("EQ",),
+        "Estado del progreso agregado de una habilidad del idioma.",
+        PROGRESS_STATUS_OPTIONS,
+        subject_label="Habilidad",
+        subject_options=ABILITY_OPTIONS,
+    ),
+    RuleCapability(
+        "ABILITY_SCORE",
+        "Puntaje de habilidad",
+        "number",
+        ("EQ", "GTE", "LTE"),
+        "Puntaje agregado de una habilidad del idioma calculado por el dominio de progreso.",
+        subject_label="Habilidad",
+        subject_options=ABILITY_OPTIONS,
+    ),
+    RuleCapability(
+        "ABILITY_TREND",
+        "Tendencia de habilidad",
+        "enum",
+        ("EQ",),
+        "Tendencia agregada de una habilidad del idioma calculada por el dominio de progreso.",
+        PROGRESS_TREND_OPTIONS,
+        subject_label="Habilidad",
+        subject_options=ABILITY_OPTIONS,
     ),
     RuleCapability(
         "CLASSES_COMPLETED",
@@ -270,6 +376,28 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         ("EQ", "GTE", "LTE"),
         "Días completos desde el primer día sin actividad que interrumpió la última racha terminada.",
     ),
+    RuleCapability(
+        "APPEALS_COUNT",
+        "Apelaciones realizadas",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad real de correcciones apeladas dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "SPEAKING_RESPONSES",
+        "Respuestas habladas",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad histórica de respuestas efectivamente enviadas en modalidad SPEAK.",
+    ),
+    RuleCapability(
+        "LISTENING_RESPONSES",
+        "Respuestas a ejercicios escuchados",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad histórica de respuestas enviadas a ejercicios presentados en modalidad LISTEN.",
+    ),
 )
 
 RULES_BY_KEY = {item.key: item for item in RULE_CAPABILITIES}
@@ -374,12 +502,26 @@ def _as_utc(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def validate_rule(field: str, operator: str, value: Any, window_days: Any = None) -> dict:
+def validate_rule(
+    field: str,
+    operator: str,
+    value: Any,
+    window_days: Any = None,
+    subject: Any = None,
+) -> dict:
     field = field.strip().upper()
     operator = operator.strip().upper()
     capability = RULES_BY_KEY.get(field)
     if capability is None or not capability.available or operator not in capability.operators:
         raise CampaignCapabilityError(f"Condición no soportada: {field} {operator}.")
+
+    normalized_subject: str | None = None
+    if capability.subject_options:
+        raw_subject = str(subject or "").strip()
+        allowed_subjects = {option.lower(): option for option, _ in capability.subject_options}
+        normalized_subject = allowed_subjects.get(raw_subject.lower())
+        if normalized_subject is None:
+            raise CampaignCapabilityError(f"{field} requiere seleccionar {capability.subject_label or 'un sujeto'} válido.")
 
     normalized_window: int | None = None
     if capability.requires_window:
@@ -438,6 +580,8 @@ def validate_rule(field: str, operator: str, value: Any, window_days: Any = None
             raise CampaignCapabilityError(f"{field} no puede quedar vacío.")
 
     result = {"field": field, "operator": operator, "value": value}
+    if normalized_subject is not None:
+        result["subject"] = normalized_subject
     if normalized_window is not None:
         result["windowDays"] = normalized_window
     return result
@@ -451,8 +595,13 @@ def ai_capabilities_text() -> str:
         if rule.options:
             options = " valores=" + ",".join(value for value, _ in rule.options)
         window = "; requiere windowDays" if rule.requires_window else ""
+        subject = (
+            f"; requiere subject ({rule.subject_label})"
+            if rule.subject_options
+            else ""
+        )
         lines.append(
-            f"- {rule.key}: {ops}; tipo={rule.value_type}{options}{window}. {rule.description}"
+            f"- {rule.key}: {ops}; tipo={rule.value_type}{options}{subject}{window}. {rule.description}"
         )
     lines.append(
         "- Triggers disponibles ahora: "
