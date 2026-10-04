@@ -601,6 +601,60 @@ export interface AiUsageRow {
   subject: AiUsageSubject | null;
 }
 
+
+export interface AiUsageDiagnosticSnapshot {
+  version: number;
+  requestKind: 'TEXT_JSON' | 'AUDIO' | string;
+  systemChars?: number;
+  userChars?: number;
+  audioBytes?: number;
+  mimeType?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface AiUsageDiagnosticMetric {
+  key: string;
+  label: string;
+  value: number;
+  median: number;
+  ratio: number | null;
+  sampleSize: number;
+}
+
+export interface AiUsageDiagnosticResponse {
+  eventId: number;
+  operation: string;
+  createdAt: string;
+  subject: Omit<AiUsageSubject, 'route'> | null;
+  execution: AiUsageExecution | null;
+  diagnostic: {
+    tokens: {
+      input: number | null;
+      reasoning: number | null;
+      output: number | null;
+      total: number | null;
+    };
+    snapshot: AiUsageDiagnosticSnapshot | null;
+    comparison: {
+      sampleSize: number;
+      enoughSample: boolean;
+      medianTotalTokens: number | null;
+      p90TotalTokens: number | null;
+      totalVsMedian: number | null;
+      cohort: {
+        operation: string;
+        subjectType: string | null;
+        provider: string;
+        model: string | null;
+        exerciseType: string | null;
+      };
+      metrics: AiUsageDiagnosticMetric[];
+      signals: AiUsageDiagnosticMetric[];
+    };
+    note: string;
+  };
+}
+
 export interface AiUsageExecutionContext {
   operation: string;
   presentationMode: string;
