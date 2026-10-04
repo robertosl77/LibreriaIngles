@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
@@ -14,7 +15,7 @@ import {
 
 @Component({
   selector: 'app-consumption',
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   template: `
     <main class="page">
       <header class="page-header">
@@ -104,7 +105,7 @@ import {
                     <th>Operación</th>
                     <th>Ejecución</th>
                     <th>Referencia</th>
-                    <th>Proveedor / modelo</th>
+                    <th>Conexión / modelo</th>
                     <th>Origen</th>
                     <th class="number">Tokens</th>
                     <th>Estado</th>
@@ -150,9 +151,23 @@ import {
                         }
                       </td>
                       <td>
-                        <div>{{ row.provider }}</div>
+                        @if (row.connectionName) {
+                          @if (row.connectionRoute && row.connectionId) {
+                            <a
+                              class="reference-link"
+                              [routerLink]="row.connectionRoute"
+                              [queryParams]="{ connectionId: row.connectionId }"
+                            >
+                              {{ row.connectionName }}
+                            </a>
+                          } @else {
+                            <div>{{ row.connectionName }}</div>
+                          }
+                        } @else {
+                          <div>{{ row.provider }}</div>
+                        }
                         <div class="muted tiny">
-                          {{ row.model || row.connectionName || '—' }}
+                          {{ providerModelLabel(row) }}
                         </div>
                       </td>
                       <td>{{ sourceLabel(row) }}</td>
@@ -1030,6 +1045,11 @@ export class ConsumptionComponent implements OnInit {
     if (status === 'RECOVERED_BY_FAILOVER') return 'Recuperada por failover';
     if (status === 'INTERRUPTED') return 'Interrumpida';
     return 'OK';
+  }
+
+  providerModelLabel(row: AiUsageRow): string {
+    const parts = [row.provider, row.model].filter((value): value is string => !!value);
+    return parts.join(' · ') || '—';
   }
 
   sourceLabel(row: AiUsageRow): string {
