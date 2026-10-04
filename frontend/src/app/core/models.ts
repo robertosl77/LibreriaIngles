@@ -552,6 +552,62 @@ export interface AbilityProgress {
   practiceLast?: number | null;
 }
 
+export type AiUsageScopeKind = 'ME' | 'ORGANIZATION' | 'PLATFORM';
+
+export interface AiUsageScope {
+  kind: AiUsageScopeKind;
+  id: number | null;
+  label: string;
+}
+
+export interface AiUsageSubject {
+  type: string | null;
+  id: number | null;
+  label: string | null;
+  route: string | null;
+}
+
+export interface AiUsageRow {
+  id: number;
+  createdAt: string;
+  accountId: number | null;
+  accountEmail: string | null;
+  accountName: string | null;
+  organizationId: number | null;
+  operation: string;
+  provider: string;
+  model: string | null;
+  connectionName: string | null;
+  connectionOwnerType: 'ACCOUNT' | 'PLATFORM' | 'ORGANIZATION';
+  serviceSource: AiSource | 'OWNER' | null;
+  actualSource: 'BYOK' | 'PLATFORM' | 'ORGANIZATION';
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  success: boolean;
+  errorCode: string | null;
+  subject: AiUsageSubject | null;
+}
+
+export interface AiUsageReport {
+  scope: AiUsageScopeKind;
+  organizationId: number | null;
+  scopes: AiUsageScope[];
+  summary: {
+    requests: number;
+    successful: number;
+    errors: number;
+    measuredRequests: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  offset: number;
+  limit: number;
+  total: number;
+  rows: AiUsageRow[];
+}
+
 export interface UsageCounts {
   requests: number;
   successful: number;
