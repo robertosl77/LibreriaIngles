@@ -443,7 +443,12 @@ def usage_scopes(account: CurrentAccount, db: DbSession) -> list[dict]:
 
 
 @router.get("/{event_id}/reference")
-def usage_reference(event_id: int, account: CurrentAccount, db: DbSession) -> dict:
+def usage_reference(
+    event_id: int,
+    account: CurrentAccount,
+    db: DbSession,
+    view: Literal["REFERENCE", "CLASS"] = "REFERENCE",
+) -> dict:
     """Visor de solo lectura del trabajo asociado al evento de consumo."""
     event = db.get(AIUsageEvent, event_id)
     if event is None:
@@ -455,7 +460,14 @@ def usage_reference(event_id: int, account: CurrentAccount, db: DbSession) -> di
         exercise = db.get(Exercise, event.subject_id)
         if exercise is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Ejercicio asociado inexistente.")
-        preview = _exercise_preview(db, event, exercise)
+        if view == "CLASS":
+            session = db.get(ClassSession, exercise.class_session_id)
+            if session is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Clase asociada inexistente.")
+            preview = _class_preview(db, event, session)
+            preview["sourceExerciseId"] = exercise.id
+        else:
+            preview = _exercise_preview(db, event, exercise)
     elif event.subject_type in {"CLASS", "EXAM"} and event.subject_id is not None:
         session = db.get(ClassSession, event.subject_id)
         if session is None:
