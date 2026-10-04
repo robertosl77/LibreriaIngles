@@ -14,6 +14,8 @@ Reglas (documento funcional §24–§29):
 """
 
 from dataclasses import dataclass, field
+from hashlib import sha256
+import json
 from datetime import timedelta
 from uuid import uuid4
 
@@ -263,6 +265,7 @@ def _text_diagnostic_snapshot(
             "requestKind": "TEXT_JSON",
             "systemChars": len(system),
             "userChars": len(user),
+            "systemFingerprint": sha256(system.encode("utf-8")).hexdigest()[:16],
         },
         usage_context,
     )
@@ -419,6 +422,10 @@ def _run_json_task_with_connections(
             db.commit()
             continue
         _mark_success(connection)
+        success_diagnostic = dict(diagnostic_snapshot)
+        success_diagnostic["responseJsonChars"] = len(
+            json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        )
         record_usage(
             db,
             connection,
@@ -428,7 +435,7 @@ def _run_json_task_with_connections(
             usage_context=usage_context,
             execution_id=execution_id,
             attempt_index=attempt_index,
-            diagnostic_snapshot=diagnostic_snapshot,
+            diagnostic_snapshot=success_diagnostic,
         )
         db.commit()
         return AIResult(data=data, connection=connection, failed_connections=failed)
