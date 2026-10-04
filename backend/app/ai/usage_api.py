@@ -739,7 +739,7 @@ def usage(
     db: DbSession,
     scope: UsageScope = "ME",
     organizationId: int | None = None,
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> dict:
     filters = _filters_for_scope(db, account, scope, organizationId)
