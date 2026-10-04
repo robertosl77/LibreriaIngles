@@ -531,6 +531,31 @@ def create_class(
     return session, result
 
 
+def _generation_diagnostic(slots: list[dict]) -> dict:
+    """Composición pedida a la IA; no guarda ejemplos ni contenido curricular."""
+    type_counts: dict[str, int] = {}
+    presentation_counts: dict[str, int] = {}
+    response_counts: dict[str, int] = {}
+    conversation_slots = 0
+    for slot in slots:
+        for exercise_type in slot.get("allowedTypes") or []:
+            key = str(exercise_type)
+            type_counts[key] = type_counts.get(key, 0) + 1
+        presentation = str(slot.get("presentation") or "READ")
+        response = str(slot.get("response") or "WRITE")
+        presentation_counts[presentation] = presentation_counts.get(presentation, 0) + 1
+        response_counts[response] = response_counts.get(response, 0) + 1
+        if slot.get("conversationGroup"):
+            conversation_slots += 1
+    return {
+        "slotCount": len(slots),
+        "conversationSlots": conversation_slots,
+        "typeCounts": type_counts,
+        "presentationCounts": presentation_counts,
+        "responseCounts": response_counts,
+    }
+
+
 def generate_content(
     db: Session, study: StudyContext, session: ClassSession
 ) -> AIResult | None:
@@ -557,6 +582,7 @@ def generate_content(
                     else f"Clase #{session.id}"
                 ),
                 subject_route=f"/app/clase/{session.id}",
+                diagnostic=_generation_diagnostic(public_slots),
             ),
         )
     except NoAIAvailable as exc:
