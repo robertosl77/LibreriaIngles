@@ -206,21 +206,35 @@ def test_platform_owner_can_use_global_consumption_scope(client) -> None:
 
 def test_failover_attempts_share_execution_and_report_recovery(client) -> None:
     headers = login(client, "failover@example.com")
-    first = client.post(
-        f"{API}/ai/connections",
-        json={"provider": "MOCK", "name": "Primaria", "model": "mock-fail-down", "priority": 1},
-        headers=headers,
-    )
-    assert first.status_code == 201, first.text
-    backup = client.post(
-        f"{API}/ai/connections",
-        json={"provider": "MOCK", "name": "Backup", "model": "mock", "priority": 2},
-        headers=headers,
-    )
-    assert backup.status_code == 201, backup.text
 
     with SessionLocal() as db:
         account = _account(db, "failover@example.com")
+        db.add_all(
+            [
+                AIConnection(
+                    owner_type=AIConnectionOwnerType.ACCOUNT,
+                    owner_id=account.id,
+                    provider="MOCK",
+                    name="Primaria",
+                    model="mock-fail-down",
+                    priority=1,
+                    active=True,
+                    status=AIConnectionStatus.AVAILABLE,
+                ),
+                AIConnection(
+                    owner_type=AIConnectionOwnerType.ACCOUNT,
+                    owner_id=account.id,
+                    provider="MOCK",
+                    name="Backup",
+                    model="mock",
+                    priority=2,
+                    active=True,
+                    status=AIConnectionStatus.AVAILABLE,
+                ),
+            ]
+        )
+        db.commit()
+
         result = run_json_task(
             db,
             account,
@@ -262,24 +276,37 @@ def test_failover_attempts_share_execution_and_report_recovery(client) -> None:
     }
     assert {row["execution"]["attempts"] for row in correlated} == {2}
 
-
 def test_exhausted_execution_is_reported_as_interrupted(client) -> None:
     headers = login(client, "interrupted@example.com")
-    for priority, model in ((1, "mock-fail-down"), (2, "mock-fail-auth")):
-        response = client.post(
-            f"{API}/ai/connections",
-            json={
-                "provider": "MOCK",
-                "name": f"Fallida {priority}",
-                "model": model,
-                "priority": priority,
-            },
-            headers=headers,
-        )
-        assert response.status_code == 201, response.text
 
     with SessionLocal() as db:
         account = _account(db, "interrupted@example.com")
+        db.add_all(
+            [
+                AIConnection(
+                    owner_type=AIConnectionOwnerType.ACCOUNT,
+                    owner_id=account.id,
+                    provider="MOCK",
+                    name="Fallida 1",
+                    model="mock-fail-down",
+                    priority=1,
+                    active=True,
+                    status=AIConnectionStatus.AVAILABLE,
+                ),
+                AIConnection(
+                    owner_type=AIConnectionOwnerType.ACCOUNT,
+                    owner_id=account.id,
+                    provider="MOCK",
+                    name="Fallida 2",
+                    model="mock-fail-auth",
+                    priority=2,
+                    active=True,
+                    status=AIConnectionStatus.AVAILABLE,
+                ),
+            ]
+        )
+        db.commit()
+
         try:
             run_json_task(
                 db,
@@ -308,7 +335,6 @@ def test_exhausted_execution_is_reported_as_interrupted(client) -> None:
     rows = [row for row in response.json()["rows"] if row["execution"]]
     assert rows
     assert {row["execution"]["status"] for row in rows} == {"INTERRUPTED"}
-
 
 def test_consumption_reference_includes_class_and_exercise(client) -> None:
     from app.classes.evaluation import evaluate_with_ai
