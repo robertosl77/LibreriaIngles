@@ -285,6 +285,34 @@ function isoDate(value: string): string | null {
                         }
                       </select>
                     }
+                    @for (filter of capability.filters; track filter.key) {
+                      <label class="rule-filter">
+                        <span>{{ filter.label }}</span>
+                        @if (filter.valueType === 'enum') {
+                          <select
+                            class="input"
+                            [name]="'rFilter' + i + filter.key"
+                            [ngModel]="ruleFilterValue(rule, filter.key)"
+                            (ngModelChange)="setRuleFilter(rule, filter.key, $event)"
+                          >
+                            @if (!filter.required) {
+                              <option value="">Cualquiera</option>
+                            }
+                            @for (option of filter.options; track option.value) {
+                              <option [value]="option.value">{{ option.label }}</option>
+                            }
+                          </select>
+                        } @else {
+                          <input
+                            class="input"
+                            [name]="'rFilter' + i + filter.key"
+                            [ngModel]="ruleFilterValue(rule, filter.key)"
+                            (ngModelChange)="setRuleFilter(rule, filter.key, $event)"
+                            placeholder="Cualquiera"
+                          />
+                        }
+                      </label>
+                    }
                   </div>
 
                   <select class="input op" [name]="'rOp' + i" [(ngModel)]="rule.operator">
@@ -496,6 +524,7 @@ function isoDate(value: string): string | null {
     .rule-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, 0.7fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
     .rule-description { margin-top: -0.25rem; }
     .rule-subject-stack, .rule-value-stack { display: flex; flex-direction: column; gap: 0.3rem; }
+    .rule-filter { display: flex; flex-direction: column; gap: 0.2rem; color: var(--muted); font-size: 0.72rem; }
     .window-field { display: flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.76rem; white-space: nowrap; }
     .window-input { width: 5rem; padding-block: 0.25rem; }
     .operator { text-align: center; font-size: 0.86rem; color: var(--muted); }
@@ -735,11 +764,21 @@ export class CampaignsAdminComponent implements OnInit {
     const capability = this.ruleCapability(rule.field);
     return {
       ...rule,
+      filters: { ...(rule.filters ?? {}) },
       value:
         capability?.valueType === 'datetime' && typeof rule.value === 'string'
           ? localDate(rule.value)
           : rule.value
     };
+  }
+
+  ruleFilterValue(rule: CampaignRule, key: string): string {
+    return rule.filters?.[key] ?? '';
+  }
+
+  setRuleFilter(rule: CampaignRule, key: string, value: string): void {
+    rule.filters = { ...(rule.filters ?? {}), [key]: value };
+    this.audiencePreview.set(null);
   }
 
   private ruleForApi(rule: CampaignRule): CampaignRule {
@@ -750,8 +789,12 @@ export class CampaignsAdminComponent implements OnInit {
     } else if (capability?.valueType === 'datetime' && value) {
       value = new Date(String(value)).toISOString();
     }
+    const filters = Object.fromEntries(
+      Object.entries(rule.filters ?? {}).filter(([, filterValue]) => String(filterValue).trim() !== '')
+    );
     return {
       ...rule,
+      filters,
       value,
       windowDays: capability?.requiresWindow ? Number(rule.windowDays) : null
     };
@@ -762,10 +805,16 @@ export class CampaignsAdminComponent implements OnInit {
     rule.operator = capability?.operators[0] ?? 'EQ';
     if (!capability) {
       rule.subject = null;
+      rule.filters = {};
       rule.value = '';
       return;
     }
     rule.subject = capability.subjectOptions[0]?.value ?? null;
+    rule.filters = Object.fromEntries(
+      capability.filters
+        .filter((filter) => filter.required)
+        .map((filter) => [filter.key, filter.options[0]?.value ?? ''])
+    );
     if (capability.valueType === 'boolean') {
       rule.value = false;
     } else if (capability.valueType === 'integer' || capability.valueType === 'number') {
@@ -790,8 +839,11 @@ export class CampaignsAdminComponent implements OnInit {
       this.form.rules.every((rule) => {
         const capability = this.ruleCapability(rule.field);
         const subjectOk = !capability?.subjectOptions.length || !!rule.subject;
+        const filtersOk = (capability?.filters ?? []).every(
+          (filter) => !filter.required || !!rule.filters?.[filter.key]
+        );
         const windowOk = !capability?.requiresWindow || Number(rule.windowDays) > 0;
-        return subjectOk && windowOk;
+        return subjectOk && filtersOk && windowOk;
       })
     );
   }
