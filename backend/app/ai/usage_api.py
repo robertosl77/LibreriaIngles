@@ -100,12 +100,45 @@ def _actual_source(owner_type: AIConnectionOwnerType) -> str:
     return "BYOK"
 
 
+def _execution_summaries(db, execution_ids: set[str]) -> dict[str, dict]:
+    """Resumen de una ejecución lógica, incluyendo todos sus intentos de failover."""
+    if not execution_ids:
+        return {}
+
+    events = db.scalars(
+        select(AIUsageEvent)
+        .where(AIUsageEvent.execution_id.in_(execution_ids))
+        .order_by(AIUsageEvent.execution_id, AIUsageEvent.attempt_index, AIUsageEvent.id)
+    ).all()
+    grouped: dict[str, list[AIUsageEvent]] = {}
+    for event in events:
+        if event.execution_id:
+            grouped.setdefault(event.execution_id, []).append(event)
+
+    summaries: dict[str, dict] = {}
+    for execution_id, attempts in grouped.items():
+        success = any(item.success for item in attempts)
+        had_failure = any(not item.success for item in attempts)
+        if success and had_failure:
+            state = "RECOVERED_BY_FAILOVER"
+        elif success:
+            state = "OK"
+        else:
+            state = "INTERRUPTED"
+        summaries[execution_id] = {
+            "attempts": len(attempts),
+            "status": state,
+        }
+    return summaries
+
+
 def _serialize_event(
     event: AIUsageEvent,
     event_account: Account | None,
     viewer: Account,
     *,
     scope: UsageScope,
+    execution_summary: dict | None = None,
 ) -> dict:
     hide_platform_engine = (
         event.owner_type == AIConnectionOwnerType.PLATFORM and not _is_owner(viewer)
@@ -131,6 +164,14 @@ def _serialize_event(
         "totalTokens": event.total_tokens,
         "success": event.success,
         "errorCode": event.error_code,
+        "execution": {
+            "id": event.execution_id,
+            "attempt": event.attempt_index,
+            "attempts": execution_summary["attempts"],
+            "status": execution_summary["status"],
+        }
+        if event.execution_id and execution_summary
+        else None,
         "subject": {
             "type": event.subject_type,
             "id": event.subject_id,
@@ -162,6 +203,25 @@ def usage(
     filters = _filters_for_scope(db, account, scope, organizationId)
 
     total = db.scalar(select(func.count(AIUsageEvent.id)).where(*filters)) or 0
+    correlated_executions = (
+        db.scalar(
+            select(func.count(func.distinct(AIUsageEvent.execution_id))).where(
+                *filters,
+                AIUsageEvent.execution_id.is_not(None),
+            )
+        )
+        or 0
+    )
+    legacy_executions = (
+        db.scalar(
+            select(func.count(AIUsageEvent.id)).where(
+                *filters,
+                AIUsageEvent.execution_id.is_(None),
+            )
+        )
+        or 0
+    )
+    executions = correlated_executions + legacy_executions
     measured = (
         db.scalar(
             select(func.count(AIUsageEvent.id)).where(
@@ -195,12 +255,17 @@ def usage(
         .offset(offset)
         .limit(limit)
     ).all()
+    execution_summaries = _execution_summaries(
+        db,
+        {event.execution_id for event, _ in rows if event.execution_id},
+    )
 
     return {
         "scope": scope,
         "organizationId": organizationId if scope == "ORGANIZATION" else None,
         "scopes": _available_scopes(db, account),
         "summary": {
+            "executions": int(executions),
             "requests": int(total),
             "successful": int(successful),
             "errors": int(total - successful),
@@ -213,7 +278,13 @@ def usage(
         "limit": limit,
         "total": int(total),
         "rows": [
-            _serialize_event(event, event_account, account, scope=scope)
+            _serialize_event(
+                event,
+                event_account,
+                account,
+                scope=scope,
+                execution_summary=execution_summaries.get(event.execution_id or ""),
+            )
             for event, event_account in rows
         ],
     }
