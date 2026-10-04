@@ -23,7 +23,7 @@ from app.accounts.models import Account
 from app.ai.models import utcnow
 from app.ai.service import NoAIAvailable, connection_snapshot, run_json_task
 from app.ai.usage import AIUsageContext
-from app.classes import service as class_service
+from app.classes.reference import exercise_display_number
 from app.classes.normalize import fill_blank_variants, normalize_answer
 from app.classes.prompts import EVALUATION_SYSTEM, evaluation_user_prompt
 from app.classes.spelling import SPELLING_SCORE, spelling_slips
@@ -550,7 +550,7 @@ def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: 
             subject_id=exercise.id,
             subject_label=(
                 f"{'Examen' if (session := db.get(ClassSession, exercise.class_session_id)) and session.kind.value == 'EXAM' else 'Clase'} "
-                f"#{exercise.class_session_id} · Ejercicio {class_service.exercise_display_number(db, exercise)}"
+                f"#{exercise.class_session_id} · Ejercicio {exercise_display_number(db, exercise)}"
             ),
             subject_route=f"/app/clase/{exercise.class_session_id}",
         ),
