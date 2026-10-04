@@ -29,14 +29,7 @@ from app.campaigns.models import (
     CampaignTrigger,
 )
 from app.core.config import settings
-from app.learning.models import (
-    Attempt,
-    ClassSession,
-    ClassSessionStatus,
-    DraftAnswer,
-    Exercise,
-    SessionKind,
-)
+from app.learning.models import ClassSession, ClassSessionStatus, SessionKind
 from app.memberships.models import Membership, MembershipStatus
 from app.study_profiles.models import (
     AccountStudyProfile,
@@ -503,30 +496,26 @@ def _class_lifecycle_metric(
         )
 
     if field == "CLASSES_STARTED":
-        draft_ids = set(
-            db.scalars(
-                select(DraftAnswer.class_session_id)
-                .join(ClassSession, ClassSession.id == DraftAnswer.class_session_id)
-                .where(
-                    ClassSession.account_id == account.id,
-                    ClassSession.kind == SessionKind.CLASS,
-                    DraftAnswer.updated_at >= since,
-                )
-            ).all()
+        rows = db.scalars(
+            select(ClassSession).where(
+                ClassSession.account_id == account.id,
+                ClassSession.kind == SessionKind.CLASS,
+                ClassSession.created_at >= since,
+            )
+        ).all()
+        started_statuses = {
+            ClassSessionStatus.IN_PROGRESS,
+            ClassSessionStatus.AWAITING_EVALUATION,
+            ClassSessionStatus.COMPLETED,
+        }
+        return sum(
+            1
+            for row in rows
+            if row.status in started_statuses
+            or row.current_attempt > 1
+            or row.submitted_at is not None
+            or row.evaluated_at is not None
         )
-        attempt_ids = set(
-            db.scalars(
-                select(Exercise.class_session_id)
-                .join(Attempt, Attempt.exercise_id == Exercise.id)
-                .join(ClassSession, ClassSession.id == Exercise.class_session_id)
-                .where(
-                    ClassSession.account_id == account.id,
-                    ClassSession.kind == SessionKind.CLASS,
-                    Attempt.created_at >= since,
-                )
-            ).all()
-        )
-        return len(draft_ids | attempt_ids)
 
     return None
 
