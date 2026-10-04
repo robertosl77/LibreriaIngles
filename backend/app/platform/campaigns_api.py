@@ -39,6 +39,7 @@ router = APIRouter(prefix="/platform/campaigns", tags=["platform"])
 class CampaignRuleIn(BaseModel):
     field: str = Field(min_length=2, max_length=60)
     subject: str | None = Field(default=None, max_length=200)
+    filters: dict[str, str] = Field(default_factory=dict)
     operator: str = Field(default="EQ", min_length=2, max_length=12)
     value: Any
     windowDays: int | None = Field(default=None, ge=1, le=3650)
@@ -83,7 +84,7 @@ Devolvé SOLO JSON con esta forma:
     "action": "acción disponible",
     "actionConfig": {},
     "trigger": "trigger disponible",
-    "rules": [{"field":"...", "subject": null o "...", "operator":"...", "value":..., "windowDays": null o número}],
+    "rules": [{"field":"...", "subject": null o "...", "filters": {}, "operator":"...", "value":..., "windowDays": null o número}],
     "priority": 100,
     "stackable": false,
     "maxRecipients": null,
@@ -120,6 +121,11 @@ una capacidad inexistente, explicalo en warnings y no la reemplaces por otra con
 Las capacidades que exponen subjectOptions requieren un subject exacto del catálogo.
 Por ejemplo, ABILITY_STATUS con subject=WRITING y value=NEEDS_REVIEW representa Writing en estado de repaso.
 No inventes subjects ni uses el nombre visible cuando el catálogo provee una clave.
+
+Las capacidades que exponen filters aceptan únicamente esos filtros y sus valores permitidos.
+AI_FAILURES_COUNT puede combinar ownerType, errorCode y operation en la MISMA regla para que el conteo
+corresponda exactamente al mismo conjunto de eventos. Para “cuota o credencial” usá
+errorCode=CREDENTIAL_OR_QUOTA. No reemplaces un filtro combinado por varias métricas independientes.
 
 Para métricas de estudio usá las capacidades del catálogo:
 - CLASSES_COMPLETED cuenta clases completadas dentro de windowDays.
@@ -613,6 +619,7 @@ def _validate_rule(rule: CampaignRuleIn) -> dict:
             rule.value,
             rule.windowDays,
             rule.subject,
+            rule.filters,
         )
     except CampaignCapabilityError as exc:
         raise HTTPException(422, str(exc)) from exc
