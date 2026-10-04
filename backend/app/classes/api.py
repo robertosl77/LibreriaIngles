@@ -345,8 +345,11 @@ async def transcribe_answer_audio(
                 membership_id=exercise.membership_id,
                 subject_type="EXERCISE",
                 subject_id=exercise.id,
-                subject_label=f"Ejercicio #{exercise.id} · audio",
-                subject_route=f"/app/clase/{session.id}",
+                subject_label=(
+                    f"{'Examen' if session.kind == SessionKind.EXAM else 'Clase'} "
+                    f"#{session.id} · Ejercicio #{exercise.id}"
+                ),
+                subject_route=f"/app/clase/{session.id}#ex-{exercise.id}",
             ),
         )
     except NoAIAvailable as exc:
