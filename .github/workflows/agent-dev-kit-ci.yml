@@ -1,0 +1,41 @@
+name: Agent Dev Kit CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "packages/agent_dev_kit/**"
+      - ".github/workflows/agent-dev-kit-ci.yml"
+  push:
+    branches: [develop, main]
+    paths:
+      - "packages/agent_dev_kit/**"
+      - ".github/workflows/agent-dev-kit-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Agent Dev Kit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/agent_dev_kit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: packages/agent_dev_kit/pyproject.toml
+
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+
+      - name: Test
+        run: pytest

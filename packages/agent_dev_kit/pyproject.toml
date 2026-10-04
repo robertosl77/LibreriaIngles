@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "srmacros-agent-dev-kit"
+version = "0.1.0"
+description = "Reusable development-specialist agent framework built on the OpenAI Agents SDK"
+requires-python = ">=3.11"
+dependencies = [
+  "openai-agents>=0.23.1,<0.24"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
