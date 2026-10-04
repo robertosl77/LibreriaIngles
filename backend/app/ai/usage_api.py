@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import case, func, select
 
 from app.accounts.models import Account, PlatformRole
-from app.ai.models import AIConnectionOwnerType, AIUsageEvent
+from app.ai.models import AIConnection, AIConnectionOwnerType, AIUsageEvent
 from app.ai.service import HEALTH_CHECK, PLATFORM_LABEL
 from app.classes import service as class_service
 from app.classes.reference import exercise_display_number
