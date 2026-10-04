@@ -225,6 +225,9 @@ import {
                   @if (snapshot.responseJsonChars !== undefined) {
                     <div><span>Respuesta estructurada</span><strong>{{ snapshot.responseJsonChars | number }} caracteres</strong></div>
                   }
+                  @if (snapshot.transcriptChars !== undefined) {
+                    <div><span>Transcripción resultante</span><strong>{{ snapshot.transcriptChars | number }} caracteres</strong></div>
+                  }
                   @if (snapshot.audioBytes !== undefined) {
                     <div><span>Audio</span><strong>{{ snapshot.audioBytes | number }} bytes</strong></div>
                   }
@@ -821,6 +824,7 @@ export class ConsumptionComponent implements OnInit {
       exerciseType: 'Tipo de ejercicio',
       presentationMode: 'Presentación',
       responseMode: 'Respuesta',
+      audioDurationMs: 'Duración del audio',
       instructionChars: 'Consigna',
       questionChars: 'Pregunta',
       passageChars: 'Texto / pasaje',
