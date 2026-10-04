@@ -143,6 +143,8 @@ def test_mock_usage_is_persisted_with_subject_and_visible_in_my_consumption(clie
         assert event.diagnostic_snapshot["requestKind"] == "TEXT_JSON"
         assert event.diagnostic_snapshot["systemChars"] == len("test")
         assert event.diagnostic_snapshot["userChars"] == len("test")
+        assert len(event.diagnostic_snapshot["systemFingerprint"]) == 16
+        assert event.diagnostic_snapshot["responseJsonChars"] > 0
 
     response = client.get(f"{API}/ai/usage", headers=headers)
     assert response.status_code == 200, response.text
