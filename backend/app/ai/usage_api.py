@@ -592,6 +592,28 @@ def _diagnostic_payload(db, event: AIUsageEvent, viewer: Account) -> dict:
     }
 
 
+def _connection_config_route(
+    db,
+    event: AIUsageEvent,
+    viewer: Account,
+) -> str | None:
+    """Ruta de administración solo cuando el visor puede gestionar esa conexión actual."""
+    if event.connection_id is None:
+        return None
+    connection = db.get(AIConnection, event.connection_id)
+    if connection is None:
+        return None
+    if connection.owner_type == AIConnectionOwnerType.ACCOUNT:
+        if connection.owner_id != viewer.id:
+            return None
+        return f"/app/ia?connectionId={connection.id}"
+    if connection.owner_type == AIConnectionOwnerType.PLATFORM:
+        if not _is_owner(viewer):
+            return None
+        return f"/app/plataforma/configuracion?connectionId={connection.id}"
+    return None
+
+
 def _serialize_event(
     db,
     event: AIUsageEvent,
@@ -617,6 +639,7 @@ def _serialize_event(
         "provider": "PLATFORM" if hide_platform_engine else event.provider,
         "model": None if hide_platform_engine else event.model,
         "connectionName": PLATFORM_LABEL if hide_platform_engine else event.connection_name,
+        "connectionRoute": _connection_config_route(db, event, viewer),
         "connectionOwnerType": event.owner_type.value,
         "serviceSource": event.service_source,
         "actualSource": _actual_source(event.owner_type),
