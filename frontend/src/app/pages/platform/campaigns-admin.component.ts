@@ -613,6 +613,9 @@ export class CampaignsAdminComponent implements OnInit {
     };
     this.draftSummary.set(`Plantilla "${template.title}" aplicada. Revisá el beneficio y los valores antes de guardar.`);
     this.draftWarnings.set([]);
+    this.draftBlockingIssues.set([]);
+    this.draftRequirements.set([]);
+    this.aiDraftExecutable.set(true);
     this.newMode.set(null);
     this.editingId.set(0);
   }
