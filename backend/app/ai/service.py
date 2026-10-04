@@ -28,6 +28,7 @@ from app.ai.models import (
     utcnow,
 )
 from app.ai.providers import PROVIDERS, ProviderError, build_provider
+from app.ai.usage import AIUsageContext, build_usage_event
 from app.core.security import decrypt_secret
 from app.subscriptions.models import AISource
 from app.subscriptions.service import effective_service
@@ -249,17 +250,22 @@ def record_usage(
     account: Account | None,
     operation: str,
     error: ProviderError | None = None,
+    usage_payload: dict | None = None,
+    usage_context: AIUsageContext | None = None,
 ) -> None:
+    info = PROVIDERS.get(connection.provider.upper())
+    actual_model = connection.model or (info.default_model if info else None)
     db.add(
-        AIUsageEvent(
-            connection_id=connection.id,
-            owner_type=connection.owner_type,
-            provider=connection.provider,
-            model=connection.model,
-            account_id=account.id if account else None,
+        build_usage_event(
+            db,
+            connection,
+            account=account,
             operation=operation,
             success=error is None,
             error_code=error.code.value if error else None,
+            usage_payload=usage_payload,
+            context=usage_context,
+            model=actual_model,
         )
     )
 
@@ -326,6 +332,7 @@ def _run_json_task_with_connections(
     system: str,
     user: str,
     task: dict,
+    usage_context: AIUsageContext | None = None,
 ) -> AIResult:
     errors: list[str] = []
     failed: list[str] = []
@@ -336,24 +343,47 @@ def _run_json_task_with_connections(
             # Límite de consumo: se saltea sin marcarla como caída.
             errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
+        provider = None
         try:
-            data = provider_for(connection).complete_json(system, user, task)
+            provider = provider_for(connection)
+            data = provider.complete_json(system, user, task)
         except ProviderError as exc:
             _mark_failure(connection, exc)
-            record_usage(db, connection, account=account, operation=operation, error=exc)
+            record_usage(
+                db,
+                connection,
+                account=account,
+                operation=operation,
+                error=exc,
+                usage_payload=getattr(provider, "last_usage_payload", None),
+                usage_context=usage_context,
+            )
             failed.append(connection.name)
             errors.append(f"{connection_label(connection, account)}: {exc.message}")
             db.commit()
             continue
         _mark_success(connection)
-        record_usage(db, connection, account=account, operation=operation)
+        record_usage(
+            db,
+            connection,
+            account=account,
+            operation=operation,
+            usage_payload=getattr(provider, "last_usage_payload", None),
+            usage_context=usage_context,
+        )
         db.commit()
         return AIResult(data=data, connection=connection, failed_connections=failed)
     raise NoAIAvailable(errors)
 
 
 def run_json_task(
-    db: Session, account: Account, *, system: str, user: str, task: dict
+    db: Session,
+    account: Account,
+    *,
+    system: str,
+    user: str,
+    task: dict,
+    usage_context: AIUsageContext | None = None,
 ) -> AIResult:
     return _run_json_task_with_connections(
         db,
@@ -362,11 +392,18 @@ def run_json_task(
         system=system,
         user=user,
         task=task,
+        usage_context=usage_context,
     )
 
 
 def run_platform_json_task(
-    db: Session, account: Account, *, system: str, user: str, task: dict
+    db: Session,
+    account: Account,
+    *,
+    system: str,
+    user: str,
+    task: dict,
+    usage_context: AIUsageContext | None = None,
 ) -> AIResult:
     """Tarea administrativa que consume únicamente conexiones PLATFORM.
 
@@ -388,6 +425,7 @@ def run_platform_json_task(
         system=system,
         user=user,
         task=task,
+        usage_context=usage_context,
     )
 
 
@@ -397,6 +435,7 @@ def transcribe_audio(
     *,
     audio: bytes,
     mime_type: str,
+    usage_context: AIUsageContext | None = None,
 ) -> AudioTranscriptionResult:
     """Transcribe sin persistir el audio y con el mismo failover/límites del router de IA."""
     errors: list[str] = []
@@ -406,22 +445,37 @@ def transcribe_audio(
         if reason:
             errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
+        provider = None
         try:
-            analysis = provider_for(connection).analyze_speech(audio, mime_type)
+            provider = provider_for(connection)
+            analysis = provider.analyze_speech(audio, mime_type)
             text = analysis.text.strip()
             if not text:
                 raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "No se detectó voz.")
         except ProviderError as exc:
             _mark_failure(connection, exc)
             record_usage(
-                db, connection, account=account, operation="transcribe_audio", error=exc
+                db,
+                connection,
+                account=account,
+                operation="transcribe_audio",
+                error=exc,
+                usage_payload=getattr(provider, "last_usage_payload", None),
+                usage_context=usage_context,
             )
             failed.append(connection.name)
             errors.append(f"{connection_label(connection, account)}: {exc.message}")
             db.commit()
             continue
         _mark_success(connection)
-        record_usage(db, connection, account=account, operation="transcribe_audio")
+        record_usage(
+            db,
+            connection,
+            account=account,
+            operation="transcribe_audio",
+            usage_payload=getattr(provider, "last_usage_payload", None),
+            usage_context=usage_context,
+        )
         db.commit()
         return AudioTranscriptionResult(
             text=text,
