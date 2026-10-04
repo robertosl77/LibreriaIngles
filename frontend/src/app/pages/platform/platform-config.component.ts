@@ -5,7 +5,6 @@ import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
 import { AiSourcesInfoComponent } from './ai-sources-info.component';
 import { AccountsAdminComponent } from './accounts-admin.component';
 import { BenefitsAdminComponent } from './benefits-admin.component';
-import { CampaignsAdminComponent } from './campaigns-admin.component';
 import { InvitationsAdminComponent } from './invitations-admin.component';
 import { ServicesAdminComponent } from './services-admin.component';
 
@@ -18,7 +17,6 @@ import { ServicesAdminComponent } from './services-admin.component';
     AccountsAdminComponent,
     ServicesAdminComponent,
     BenefitsAdminComponent,
-    CampaignsAdminComponent,
     InvitationsAdminComponent
   ],
   template: `
@@ -40,7 +38,6 @@ import { ServicesAdminComponent } from './services-admin.component';
         (changed)="configurationChanged()"
       />
 
-      <app-campaigns-admin />
 
       <app-invitations-admin />
 
