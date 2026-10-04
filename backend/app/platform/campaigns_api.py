@@ -420,8 +420,8 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
         word in lower for word in ("descuento", "bonific", "rebaja", "precio")
     )
     if mentions_discount:
-        # Un descuento pedido como recompensa no se sustituye por un Benefit de servicio.
-        normalized["draft"]["benefitId"] = None
+        # Un descuento nunca se sustituye por un Benefit. Si además se pidió un Benefit real,
+        # se conserva esa parte representable, pero el draft completo queda bloqueado.
         if not any("descuento" in warning.lower() or "precio" in warning.lower() for warning in warnings):
             warnings.append(
                 "El motor actual no administra descuentos, precios ni porcentajes; "
@@ -536,7 +536,6 @@ def _apply_description_capability_guards(description: str, normalized: dict) -> 
     for term, warning in unsupported_audience_terms.items():
         if term in lower and not any(warning.lower() == item.lower() for item in warnings):
             warnings.append(warning)
-            normalized["draft"]["benefitId"] = None
             _append_blocking_issue(blocking_issues, warning)
             break
 
