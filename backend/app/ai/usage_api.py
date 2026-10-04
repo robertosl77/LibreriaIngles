@@ -535,11 +535,14 @@ def _diagnostic_payload(db, event: AIUsageEvent, viewer: Account) -> dict:
         reverse=True,
     )[:8]
 
+    hide_platform_engine = (
+        event.owner_type == AIConnectionOwnerType.PLATFORM and not _is_owner(viewer)
+    )
     cohort = {
         "operation": event.operation,
         "subjectType": event.subject_type,
-        "provider": event.provider,
-        "model": event.model,
+        "provider": "PLATFORM" if hide_platform_engine else event.provider,
+        "model": None if hide_platform_engine else event.model,
         "exerciseType": exercise_type if exercise_type and len(comparable) >= 3 else None,
     }
     return {
