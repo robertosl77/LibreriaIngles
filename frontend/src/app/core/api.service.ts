@@ -6,6 +6,9 @@ import { environment } from '../../environments/environment';
 import {
   ActiveAiConnections,
   AiConnection,
+  AiUsageReport,
+  AiUsageScope,
+  AiUsageScopeKind,
   AuthConfig,
   Certificate,
   CampaignAssistResult,
@@ -99,6 +102,23 @@ export class ApiService {
 
   activeAiConnections(): Observable<ActiveAiConnections> {
     return this.http.get<ActiveAiConnections>(`${this.base}/ai/active`);
+  }
+
+  aiUsageScopes(): Observable<AiUsageScope[]> {
+    return this.http.get<AiUsageScope[]>(`${this.base}/ai/usage/scopes`);
+  }
+
+  aiUsage(
+    scope: AiUsageScopeKind,
+    organizationId: number | null = null,
+    limit = 200,
+    offset = 0
+  ): Observable<AiUsageReport> {
+    const params: Record<string, string | number> = { scope, limit, offset };
+    if (scope === 'ORGANIZATION' && organizationId !== null) {
+      params['organizationId'] = organizationId;
+    }
+    return this.http.get<AiUsageReport>(`${this.base}/ai/usage`, { params });
   }
 
   createConnection(body: ConnectionDraft): Observable<AiConnection> {
