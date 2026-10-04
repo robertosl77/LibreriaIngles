@@ -387,6 +387,8 @@ _DIAGNOSTIC_LABELS = {
     "userChars": "Contexto dinámico enviado",
     "audioBytes": "Tamaño del audio",
     "responseJsonChars": "Tamaño estructural de la respuesta",
+    "transcriptChars": "Tamaño de la transcripción",
+    "audioDurationMs": "Duración del audio",
     "instructionChars": "Consigna",
     "questionChars": "Pregunta",
     "passageChars": "Texto / pasaje",
@@ -409,7 +411,7 @@ def _diagnostic_numbers(snapshot: dict | None) -> dict[str, float]:
     if not isinstance(snapshot, dict):
         return {}
     values: dict[str, float] = {}
-    for key in ("systemChars", "userChars", "audioBytes", "responseJsonChars"):
+    for key in ("systemChars", "userChars", "audioBytes", "responseJsonChars", "transcriptChars"):
         value = snapshot.get(key)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             values[key] = float(value)
