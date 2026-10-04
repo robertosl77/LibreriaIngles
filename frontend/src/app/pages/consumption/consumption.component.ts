@@ -809,6 +809,64 @@ export class ConsumptionComponent implements OnInit {
     window.open(route, '_blank', 'noopener');
   }
 
+  diagnosticDetails(snapshot: AiUsageDiagnosticResponse['diagnostic']['snapshot']): { key: string; label: string; value: string }[] {
+    if (!snapshot?.details) return [];
+    const labels: Record<string, string> = {
+      exerciseType: 'Tipo de ejercicio',
+      presentationMode: 'Presentación',
+      responseMode: 'Respuesta',
+      instructionChars: 'Consigna',
+      questionChars: 'Pregunta',
+      passageChars: 'Texto / pasaje',
+      stimulusChars: 'Estímulo de escucha',
+      answerChars: 'Respuesta del alumno',
+      optionCount: 'Cantidad de opciones',
+      optionsChars: 'Tamaño de opciones',
+      referenceAnswerCount: 'Respuestas de referencia',
+      referenceAnswersChars: 'Tamaño de referencias',
+      objectiveCount: 'Objetivos curriculares',
+      objectivesChars: 'Tamaño de objetivos',
+      expectedConceptCount: 'Conceptos esperados',
+      secondarySkillCount: 'Skills secundarios',
+      conversationTurns: 'Turnos de conversación',
+      conversationChars: 'Tamaño del historial',
+      slotCount: 'Slots solicitados',
+      conversationSlots: 'Slots conversacionales',
+      typeCounts: 'Tipos solicitados',
+      presentationCounts: 'Presentaciones solicitadas',
+      responseCounts: 'Respuestas solicitadas',
+      descriptionChars: 'Descripción del asistente',
+      benefitCount: 'Beneficios disponibles',
+      capabilityCount: 'Capacidades disponibles'
+    };
+    return Object.entries(snapshot.details).map(([key, value]) => ({
+      key,
+      label: labels[key] ?? key,
+      value: this.diagnosticDetailValue(value, key.endsWith('Chars'))
+    }));
+  }
+
+  diagnosticDetailValue(value: unknown, chars = false): string {
+    if (value === null || value === undefined) return '—';
+    if (typeof value === 'object') {
+      return Object.entries(value as Record<string, unknown>)
+        .map(([key, item]) => `${key}: ${String(item)}`)
+        .join(' · ') || '—';
+    }
+    if (typeof value === 'number') {
+      return `${value.toLocaleString('es-AR')}${chars ? ' caracteres' : ''}`;
+    }
+    return String(value);
+  }
+
+  diagnosticNumber(value: number): string {
+    return value.toLocaleString('es-AR', { maximumFractionDigits: 1 });
+  }
+
+  ratioLabel(value: number | null): string {
+    return value === null ? '—' : `${value.toLocaleString('es-AR', { maximumFractionDigits: 2 })}×`;
+  }
+
   operationName(operation: string): string {
     const labels: Record<string, string> = {
       generate_class: 'Generación de clase',
