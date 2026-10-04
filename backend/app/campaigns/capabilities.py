@@ -17,6 +17,24 @@ class CampaignCapabilityError(ValueError):
 
 
 @dataclass(frozen=True)
+class RuleFilterCapability:
+    key: str
+    label: str
+    value_type: str
+    options: tuple[tuple[str, str], ...] = ()
+    required: bool = False
+
+    def payload(self) -> dict:
+        return {
+            "key": self.key,
+            "label": self.label,
+            "valueType": self.value_type,
+            "options": [{"value": value, "label": label} for value, label in self.options],
+            "required": self.required,
+        }
+
+
+@dataclass(frozen=True)
 class RuleCapability:
     key: str
     label: str
@@ -26,6 +44,7 @@ class RuleCapability:
     options: tuple[tuple[str, str], ...] = ()
     subject_label: str | None = None
     subject_options: tuple[tuple[str, str], ...] = ()
+    filters: tuple[RuleFilterCapability, ...] = ()
     available: bool = True
     requires_window: bool = False
     window_min_days: int = 1
@@ -43,6 +62,7 @@ class RuleCapability:
             "subjectOptions": [
                 {"value": value, "label": label} for value, label in self.subject_options
             ],
+            "filters": [item.payload() for item in self.filters],
             "available": self.available,
             "requiresWindow": self.requires_window,
             "windowMinDays": self.window_min_days if self.requires_window else None,
@@ -71,6 +91,42 @@ PROGRESS_TREND_OPTIONS = (
     ("UP", "Mejorando"),
     ("STABLE", "Estable"),
     ("DOWN", "Bajando"),
+)
+
+AI_OWNER_FILTER_OPTIONS = (
+    ("ACCOUNT", "Propias keys (cuenta)"),
+    ("PLATFORM", "IA de plataforma"),
+    ("ORGANIZATION", "IA de organización"),
+)
+
+AI_ERROR_FILTER_OPTIONS = (
+    ("CREDENTIAL_OR_QUOTA", "Credencial inválida o cuota excedida"),
+    ("INVALID_CREDENTIALS", "Credenciales inválidas"),
+    ("QUOTA_EXCEEDED", "Cuota excedida"),
+    ("RATE_LIMITED", "Rate limit"),
+    ("PROVIDER_DOWN", "Proveedor caído"),
+    ("NETWORK_ERROR", "Error de red"),
+    ("UNKNOWN_ERROR", "Error desconocido"),
+)
+
+AI_FAILURE_FILTERS = (
+    RuleFilterCapability(
+        "ownerType",
+        "Origen de IA",
+        "enum",
+        AI_OWNER_FILTER_OPTIONS,
+    ),
+    RuleFilterCapability(
+        "errorCode",
+        "Código de error",
+        "enum",
+        AI_ERROR_FILTER_OPTIONS,
+    ),
+    RuleFilterCapability(
+        "operation",
+        "Operación",
+        "string",
+    ),
 )
 
 
@@ -398,6 +454,22 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         ("EQ", "GTE", "LTE"),
         "Cantidad histórica de respuestas enviadas a ejercicios presentados en modalidad LISTEN.",
     ),
+    RuleCapability(
+        "AI_FAILURES_COUNT",
+        "Fallos de IA",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de llamadas de IA fallidas dentro de una ventana, con filtros opcionales por origen, código y operación.",
+        filters=AI_FAILURE_FILTERS,
+        requires_window=True,
+    ),
+    RuleCapability(
+        "DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS",
+        "Días con BYOK configurado sin uso exitoso",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Días desde la primera conexión propia activa cuando ninguna conexión propia activa logró todavía un uso real exitoso. Los health checks no cuentan como activación.",
+    ),
 )
 
 RULES_BY_KEY = {item.key: item for item in RULE_CAPABILITIES}
@@ -508,6 +580,7 @@ def validate_rule(
     value: Any,
     window_days: Any = None,
     subject: Any = None,
+    filters: Any = None,
 ) -> dict:
     field = field.strip().upper()
     operator = operator.strip().upper()
@@ -522,6 +595,39 @@ def validate_rule(
         normalized_subject = allowed_subjects.get(raw_subject.lower())
         if normalized_subject is None:
             raise CampaignCapabilityError(f"{field} requiere seleccionar {capability.subject_label or 'un sujeto'} válido.")
+
+    raw_filters = filters if isinstance(filters, dict) else {}
+    filter_capabilities = {item.key: item for item in capability.filters}
+    unknown_filters = set(raw_filters) - set(filter_capabilities)
+    if unknown_filters:
+        raise CampaignCapabilityError(
+            f"Filtro no soportado para {field}: {sorted(unknown_filters)[0]}."
+        )
+    normalized_filters: dict[str, str] = {}
+    for filter_key, filter_capability in filter_capabilities.items():
+        raw_filter = raw_filters.get(filter_key)
+        if raw_filter in (None, ""):
+            if filter_capability.required:
+                raise CampaignCapabilityError(
+                    f"{field} requiere el filtro {filter_capability.label}."
+                )
+            continue
+        filter_value = str(raw_filter).strip()
+        if filter_capability.value_type == "enum":
+            filter_value = filter_value.upper()
+            allowed_values = {option for option, _ in filter_capability.options}
+            if filter_value not in allowed_values:
+                raise CampaignCapabilityError(
+                    f"Valor inválido para el filtro {filter_capability.label}."
+                )
+        elif filter_capability.value_type == "string":
+            if not filter_value:
+                raise CampaignCapabilityError(
+                    f"El filtro {filter_capability.label} no puede quedar vacío."
+                )
+            if filter_key == "operation":
+                filter_value = filter_value.lower()
+        normalized_filters[filter_key] = filter_value
 
     normalized_window: int | None = None
     if capability.requires_window:
@@ -582,6 +688,8 @@ def validate_rule(
     result = {"field": field, "operator": operator, "value": value}
     if normalized_subject is not None:
         result["subject"] = normalized_subject
+    if normalized_filters:
+        result["filters"] = normalized_filters
     if normalized_window is not None:
         result["windowDays"] = normalized_window
     return result
@@ -600,8 +708,19 @@ def ai_capabilities_text() -> str:
             if rule.subject_options
             else ""
         )
+        filters = ""
+        if rule.filters:
+            filter_parts = []
+            for item in rule.filters:
+                if item.options:
+                    filter_parts.append(
+                        f"{item.key}=" + "/".join(value for value, _ in item.options)
+                    )
+                else:
+                    filter_parts.append(f"{item.key}=texto")
+            filters = "; filtros opcionales: " + ", ".join(filter_parts)
         lines.append(
-            f"- {rule.key}: {ops}; tipo={rule.value_type}{options}{subject}{window}. {rule.description}"
+            f"- {rule.key}: {ops}; tipo={rule.value_type}{options}{subject}{filters}{window}. {rule.description}"
         )
     lines.append(
         "- Triggers disponibles ahora: "

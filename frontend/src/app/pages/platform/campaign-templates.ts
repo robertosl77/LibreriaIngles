@@ -375,6 +375,46 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     message: 'Ya venís practicando con constancia. Te invitamos a probar una actividad hablando.'
   },
   {
+    id: 'byok-key-failures',
+    title: 'BYOK con fallas de credencial o cuota',
+    description: 'Usuarios BYOK con al menos 3 fallos de sus propias conexiones por credencial inválida o cuota durante los últimos 7 días.',
+    name: 'Conversión · BYOK con fallas repetidas',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'SERVICE_SOURCE', operator: 'EQ', value: 'BYOK' },
+      {
+        field: 'AI_FAILURES_COUNT',
+        filters: { ownerType: 'ACCOUNT', errorCode: 'CREDENTIAL_OR_QUOTA' },
+        operator: 'GTE',
+        value: 3,
+        windowDays: 7
+      }
+    ],
+    priority: 40,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Tus propias conexiones de IA tuvieron varias dificultades. Podemos ofrecerte una alternativa para seguir practicando.'
+  },
+  {
+    id: 'byok-never-activated',
+    title: 'BYOK configurado pero nunca activado',
+    description: 'Usuarios BYOK con una conexión propia activa configurada hace al menos 7 días y sin ningún uso real exitoso.',
+    name: 'Onboarding técnico · BYOK sin activación',
+    trigger: 'LOGIN',
+    rules: [
+      { field: 'ACCOUNT_TYPE', operator: 'EQ', value: 'PERSONAL' },
+      { field: 'SERVICE_SOURCE', operator: 'EQ', value: 'BYOK' },
+      { field: 'DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS', operator: 'GTE', value: 7 }
+    ],
+    priority: 40,
+    stackable: false,
+    maxRecipients: null,
+    notification: 'IN_APP',
+    message: 'Tu conexión propia todavía no logró completar un uso exitoso. Queremos ayudarte a ponerla en funcionamiento.'
+  },
+  {
     id: 'study-streak',
     title: 'Racha de estudio',
     description: 'Usuarios con una racha actual de al menos 7 días consecutivos.',
