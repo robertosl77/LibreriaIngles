@@ -579,8 +579,8 @@ export class CampaignsAdminComponent implements OnInit {
       priority: template.priority,
       stackable: template.stackable,
       maxRecipients: template.maxRecipients,
-      startsAt: '',
-      endsAt: '',
+      startsAt: template.startsAt ?? '',
+      endsAt: template.endsAt ?? '',
       notification: template.notification,
       message: template.message
     };
