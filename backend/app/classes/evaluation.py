@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.accounts.models import Account
 from app.ai.models import utcnow
 from app.ai.service import NoAIAvailable, connection_snapshot, run_json_task
+from app.ai.usage import AIUsageContext
 from app.classes.normalize import fill_blank_variants, normalize_answer
 from app.classes.prompts import EVALUATION_SYSTEM, evaluation_user_prompt
 from app.classes.spelling import SPELLING_SCORE, spelling_slips
@@ -541,6 +542,14 @@ def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: 
             },
             "answer": answer,
         },
+        usage_context=AIUsageContext(
+            organization_id=exercise.organization_id,
+            membership_id=exercise.membership_id,
+            subject_type="EXERCISE",
+            subject_id=exercise.id,
+            subject_label=f"Ejercicio #{exercise.id}",
+            subject_route=f"/app/clase/{exercise.class_session_id}",
+        ),
     )
     sanitized = _sanitize_ai_result(exercise, result.data)
     spoken = bool(
