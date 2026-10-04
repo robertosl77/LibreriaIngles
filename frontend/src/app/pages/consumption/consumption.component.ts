@@ -545,12 +545,16 @@ import {
     .preview-result p, .preview-box p { margin: 0.35rem 0 0; }
     .class-preview-list { display: grid; gap: 0.55rem; }
     .modal-actions {
+      position: sticky;
+      bottom: -1.15rem;
+      z-index: 2;
       display: flex;
       justify-content: flex-end;
       gap: 0.55rem;
-      margin-top: 1rem;
-      padding-top: 0.8rem;
+      margin: 1rem -1.15rem -1.15rem;
+      padding: 0.8rem 1.15rem 1.15rem;
       border-top: 1px solid var(--border);
+      background: var(--surface);
     }
     .modal-actions button {
       min-height: 2.2rem;
