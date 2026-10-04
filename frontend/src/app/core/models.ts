@@ -122,6 +122,7 @@ export type CampaignAction =
 export interface CampaignRule {
   field: string;
   subject?: string | null;
+  filters?: Record<string, string>;
   operator: string;
   value: string | number | boolean;
   windowDays?: number | null;
@@ -205,6 +206,14 @@ export interface CampaignAssistResult {
 }
 
 
+export interface CampaignRuleFilterCapability {
+  key: string;
+  label: string;
+  valueType: 'enum' | 'string';
+  options: { value: string; label: string }[];
+  required: boolean;
+}
+
 export interface CampaignRuleCapability {
   key: string;
   label: string;
@@ -214,6 +223,7 @@ export interface CampaignRuleCapability {
   options: { value: string; label: string }[];
   subjectLabel: string | null;
   subjectOptions: { value: string; label: string }[];
+  filters: CampaignRuleFilterCapability[];
   available: boolean;
   requiresWindow: boolean;
   windowMinDays: number | null;
@@ -241,6 +251,7 @@ export interface CampaignAudienceRuleResult {
   expected: string | number | boolean;
   actual: string | number | boolean | null;
   subject?: string | null;
+  filters?: Record<string, string>;
   matched: boolean;
   windowDays?: number | null;
 }
