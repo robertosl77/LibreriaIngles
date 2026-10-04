@@ -258,6 +258,14 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         tuple((level, level) for level in ("A1", "A2", "B1", "B2", "C1", "C2")),
     ),
     RuleCapability(
+        "CERTIFICATE_ISSUED",
+        "Certificado de nivel emitido",
+        "enum",
+        ("EQ",),
+        "Indica que la cuenta ya obtuvo un certificado real para el nivel seleccionado.",
+        tuple((level, level) for level in ("A1", "A2", "B1", "B2", "C1", "C2")),
+    ),
+    RuleCapability(
         "SKILL_STATUS",
         "Estado de skill",
         "enum",

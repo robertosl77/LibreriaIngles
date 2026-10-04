@@ -10,6 +10,7 @@ from app.ai.models import AIConnection, AIConnectionOwnerType, AIUsageEvent
 from app.campaigns.models import CampaignGrant
 from app.curriculum.service import get_level
 from app.db import SessionLocal
+from app.exams.models import LevelCertificate
 from app.learning.models import (
     Attempt,
     ClassSession,
@@ -84,6 +85,15 @@ def test_campaign_capabilities_are_single_owner_catalog(client) -> None:
     }
     assert rules["NEVER_STUDIED"]["valueType"] == "boolean"
     assert rules["CURRENT_LEVEL"]["valueType"] == "enum"
+    assert rules["CERTIFICATE_ISSUED"]["valueType"] == "enum"
+    assert {option["value"] for option in rules["CERTIFICATE_ISSUED"]["options"]} == {
+        "A1",
+        "A2",
+        "B1",
+        "B2",
+        "C1",
+        "C2",
+    }
     assert rules["EXAMS_FAILED"]["requiresWindow"] is True
     assert rules["CLASSES_GENERATED"]["requiresWindow"] is True
     assert rules["CLASSES_STARTED"]["requiresWindow"] is True
@@ -345,6 +355,78 @@ def test_preview_can_segment_by_active_subscription_origin(client) -> None:
     result = body["sample"][0]["rules"][0]
     assert result["actual"] == "INVITATION"
     assert result["matched"] is True
+
+
+def test_preview_can_segment_by_real_level_certificate(client) -> None:
+    user = login(client, "certificate-campaign@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "certificate-campaign@example.com"))
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert account is not None and link is not None
+        now = datetime.now(timezone.utc)
+        exam = ClassSession(
+            study_profile_id=link.study_profile_id,
+            account_id=account.id,
+            status=ClassSessionStatus.COMPLETED,
+            kind=SessionKind.EXAM,
+            target_level="A1",
+            score=88,
+            exam_result={"passed": True},
+            evaluated_at=now - timedelta(days=1),
+        )
+        db.add(exam)
+        db.flush()
+        db.add(
+            LevelCertificate(
+                code="LI-A1-CAMPAIGN-TEST",
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                exam_session_id=exam.id,
+                holder_name=account.display_name or "Alumno",
+                level="A1",
+                score=88,
+                area_scores={},
+                issued_at=now - timedelta(days=1),
+            )
+        )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "CERTIFICATE_ISSUED", "operator": "EQ", "value": "A1"}],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] == "A1"
+    assert result["expected"] == "A1"
+    assert result["matched"] is True
+
+    other_level = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "CERTIFICATE_ISSUED", "operator": "EQ", "value": "B1"}],
+    )
+    assert other_level.status_code == 200, other_level.text
+    assert other_level.json()["eligibleCount"] == 0
+
+    invalid = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "CERTIFICATE_ISSUED", "operator": "EQ", "value": "A7"}],
+    )
+    assert invalid.status_code == 422
 
 
 def test_preview_can_segment_by_failed_exam_count(client) -> None:
