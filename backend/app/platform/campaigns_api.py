@@ -127,6 +127,14 @@ AI_FAILURES_COUNT puede combinar ownerType, errorCode y operation en la MISMA re
 corresponda exactamente al mismo conjunto de eventos. Para “cuota o credencial” usá
 errorCode=CREDENTIAL_OR_QUOTA. No reemplaces un filtro combinado por varias métricas independientes.
 
+PRIORIDAD y CONVIVENCIA:
+- priority solo ordena campañas que resultan elegibles en la misma evaluación; un número menor se intenta primero.
+- stackable=false es el valor conservador por defecto.
+- stackable=true significa únicamente que la campaña puede convivir con otra campaña elegible en ESA MISMA evaluación.
+- stackable NO significa ignorar campañas recibidas anteriormente, frequency caps ni supresiones históricas.
+- Si el usuario pide excluir por campañas/beneficios recibidos previamente y el catálogo no ofrece esa condición,
+  declaralo UNSUPPORTED. Nunca lo sustituyas por stackable=false ni por priority.
+
 Para métricas de estudio usá las capacidades del catálogo:
 - CLASSES_COMPLETED cuenta clases completadas dentro de windowDays.
 - ACTIVE_STUDY_DAYS cuenta días distintos con actividad dentro de windowDays.
