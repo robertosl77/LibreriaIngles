@@ -336,7 +336,7 @@ def _run_json_task_with_connections(
 ) -> AIResult:
     errors: list[str] = []
     failed: list[str] = []
-    operation = str(task.get("kind") or "unknown")[:40]
+    operation = str(task.get("kind") or "unknown")[:80]
     for connection in connections:
         reason = limit_reason(db, connection, account)
         if reason:
