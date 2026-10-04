@@ -826,11 +826,21 @@ export class ClassComponent implements OnDestroy {
     this.loading.set(true);
     try {
       this.setClass(await firstValueFrom(this.api.getClass(id)));
+      this.scrollToLinkedExercise();
     } catch (err) {
       this.toast.error(errorMessage(err, 'No se pudo cargar la clase.'));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private scrollToLinkedExercise(): void {
+    const fragment = window.location.hash.replace(/^#/, '');
+    if (!/^ex-\d+$/.test(fragment)) return;
+    // El ejercicio se renderiza después de actualizar la signal; esperamos al siguiente ciclo.
+    setTimeout(() => {
+      document.getElementById(fragment)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   }
 
   private setClass(detail: ClassDetail): void {
