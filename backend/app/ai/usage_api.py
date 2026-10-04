@@ -386,6 +386,7 @@ _DIAGNOSTIC_LABELS = {
     "systemChars": "Prompt base / instrucciones del sistema",
     "userChars": "Contexto dinámico enviado",
     "audioBytes": "Tamaño del audio",
+    "responseJsonChars": "Tamaño estructural de la respuesta",
     "instructionChars": "Consigna",
     "questionChars": "Pregunta",
     "passageChars": "Texto / pasaje",
@@ -408,7 +409,7 @@ def _diagnostic_numbers(snapshot: dict | None) -> dict[str, float]:
     if not isinstance(snapshot, dict):
         return {}
     values: dict[str, float] = {}
-    for key in ("systemChars", "userChars", "audioBytes"):
+    for key in ("systemChars", "userChars", "audioBytes", "responseJsonChars"):
         value = snapshot.get(key)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             values[key] = float(value)
@@ -459,6 +460,7 @@ def _diagnostic_payload(db, event: AIUsageEvent, viewer: Account) -> dict:
         and isinstance(event.diagnostic_snapshot.get("details"), dict)
         else {}
     )
+    cohort_exercise_type = None
     exercise_type = current_details.get("exerciseType")
     if exercise_type:
         same_type = [
@@ -470,6 +472,24 @@ def _diagnostic_payload(db, event: AIUsageEvent, viewer: Account) -> dict:
         ]
         if len(same_type) >= 3:
             comparable = same_type
+            cohort_exercise_type = exercise_type
+
+    prompt_fingerprint = (
+        event.diagnostic_snapshot.get("systemFingerprint")
+        if isinstance(event.diagnostic_snapshot, dict)
+        else None
+    )
+    cohort_prompt_fingerprint = None
+    if prompt_fingerprint:
+        same_prompt = [
+            item
+            for item in comparable
+            if isinstance(item.diagnostic_snapshot, dict)
+            and item.diagnostic_snapshot.get("systemFingerprint") == prompt_fingerprint
+        ]
+        if len(same_prompt) >= 3:
+            comparable = same_prompt
+            cohort_prompt_fingerprint = prompt_fingerprint
 
     totals = [item.total_tokens for item in comparable if item.total_tokens is not None]
     sorted_totals = sorted(totals)
@@ -543,7 +563,8 @@ def _diagnostic_payload(db, event: AIUsageEvent, viewer: Account) -> dict:
         "subjectType": event.subject_type,
         "provider": "PLATFORM" if hide_platform_engine else event.provider,
         "model": None if hide_platform_engine else event.model,
-        "exerciseType": exercise_type if exercise_type and len(comparable) >= 3 else None,
+        "exerciseType": cohort_exercise_type,
+        "promptFingerprint": cohort_prompt_fingerprint,
     }
     return {
         "tokens": {
