@@ -31,6 +31,7 @@ def test_usage_normalization_is_driven_by_database_mapping(client) -> None:
                 provider="CUSTOM",
                 input_tokens_path="metrics.request.tokens",
                 output_tokens_path="metrics.response.tokens",
+                reasoning_tokens_path="metrics.thinking.tokens",
                 total_tokens_path=None,
                 active=True,
             )
@@ -43,24 +44,26 @@ def test_usage_normalization_is_driven_by_database_mapping(client) -> None:
             {
                 "metrics": {
                     "request": {"tokens": 17},
+                    "thinking": {"tokens": 5},
                     "response": {"tokens": "9"},
                 }
             },
-        ) == (17, 9, 26)
+        ) == (17, 5, 9, 31)
 
         # Cambiar el contrato del proveedor es dato, no código del motor de consumo.
         mapping = db.get(AIProviderUsageMapping, "CUSTOM")
         assert mapping is not None
         mapping.input_tokens_path = "new_usage.in"
         mapping.output_tokens_path = "new_usage.out"
+        mapping.reasoning_tokens_path = "new_usage.think"
         mapping.total_tokens_path = "new_usage.total"
         db.commit()
 
         assert normalize_usage(
             db,
             "CUSTOM",
-            {"new_usage": {"in": 4, "out": 6, "total": 10}},
-        ) == (4, 6, 10)
+            {"new_usage": {"in": 4, "think": 2, "out": 6, "total": 12}},
+        ) == (4, 2, 6, 12)
 
 
 def test_mock_usage_is_persisted_with_subject_and_visible_in_my_consumption(client) -> None:
@@ -73,6 +76,7 @@ def test_mock_usage_is_persisted_with_subject_and_visible_in_my_consumption(clie
                 provider="MOCK",
                 input_tokens_path="usage.input_tokens",
                 output_tokens_path="usage.output_tokens",
+                reasoning_tokens_path=None,
                 total_tokens_path="usage.total_tokens",
                 active=True,
             )
@@ -112,7 +116,12 @@ def test_mock_usage_is_persisted_with_subject_and_visible_in_my_consumption(clie
             .order_by(AIUsageEvent.id.desc())
         )
         assert event is not None
-        assert (event.input_tokens, event.output_tokens, event.total_tokens) == (120, 40, 160)
+        assert (
+            event.input_tokens,
+            event.reasoning_tokens,
+            event.output_tokens,
+            event.total_tokens,
+        ) == (120, None, 40, 160)
         assert event.subject_type == "TEST_OBJECT"
         assert event.subject_id == 77
         assert event.subject_route == "/app/clase/77"
@@ -383,13 +392,39 @@ def test_consumption_reference_includes_class_and_exercise(client) -> None:
             .order_by(AIUsageEvent.id.desc())
         )
         assert event is not None
-        assert event.subject_label == f"Clase #{klass['id']} · Ejercicio #{exercise.id}"
-        assert event.subject_route == f"/app/clase/{klass['id']}#ex-{exercise.id}"
+        from app.classes import service as class_service
+
+        number = class_service.exercise_display_number(db, exercise)
+        event_id = event.id
+        assert event.subject_label == f"Clase #{klass['id']} · Ejercicio {number}"
+        assert event.subject_route == f"/app/clase/{klass['id']}"
 
     report = client.get(f"{API}/ai/usage", headers=headers)
     assert report.status_code == 200
     correction = next(
         row for row in report.json()["rows"] if row["operation"] == "evaluate_answer"
     )
-    assert correction["subject"]["label"].startswith(f"Clase #{klass['id']} · Ejercicio #")
-    assert correction["subject"]["route"].startswith(f"/app/clase/{klass['id']}#ex-")
+    assert correction["subject"]["label"] == f"Clase #{klass['id']} · Ejercicio {number}"
+    assert correction["subject"]["exerciseNumber"] == number
+    assert correction["subject"]["previewable"] is True
+
+    preview = client.get(f"{API}/ai/usage/{event_id}/reference", headers=headers)
+    assert preview.status_code == 200, preview.text
+    detail = preview.json()
+    assert detail["kind"] == "EXERCISE"
+    assert detail["class"]["id"] == klass["id"]
+    assert detail["exercise"]["number"] == number
+    assert detail["exercise"]["id"] == exercise.id
+    assert detail["fullClassRoute"] == f"/app/clase/{klass['id']}"
+
+    generation = next(
+        row for row in report.json()["rows"] if row["operation"] == "generate_class"
+    )
+    class_preview = client.get(
+        f"{API}/ai/usage/{generation['id']}/reference", headers=headers
+    )
+    assert class_preview.status_code == 200, class_preview.text
+    class_detail = class_preview.json()
+    assert class_detail["kind"] == "CLASS"
+    assert class_detail["class"]["id"] == klass["id"]
+    assert class_detail["exercises"]
