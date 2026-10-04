@@ -565,6 +565,9 @@ export interface AiUsageSubject {
   id: number | null;
   label: string | null;
   route: string | null;
+  classId: number | null;
+  exerciseNumber: number | null;
+  previewable: boolean;
 }
 
 export interface AiUsageExecution {
@@ -595,6 +598,43 @@ export interface AiUsageRow {
   errorCode: string | null;
   execution: AiUsageExecution | null;
   subject: AiUsageSubject | null;
+}
+
+export interface AiUsageReferenceExercise {
+  id: number;
+  number: number;
+  type: string;
+  area: string | null;
+  skillKey?: string | null;
+  instruction: string | null;
+  question: string;
+  passage: string | null;
+  options?: string[] | null;
+  conversation: { turn?: number; total?: number; closing?: string } | null;
+  presentation?: string;
+  responseMode?: string;
+  answer: string | null;
+  score: number | null;
+  result?: string | null;
+  feedback: string | null;
+  correctAnswer?: string | null;
+}
+
+export interface AiUsageReference {
+  eventId: number;
+  kind: 'EXERCISE' | 'CLASS';
+  class: {
+    id: number;
+    kind: 'CLASS' | 'EXAM';
+    label: string;
+    title: string | null;
+    targetLevel: string | null;
+    status?: string;
+    score?: number | null;
+  };
+  exercise?: AiUsageReferenceExercise;
+  exercises?: AiUsageReferenceExercise[];
+  fullClassRoute: string | null;
 }
 
 export interface AiUsageReport {
