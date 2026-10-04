@@ -170,6 +170,7 @@ class AIUsageEvent(Base):
         Index("ix_ai_usage_events_account_created", "account_id", "created_at"),
         Index("ix_ai_usage_events_organization_created", "organization_id", "created_at"),
         Index("ix_ai_usage_events_subject", "subject_type", "subject_id"),
+        Index("ix_ai_usage_events_execution", "execution_id", "attempt_index"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -202,6 +203,9 @@ class AIUsageEvent(Base):
     # Fuente configurada en el servicio al momento del uso (BYOK/PLATFORM/HYBRID).
     # owner_type conserva además qué conexión atendió efectivamente.
     service_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Una ejecución lógica puede intentar varias conexiones por failover.
+    execution_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    attempt_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     operation: Mapped[str] = mapped_column(String(80))
     subject_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     subject_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
