@@ -20,8 +20,8 @@ import {
         <div>
           <h1>Consumo</h1>
           <p class="muted">
-            Uso real de IA por operación. Entrada = tokens enviados al modelo; salida = tokens
-            generados por el modelo.
+            Uso real de IA por operación. Entrada = tokens enviados al modelo; pensamiento = tokens
+            internos de razonamiento cuando el proveedor los informa; salida = tokens generados.
           </p>
         </div>
 
@@ -58,6 +58,10 @@ import {
           <article class="card metric">
             <span class="muted">Tokens entrada</span>
             <strong>{{ data.summary.inputTokens | number }}</strong>
+          </article>
+          <article class="card metric">
+            <span class="muted">Pensamiento</span>
+            <strong>{{ data.summary.reasoningTokens | number }}</strong>
           </article>
           <article class="card metric">
             <span class="muted">Tokens salida</span>
@@ -102,6 +106,7 @@ import {
                     <th>Proveedor / modelo</th>
                     <th>Origen</th>
                     <th class="number">Entrada</th>
+                    <th class="number">Pensamiento</th>
                     <th class="number">Salida</th>
                     <th class="number">Total</th>
                     <th>Estado</th>
@@ -154,6 +159,7 @@ import {
                       </td>
                       <td>{{ sourceLabel(row) }}</td>
                       <td class="number">{{ tokenValue(row.inputTokens) }}</td>
+                      <td class="number">{{ tokenValue(row.reasoningTokens) }}</td>
                       <td class="number">{{ tokenValue(row.outputTokens) }}</td>
                       <td class="number total">{{ tokenValue(row.totalTokens) }}</td>
                       <td>
@@ -293,7 +299,7 @@ import {
     }
     .summary {
       display: grid;
-      grid-template-columns: repeat(7, minmax(120px, 1fr));
+      grid-template-columns: repeat(8, minmax(115px, 1fr));
       gap: 0.7rem;
       margin-bottom: 1rem;
     }
@@ -317,7 +323,7 @@ import {
     .table-wrap { overflow: auto; }
     table {
       width: 100%;
-      min-width: 1240px;
+      min-width: 1340px;
       border-collapse: collapse;
       font-size: 0.88rem;
     }
