@@ -606,11 +606,11 @@ def _connection_config_route(
     if connection.owner_type == AIConnectionOwnerType.ACCOUNT:
         if connection.owner_id != viewer.id:
             return None
-        return f"/app/ia?connectionId={connection.id}"
+        return "/app/ia"
     if connection.owner_type == AIConnectionOwnerType.PLATFORM:
         if not _is_owner(viewer):
             return None
-        return f"/app/plataforma/configuracion?connectionId={connection.id}"
+        return "/app/plataforma/configuracion"
     return None
 
 
@@ -627,6 +627,7 @@ def _serialize_event(
         event.owner_type == AIConnectionOwnerType.PLATFORM and not _is_owner(viewer)
     )
     own_event = event.account_id == viewer.id
+    connection_route = _connection_config_route(db, event, viewer)
 
     return {
         "id": event.id,
@@ -639,7 +640,8 @@ def _serialize_event(
         "provider": "PLATFORM" if hide_platform_engine else event.provider,
         "model": None if hide_platform_engine else event.model,
         "connectionName": PLATFORM_LABEL if hide_platform_engine else event.connection_name,
-        "connectionRoute": _connection_config_route(db, event, viewer),
+        "connectionRoute": connection_route,
+        "connectionId": event.connection_id if connection_route else None,
         "connectionOwnerType": event.owner_type.value,
         "serviceSource": event.service_source,
         "actualSource": _actual_source(event.owner_type),
