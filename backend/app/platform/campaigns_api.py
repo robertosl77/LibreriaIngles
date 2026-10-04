@@ -105,7 +105,9 @@ Devolvé SOLO JSON con esta forma:
 
 requirements es obligatorio y debe enumerar TODOS los requisitos materiales de la intención:
 audiencia/condiciones, trigger, acción, delivery, beneficio, límites y fechas que el usuario haya
-pedido explícitamente. Si un requisito no puede expresarse exactamente con el catálogo actual,
+pedido explícitamente. Un pedido genérico de "dar un beneficio" se representa con ACTION=GRANT_BENEFIT;
+usá kind=BENEFIT solo cuando el usuario exija un beneficio concreto que deba quedar identificado.
+Si un requisito no puede expresarse exactamente con el catálogo actual,
 marcalo UNSUPPORTED y no lo sustituyas por otra capacidad parecida. Un requisito REPRESENTED debe
 apuntar mediante capability a la capacidad exacta que realmente aparece en draft. No ocultes una
 limitación solo para producir un borrador válido.
@@ -203,7 +205,17 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
 
     rules: list[dict] = []
     for item in raw.get("rules") or []:
-        if not isinstance(item, dict) or len(rules) >= 20:
+        if not isinstance(item, dict):
+            _append_blocking_issue(
+                blocking_issues,
+                "La IA devolvió una condición con formato inválido.",
+            )
+            continue
+        if len(rules) >= 20:
+            _append_blocking_issue(
+                blocking_issues,
+                "La IA propuso más de 20 condiciones; algunas quedarían fuera del borrador.",
+            )
             continue
         try:
             rules.append(_validate_rule(CampaignRuleIn.model_validate(item)))
