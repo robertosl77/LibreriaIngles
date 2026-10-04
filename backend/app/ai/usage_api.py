@@ -9,6 +9,7 @@ from app.accounts.models import Account, PlatformRole
 from app.ai.models import AIConnectionOwnerType, AIUsageEvent
 from app.ai.service import HEALTH_CHECK, PLATFORM_LABEL
 from app.classes import service as class_service
+from app.classes.reference import exercise_display_number
 from app.core.deps import CurrentAccount, DbSession
 from app.memberships.models import Membership, MembershipRole, MembershipStatus
 from app.organizations.models import Organization
@@ -120,7 +121,7 @@ def _human_subject(db, event: AIUsageEvent) -> dict | None:
         if exercise is not None:
             session = db.get(ClassSession, exercise.class_session_id)
             if session is not None:
-                number = class_service.exercise_display_number(db, exercise)
+                number = exercise_display_number(db, exercise)
                 kind = "Examen" if session.kind == SessionKind.EXAM else "Clase"
                 return {
                     "type": event.subject_type,
@@ -182,7 +183,7 @@ def _exercise_preview(db, event: AIUsageEvent, exercise: Exercise) -> dict:
         },
         "exercise": {
             "id": exercise.id,
-            "number": class_service.exercise_display_number(db, exercise),
+            "number": exercise_display_number(db, exercise),
             "type": exercise.exercise_type,
             "area": exercise.area,
             "skillKey": exercise.skill_key,
@@ -211,7 +212,7 @@ def _class_preview(db, event: AIUsageEvent, session: ClassSession) -> dict:
         items.append(
             {
                 "id": exercise.id,
-                "number": class_service.exercise_display_number(db, exercise),
+                "number": exercise_display_number(db, exercise),
                 "type": exercise.exercise_type,
                 "area": exercise.area,
                 "instruction": exercise.instruction,
