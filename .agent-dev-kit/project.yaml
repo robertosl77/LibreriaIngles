@@ -1,0 +1,75 @@
+project:
+  name: LibreriaIngles
+
+stack:
+  backend:
+    language: Python
+    framework: FastAPI
+  frontend:
+    language: TypeScript
+    framework: Angular
+  ui:
+    framework: Bootstrap
+  database:
+    engine: SQLite
+
+provider:
+  name: openai
+
+git_workflow:
+  branches:
+    production: main
+    integration: develop
+  protected:
+    - main
+    - develop
+  task_branch:
+    base: develop
+    naming: "{kind}/{issue}-{slug}"
+  pull_requests:
+    task_target: develop
+    release_source: develop
+    release_target: main
+    require_issue_reference: true
+  sync:
+    require_updated_base_before_task: true
+  direct_writes:
+    protected_branches: deny
+    exception: explicit_human_authorization
+
+gateway:
+  session_ttl_seconds: 3600
+  max_sessions: 100
+
+orchestration:
+  trace:
+    enabled: true
+    path: .agent-dev-kit/runtime/orchestration-traces.jsonl
+    persist_full_request: false
+    max_entries: 1000
+  budgets:
+    max_dag_nodes: 12
+    max_provider_calls: 24
+    max_revisits: 2
+    max_context_chars: 16000
+    max_dependency_evidence_chars: 8000
+  improvement_candidate_threshold: 3
+
+agents:
+  enabled:
+    - triage
+    - product
+    - pmo
+    - architecture
+    - ux_ui
+    - backend
+    - frontend
+    - database
+    - security
+    - testing
+    - reviewer
+    - documentation
+    - devops
+    - performance
+    - observability
+    - data
