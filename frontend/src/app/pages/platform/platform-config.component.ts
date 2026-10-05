@@ -1,4 +1,5 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 
 import { ConnectionsManagerComponent } from '../../shared/connections-manager.component';
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
@@ -47,11 +48,13 @@ import { ServicesAdminComponent } from './services-admin.component';
       <app-collapse-card
         title="Conexiones de la plataforma"
         description="API keys, modelos, prioridades, límites y estado de las conexiones usadas por la plataforma."
+        [open]="focusedConnectionId !== null"
       >
         <app-connections-manager
           scope="platform"
           title="Conexiones de la plataforma"
           [embedded]="true"
+          [focusConnectionId]="focusedConnectionId"
         />
       </app-collapse-card>
     </section>
@@ -59,6 +62,14 @@ import { ServicesAdminComponent } from './services-admin.component';
   styles: ``
 })
 export class PlatformConfigComponent {
+  private readonly route = inject(ActivatedRoute);
+  readonly focusedConnectionId = this.connectionIdFromQuery();
+
+  private connectionIdFromQuery(): number | null {
+    const value = Number(this.route.snapshot.queryParamMap.get('connectionId'));
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
+
   readonly configurationRefreshVersion = signal(0);
 
   configurationChanged(): void {

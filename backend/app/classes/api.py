@@ -10,7 +10,9 @@ from app.ai.service import (
     public_trace,
     transcribe_audio,
 )
+from app.ai.usage import AIUsageContext
 from app.classes import generation, service
+from app.classes.reference import exercise_display_number
 from app.pronunciation import normalize_ai_pronunciation
 from app.core.deps import CurrentStudy, DbSession
 from app.curriculum.lessons import get_lesson
@@ -335,7 +337,27 @@ async def transcribe_answer_audio(
 
     try:
         result = transcribe_audio(
-            db, study.account, audio=audio, mime_type=mime_type
+            db,
+            study.account,
+            audio=audio,
+            mime_type=mime_type,
+            usage_context=AIUsageContext(
+                organization_id=exercise.organization_id,
+                membership_id=exercise.membership_id,
+                subject_type="EXERCISE",
+                subject_id=exercise.id,
+                subject_label=(
+                    f"{'Examen' if session.kind == SessionKind.EXAM else 'Clase'} "
+                    f"#{session.id} · Ejercicio {exercise_display_number(db, exercise)}"
+                ),
+                subject_route=f"/app/clase/{session.id}",
+                diagnostic={
+                    "exerciseType": exercise.exercise_type,
+                    "presentationMode": exercise.presentation_mode.value,
+                    "responseMode": exercise.response_mode.value,
+                    "audioDurationMs": duration_ms,
+                },
+            ),
         )
     except NoAIAvailable as exc:
         detail = "No hay una conexión disponible que pueda transcribir audio."

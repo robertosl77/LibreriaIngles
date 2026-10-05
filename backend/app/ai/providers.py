@@ -122,6 +122,9 @@ class _HttpProvider:
     def __init__(self, api_key: str, model: str):
         self.api_key = api_key
         self.model = model
+        # Payload efímero de la última operación que puede contener usage.
+        # Nunca se persiste completo: T-049 solo extrae los contadores configurados en BD.
+        self.last_usage_payload: dict | None = None
 
     def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
         try:
@@ -160,7 +163,9 @@ class OpenAIProvider(_HttpProvider):
             },
         )
         try:
-            text = response.json()["choices"][0]["message"]["content"]
+            payload = response.json()
+            self.last_usage_payload = payload
+            text = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, ValueError) as exc:
             raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de OpenAI.") from exc
         return parse_json_text(text)
@@ -200,7 +205,9 @@ class OpenAIProvider(_HttpProvider):
             files={"file": ("answer.webm", audio, mime_type or "audio/webm")},
         )
         try:
-            text = str(response.json()["text"]).strip()
+            payload = response.json()
+            self.last_usage_payload = payload
+            text = str(payload["text"]).strip()
         except (KeyError, ValueError) as exc:
             raise ProviderError(
                 AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de OpenAI al transcribir."
@@ -228,7 +235,9 @@ class GeminiProvider(_HttpProvider):
             },
         )
         try:
-            parts = response.json()["candidates"][0]["content"]["parts"]
+            payload = response.json()
+            self.last_usage_payload = payload
+            parts = payload["candidates"][0]["content"]["parts"]
             text = "".join(part.get("text", "") for part in parts)
         except (KeyError, IndexError, ValueError) as exc:
             raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de Gemini.") from exc
@@ -292,7 +301,9 @@ class GeminiProvider(_HttpProvider):
             },
         )
         try:
-            parts = response.json()["candidates"][0]["content"]["parts"]
+            payload = response.json()
+            self.last_usage_payload = payload
+            parts = payload["candidates"][0]["content"]["parts"]
             text = "".join(part.get("text", "") for part in parts).strip()
         except (KeyError, IndexError, ValueError) as exc:
             raise ProviderError(
@@ -327,7 +338,9 @@ class GeminiProvider(_HttpProvider):
             },
         )
         try:
-            parts = response.json()["candidates"][0]["content"]["parts"]
+            payload = response.json()
+            self.last_usage_payload = payload
+            parts = payload["candidates"][0]["content"]["parts"]
             data = parse_json_text("".join(part.get("text", "") for part in parts))
             text = str(data.get("transcript") or "").strip()
         except (KeyError, IndexError, ValueError, ProviderError):
@@ -375,7 +388,9 @@ class AnthropicProvider(_HttpProvider):
             },
         )
         try:
-            blocks = response.json()["content"]
+            payload = response.json()
+            self.last_usage_payload = payload
+            blocks = payload["content"]
             text = "".join(block.get("text", "") for block in blocks if block.get("type") == "text")
         except (KeyError, ValueError) as exc:
             raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de Anthropic.") from exc

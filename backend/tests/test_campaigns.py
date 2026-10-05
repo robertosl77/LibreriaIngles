@@ -472,6 +472,8 @@ def test_campaign_assist_builds_reviewable_draft_without_persisting(client, monk
                 "draft": {
                     "name": "Aniversario",
                     "benefitId": benefit["id"],
+                    "action": "GRANT_BENEFIT",
+                    "actionConfig": {},
                     "trigger": "SCHEDULED",
                     "rules": [
                         {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
@@ -483,6 +485,38 @@ def test_campaign_assist_builds_reviewable_draft_without_persisting(client, monk
                     "notification": "IN_APP",
                     "message": "Gracias por seguir con nosotros.",
                 },
+                "requirements": [
+                    {
+                        "text": "Cuenta personal",
+                        "kind": "RULE",
+                        "status": "REPRESENTED",
+                        "capability": "ACCOUNT_TYPE",
+                    },
+                    {
+                        "text": "Al menos un año desde el registro",
+                        "kind": "RULE",
+                        "status": "REPRESENTED",
+                        "capability": "DAYS_SINCE_CREATED",
+                    },
+                    {
+                        "text": "Otorgar beneficio",
+                        "kind": "BENEFIT",
+                        "status": "REPRESENTED",
+                        "capability": "BENEFIT",
+                    },
+                    {
+                        "text": "Ejecutar programadamente",
+                        "kind": "TRIGGER",
+                        "status": "UNSUPPORTED",
+                        "capability": None,
+                    },
+                    {
+                        "text": "Aplicar 20% de descuento",
+                        "kind": "ACTION",
+                        "status": "UNSUPPORTED",
+                        "capability": None,
+                    },
+                ],
                 "warnings": ["El pedido menciona un descuento, que el motor actual no administra."],
                 "summary": "Fidelización al cumplir un año.",
             }
@@ -497,8 +531,10 @@ def test_campaign_assist_builds_reviewable_draft_without_persisting(client, monk
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["draft"]["name"] == "Aniversario"
-    assert body["draft"]["benefitId"] is None
+    assert body["draft"]["benefitId"] == benefit["id"]
     assert body["draft"]["trigger"] == "LOGIN"
+    assert body["executable"] is False
+    assert body["blockingIssues"]
     assert body["draft"]["rules"][1] == {
         "field": "DAYS_SINCE_CREATED",
         "operator": "GTE",
@@ -545,7 +581,7 @@ def test_campaign_assist_uses_platform_ai_only_and_does_not_create_campaign(clie
     response = client.post(
         f"{API}/platform/campaigns/assist",
         headers=owner,
-        json={"description": "Usuarios con al menos un año desde el registro, al volver a ingresar."},
+        json={"description": "Usuarios con al menos un año desde el registro: darles un beneficio al volver a ingresar."},
     )
     assert response.status_code == 200, response.text
     body = response.json()
@@ -556,6 +592,8 @@ def test_campaign_assist_uses_platform_ai_only_and_does_not_create_campaign(clie
         and rule["value"] == 365
         for rule in body["draft"]["rules"]
     )
+    assert body["executable"] is True
+    assert all(requirement["verified"] for requirement in body["requirements"])
     assert len(_campaigns(client, owner)) == before
 
     with SessionLocal() as db:
@@ -567,6 +605,72 @@ def test_campaign_assist_uses_platform_ai_only_and_does_not_create_campaign(clie
         assert len(events) == 1
         assert events[0].owner_type == AIConnectionOwnerType.PLATFORM
         assert events[0].connection_id == platform.json()["id"]
+        assert events[0].execution_id
+        assert events[0].attempt_index == 1
+
+
+def test_campaign_assist_failover_uses_same_execution_contract(client) -> None:
+    from app.accounts.models import Account
+    from app.ai.models import (
+        AIConnection,
+        AIConnectionOwnerType,
+        AIConnectionStatus,
+        AIUsageEvent,
+    )
+    from app.db import SessionLocal
+
+    owner, _ = _owner_and_services(client)
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == OWNER))
+        assert account is not None
+        db.add_all(
+            [
+                AIConnection(
+                    owner_type=AIConnectionOwnerType.PLATFORM,
+                    owner_id=None,
+                    provider="MOCK",
+                    name="Campaign primaria caída",
+                    model="mock-fail-down",
+                    priority=1,
+                    active=True,
+                    status=AIConnectionStatus.AVAILABLE,
+                ),
+                AIConnection(
+                    owner_type=AIConnectionOwnerType.PLATFORM,
+                    owner_id=None,
+                    provider="MOCK",
+                    name="Campaign backup",
+                    model="mock",
+                    priority=2,
+                    active=True,
+                    status=AIConnectionStatus.AVAILABLE,
+                ),
+            ]
+        )
+        db.commit()
+
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={"description": "Usuarios nuevos: preparar una campaña de bienvenida al ingresar."},
+    )
+    assert response.status_code == 200, response.text
+
+    with SessionLocal() as db:
+        events = list(
+            db.scalars(
+                select(AIUsageEvent)
+                .where(AIUsageEvent.operation == "campaign_assist")
+                .order_by(AIUsageEvent.attempt_index, AIUsageEvent.id)
+            ).all()
+        )
+        assert len(events) == 2
+        assert events[0].execution_id
+        assert events[0].execution_id == events[1].execution_id
+        assert [event.attempt_index for event in events] == [1, 2]
+        assert [event.success for event in events] == [False, True]
+        assert events[0].error_code == "PROVIDER_DOWN"
 
 
 def test_campaign_assist_is_owner_only(client) -> None:
@@ -612,3 +716,143 @@ def test_campaign_assist_warns_instead_of_faking_paid_tenure_or_discount(client)
     joined = " ".join(body["warnings"]).lower()
     assert "descuento" in joined or "porcentaje" in joined
     assert "suscripción" in joined or "pago" in joined
+    assert body["executable"] is False
+    blockers = " ".join(body["blockingIssues"]).lower()
+    assert "descuento" in blockers or "precio" in blockers
+    assert "pago" in blockers or "suscripción" in blockers
+
+
+
+def test_campaign_assist_blocks_unknown_condition_instead_of_broadening_audience(client, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import app.platform.campaigns_api as campaigns_api
+
+    owner, services = _owner_and_services(client)
+    benefit = _benefit(
+        client,
+        owner,
+        services["INDIVIDUAL_PLATFORM"]["id"],
+        name="Consentimiento",
+        days=7,
+    )
+
+    def fake_assist(*args, **kwargs):
+        return SimpleNamespace(
+            data={
+                "draft": {
+                    "name": "Promoción con consentimiento",
+                    "benefitId": benefit["id"],
+                    "action": "GRANT_BENEFIT",
+                    "actionConfig": {},
+                    "trigger": "LOGIN",
+                    "rules": [
+                        {"field": "MARKETING_CONSENT", "operator": "EQ", "value": True},
+                    ],
+                    "priority": 100,
+                    "stackable": False,
+                    "maxRecipients": None,
+                    "startsAt": None,
+                    "endsAt": None,
+                    "notification": "IN_APP",
+                    "message": "Promoción",
+                },
+                "requirements": [
+                    {
+                        "text": "Solo usuarios con consentimiento comercial",
+                        "kind": "RULE",
+                        "status": "REPRESENTED",
+                        "capability": "MARKETING_CONSENT",
+                    },
+                    {
+                        "text": "Otorgar beneficio",
+                        "kind": "BENEFIT",
+                        "status": "REPRESENTED",
+                        "capability": "BENEFIT",
+                    },
+                    {
+                        "text": "Ejecutar en login",
+                        "kind": "TRIGGER",
+                        "status": "REPRESENTED",
+                        "capability": "LOGIN",
+                    },
+                ],
+                "warnings": [],
+                "summary": "Promoción limitada por consentimiento.",
+            }
+        )
+
+    monkeypatch.setattr(campaigns_api, "run_platform_json_task", fake_assist)
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={"description": "Dar un beneficio solo a usuarios con consentimiento comercial."},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["executable"] is False
+    assert body["draft"]["benefitId"] == benefit["id"]
+    assert body["draft"]["rules"] == [
+        {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"}
+    ]
+    assert any("MARKETING_CONSENT" in issue for issue in body["blockingIssues"])
+    consent = next(
+        requirement
+        for requirement in body["requirements"]
+        if requirement["capability"] == "MARKETING_CONSENT"
+    )
+    assert consent["verified"] is False
+
+
+def test_campaign_assist_without_requirement_coverage_is_non_executable(client, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import app.platform.campaigns_api as campaigns_api
+
+    owner, services = _owner_and_services(client)
+    benefit = _benefit(
+        client,
+        owner,
+        services["INDIVIDUAL_PLATFORM"]["id"],
+        name="Cobertura faltante",
+        days=3,
+    )
+
+    def fake_assist(*args, **kwargs):
+        return SimpleNamespace(
+            data={
+                "draft": {
+                    "name": "Sin cobertura",
+                    "benefitId": benefit["id"],
+                    "action": "GRANT_BENEFIT",
+                    "actionConfig": {},
+                    "trigger": "LOGIN",
+                    "rules": [
+                        {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+                    ],
+                    "priority": 100,
+                    "stackable": False,
+                    "maxRecipients": None,
+                    "startsAt": None,
+                    "endsAt": None,
+                    "notification": "IN_APP",
+                    "message": None,
+                },
+                "warnings": [],
+                "summary": "Respuesta antigua sin matriz de cobertura.",
+            }
+        )
+
+    monkeypatch.setattr(campaigns_api, "run_platform_json_task", fake_assist)
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={"description": "Dar un beneficio a cuentas personales cuando ingresen."},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    assert body["executable"] is False
+    assert body["requirements"] == []
+    assert any("cobertura de requisitos" in issue.lower() for issue in body["blockingIssues"])

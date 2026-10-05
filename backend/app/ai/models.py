@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -140,6 +140,24 @@ class AICredentialAuditEvent(Base):
     )
 
 
+class AIProviderUsageMapping(Base):
+    """Cómo un proveedor externo declara sus contadores de consumo.
+
+    Las rutas son dot-paths sobre el JSON de respuesta del proveedor. El motor de
+    consumo las interpreta dinámicamente y no contiene condicionales por proveedor.
+    """
+
+    __tablename__ = "ai_provider_usage_mappings"
+
+    provider: Mapped[str] = mapped_column(String(80), primary_key=True)
+    input_tokens_path: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    output_tokens_path: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reasoning_tokens_path: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    total_tokens_path: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class AIUsageEvent(Base):
     """Una llamada a un proveedor de IA (exitosa o fallida).
 
@@ -151,6 +169,9 @@ class AIUsageEvent(Base):
     __table_args__ = (
         Index("ix_ai_usage_events_connection_created", "connection_id", "created_at"),
         Index("ix_ai_usage_events_account_created", "account_id", "created_at"),
+        Index("ix_ai_usage_events_organization_created", "organization_id", "created_at"),
+        Index("ix_ai_usage_events_subject", "subject_type", "subject_id"),
+        Index("ix_ai_usage_events_execution", "execution_id", "attempt_index"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -162,6 +183,7 @@ class AIUsageEvent(Base):
         ),
         nullable=True,
     )
+    connection_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     owner_type: Mapped[AIConnectionOwnerType] = mapped_column(
         SqlEnum(AIConnectionOwnerType, native_enum=False)
     )
@@ -171,7 +193,31 @@ class AIUsageEvent(Base):
     account_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts.id", name="fk_ai_usage_events_account_id"), nullable=True
     )
-    operation: Mapped[str] = mapped_column(String(40))
+    organization_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id", name="fk_ai_usage_events_organization_id"),
+        nullable=True,
+    )
+    membership_id: Mapped[int | None] = mapped_column(
+        ForeignKey("memberships.id", name="fk_ai_usage_events_membership_id"),
+        nullable=True,
+    )
+    # Fuente configurada en el servicio al momento del uso (BYOK/PLATFORM/HYBRID).
+    # owner_type conserva además qué conexión atendió efectivamente.
+    service_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Una ejecución lógica puede intentar varias conexiones por failover.
+    execution_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    attempt_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    operation: Mapped[str] = mapped_column(String(80))
+    subject_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    subject_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    subject_label: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    subject_route: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Huella estructurada de la llamada para diagnóstico. Nunca contiene prompts ni respuestas completas.
+    diagnostic_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     success: Mapped[bool] = mapped_column(Boolean)
     error_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

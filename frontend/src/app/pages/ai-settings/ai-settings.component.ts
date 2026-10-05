@@ -1,5 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../../core/api.service';
@@ -68,6 +68,7 @@ import { MyServiceComponent } from '../../shared/my-service.component';
         <app-connections-manager
           scope="account"
           title="Tus conexiones"
+          [focusConnectionId]="focusedConnectionId"
           (changed)="refreshActive()"
         />
       } @else if (ownKeys() > 0) {
@@ -77,6 +78,7 @@ import { MyServiceComponent } from '../../shared/my-service.component';
           title="Tus conexiones guardadas"
           note="No se usan mientras tengas este servicio; cuando venza, vuelven a usarse. Podés editarlas, pausarlas o eliminarlas."
           [allowCreate]="false"
+          [focusConnectionId]="focusedConnectionId"
           (changed)="refreshActive()"
         />
       }
@@ -86,12 +88,19 @@ import { MyServiceComponent } from '../../shared/my-service.component';
 export class AiSettingsComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
+  readonly focusedConnectionId = this.connectionIdFromQuery();
 
   readonly isOwner = computed(() => this.auth.me()?.account.isPlatformOwner ?? false);
   /** T-055: con un servicio que no usa keys propias (Plataforma) no se ofrece cargarlas. */
   readonly keysUnused = computed(() => this.auth.me()?.service.ownKeys === 'unused');
   readonly ownKeys = computed(() => this.auth.me()?.ai.own ?? 0);
   readonly active = signal<ActiveAiConnections>({ default: null, audio: null });
+
+  private connectionIdFromQuery(): number | null {
+    const value = Number(this.route.snapshot.queryParamMap.get('connectionId'));
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }
 
   async ngOnInit(): Promise<void> {
     await this.refreshActive();

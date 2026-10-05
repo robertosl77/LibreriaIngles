@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService, errorMessage } from '../../core/api.service';
 import {
   CampaignAction,
+  CampaignAssistRequirement,
   CampaignAudiencePreview,
   CampaignNotification,
   CampaignRule,
@@ -162,7 +163,7 @@ function isoDate(value: string): string | null {
                 [disabled]="aiLoading() || aiDescription.trim().length < 8"
               >
                 @if (aiLoading()) { <span class="spinner"></span> }
-                Generar borrador
+                Interpretar con IA
               </button>
             </div>
           }
@@ -171,10 +172,25 @@ function isoDate(value: string): string | null {
 
       @if (editingId() !== null) {
         @if (draftSummary()) {
-          <div class="banner small draft-banner">
+          <div class="banner small draft-banner" [class.draft-blocked]="!aiDraftExecutable()">
             <strong>{{ draftSummary() }}</strong>
+            @if (!aiDraftExecutable()) {
+              <div class="warning"><strong>Borrador incompleto: no se puede guardar ni previsualizar.</strong></div>
+              @for (issue of draftBlockingIssues(); track issue) {
+                <div class="warning">· {{ issue }}</div>
+              }
+            }
             @for (warning of draftWarnings(); track warning) {
               <div>· {{ warning }}</div>
+            }
+            @if (draftRequirements().length) {
+              <div class="requirement-list">
+                @for (requirement of draftRequirements(); track requirement.text + requirement.kind) {
+                  <div [class.warning]="!requirement.verified">
+                    {{ requirement.verified ? '✓' : '!' }} {{ requirement.text }}
+                  </div>
+                }
+              </div>
             }
           </div>
         }
@@ -256,11 +272,48 @@ function isoDate(value: string): string | null {
             @for (rule of form.rules; track $index; let i = $index) {
               @if (ruleCapability(rule.field); as capability) {
                 <div class="rule-row">
-                  <select class="input" [name]="'rField' + i" [(ngModel)]="rule.field" (ngModelChange)="resetRule(rule)">
-                    @for (availableRule of ruleCapabilities(); track availableRule.key) {
-                      <option [value]="availableRule.key">{{ availableRule.label }}</option>
+                  <div class="rule-subject-stack">
+                    <select class="input" [name]="'rField' + i" [(ngModel)]="rule.field" (ngModelChange)="resetRule(rule)">
+                      @for (availableRule of ruleCapabilities(); track availableRule.key) {
+                        <option [value]="availableRule.key">{{ availableRule.label }}</option>
+                      }
+                    </select>
+                    @if (capability.subjectOptions.length > 0) {
+                      <select class="input" [name]="'rSubject' + i" [(ngModel)]="rule.subject">
+                        @for (option of capability.subjectOptions; track option.value) {
+                          <option [value]="option.value">{{ option.label }}</option>
+                        }
+                      </select>
                     }
-                  </select>
+                    @for (filter of capability.filters; track filter.key) {
+                      <label class="rule-filter">
+                        <span>{{ filter.label }}</span>
+                        @if (filter.valueType === 'enum') {
+                          <select
+                            class="input"
+                            [name]="'rFilter' + i + filter.key"
+                            [ngModel]="ruleFilterValue(rule, filter.key)"
+                            (ngModelChange)="setRuleFilter(rule, filter.key, $event)"
+                          >
+                            @if (!filter.required) {
+                              <option value="">Cualquiera</option>
+                            }
+                            @for (option of filter.options; track option.value) {
+                              <option [value]="option.value">{{ option.label }}</option>
+                            }
+                          </select>
+                        } @else {
+                          <input
+                            class="input"
+                            [name]="'rFilter' + i + filter.key"
+                            [ngModel]="ruleFilterValue(rule, filter.key)"
+                            (ngModelChange)="setRuleFilter(rule, filter.key, $event)"
+                            placeholder="Cualquiera"
+                          />
+                        }
+                      </label>
+                    }
+                  </div>
 
                   <select class="input op" [name]="'rOp' + i" [(ngModel)]="rule.operator">
                     @for (operator of capability.operators; track operator) {
@@ -464,11 +517,14 @@ function isoDate(value: string): string | null {
     .choice-card span, .template-card span { color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
     .ai-description { min-height: 6.5rem; resize: vertical; }
     .draft-banner { margin-bottom: 0.8rem; }
+    .draft-blocked { border-color: var(--warn); }
+    .requirement-list { margin-top: 0.45rem; padding-top: 0.45rem; border-top: 1px solid var(--border); }
     .spread { justify-content: space-between; }
     .check-row { display: flex; gap: 0.5rem; align-items: flex-start; }
     .rule-row { display: grid; grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, 0.7fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
     .rule-description { margin-top: -0.25rem; }
-    .rule-value-stack { display: flex; flex-direction: column; gap: 0.3rem; }
+    .rule-subject-stack, .rule-value-stack { display: flex; flex-direction: column; gap: 0.3rem; }
+    .rule-filter { display: flex; flex-direction: column; gap: 0.2rem; color: var(--muted); font-size: 0.72rem; }
     .window-field { display: flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.76rem; white-space: nowrap; }
     .window-input { width: 5rem; padding-block: 0.25rem; }
     .operator { text-align: center; font-size: 0.86rem; color: var(--muted); }
@@ -509,6 +565,9 @@ export class CampaignsAdminComponent implements OnInit {
   readonly aiLoading = signal(false);
   readonly draftSummary = signal('');
   readonly draftWarnings = signal<string[]>([]);
+  readonly draftBlockingIssues = signal<string[]>([]);
+  readonly draftRequirements = signal<CampaignAssistRequirement[]>([]);
+  readonly aiDraftExecutable = signal(true);
   readonly templates = CAMPAIGN_TEMPLATES;
   aiDescription = '';
 
@@ -554,6 +613,9 @@ export class CampaignsAdminComponent implements OnInit {
     this.editingId.set(null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.draftBlockingIssues.set([]);
+    this.draftRequirements.set([]);
+    this.aiDraftExecutable.set(true);
     this.audiencePreview.set(null);
     this.aiDescription = '';
     this.newMode.set('choose');
@@ -563,6 +625,9 @@ export class CampaignsAdminComponent implements OnInit {
     this.form = emptyForm(this.activeBenefits()[0]?.id ?? null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.draftBlockingIssues.set([]);
+    this.draftRequirements.set([]);
+    this.aiDraftExecutable.set(true);
     this.audiencePreview.set(null);
     this.newMode.set(null);
     this.editingId.set(0);
@@ -579,13 +644,16 @@ export class CampaignsAdminComponent implements OnInit {
       priority: template.priority,
       stackable: template.stackable,
       maxRecipients: template.maxRecipients,
-      startsAt: '',
-      endsAt: '',
+      startsAt: template.startsAt ?? '',
+      endsAt: template.endsAt ?? '',
       notification: template.notification,
       message: template.message
     };
     this.draftSummary.set(`Plantilla "${template.title}" aplicada. Revisá el beneficio y los valores antes de guardar.`);
     this.draftWarnings.set([]);
+    this.draftBlockingIssues.set([]);
+    this.draftRequirements.set([]);
+    this.aiDraftExecutable.set(true);
     this.newMode.set(null);
     this.editingId.set(0);
   }
@@ -599,6 +667,9 @@ export class CampaignsAdminComponent implements OnInit {
     this.editingId.set(null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.draftBlockingIssues.set([]);
+    this.draftRequirements.set([]);
+    this.aiDraftExecutable.set(true);
     this.audiencePreview.set(null);
   }
 
@@ -626,6 +697,9 @@ export class CampaignsAdminComponent implements OnInit {
       };
       this.draftSummary.set(result.summary || 'Borrador generado por IA. Revisalo antes de guardar.');
       this.draftWarnings.set(result.warnings ?? []);
+      this.draftBlockingIssues.set(result.blockingIssues ?? []);
+      this.draftRequirements.set(result.requirements ?? []);
+      this.aiDraftExecutable.set(result.executable === true);
       this.newMode.set(null);
       this.editingId.set(0);
     } catch (err) {
@@ -654,6 +728,9 @@ export class CampaignsAdminComponent implements OnInit {
     this.newMode.set(null);
     this.draftSummary.set('');
     this.draftWarnings.set([]);
+    this.draftBlockingIssues.set([]);
+    this.draftRequirements.set([]);
+    this.aiDraftExecutable.set(true);
     this.audiencePreview.set(null);
     this.editingId.set(campaign.id);
   }
@@ -687,11 +764,21 @@ export class CampaignsAdminComponent implements OnInit {
     const capability = this.ruleCapability(rule.field);
     return {
       ...rule,
+      filters: { ...(rule.filters ?? {}) },
       value:
         capability?.valueType === 'datetime' && typeof rule.value === 'string'
           ? localDate(rule.value)
           : rule.value
     };
+  }
+
+  ruleFilterValue(rule: CampaignRule, key: string): string {
+    return rule.filters?.[key] ?? '';
+  }
+
+  setRuleFilter(rule: CampaignRule, key: string, value: string): void {
+    rule.filters = { ...(rule.filters ?? {}), [key]: value };
+    this.audiencePreview.set(null);
   }
 
   private ruleForApi(rule: CampaignRule): CampaignRule {
@@ -702,8 +789,12 @@ export class CampaignsAdminComponent implements OnInit {
     } else if (capability?.valueType === 'datetime' && value) {
       value = new Date(String(value)).toISOString();
     }
+    const filters = Object.fromEntries(
+      Object.entries(rule.filters ?? {}).filter(([, filterValue]) => String(filterValue).trim() !== '')
+    );
     return {
       ...rule,
+      filters,
       value,
       windowDays: capability?.requiresWindow ? Number(rule.windowDays) : null
     };
@@ -713,9 +804,17 @@ export class CampaignsAdminComponent implements OnInit {
     const capability = this.ruleCapability(rule.field);
     rule.operator = capability?.operators[0] ?? 'EQ';
     if (!capability) {
+      rule.subject = null;
+      rule.filters = {};
       rule.value = '';
       return;
     }
+    rule.subject = capability.subjectOptions[0]?.value ?? null;
+    rule.filters = Object.fromEntries(
+      capability.filters
+        .filter((filter) => filter.required)
+        .map((filter) => [filter.key, filter.options[0]?.value ?? ''])
+    );
     if (capability.valueType === 'boolean') {
       rule.value = false;
     } else if (capability.valueType === 'integer' || capability.valueType === 'number') {
@@ -731,6 +830,7 @@ export class CampaignsAdminComponent implements OnInit {
 
   canSave(): boolean {
     return (
+      this.aiDraftExecutable() &&
       !!this.capabilities() &&
       !!this.form.name.trim() &&
       !!this.form.benefitId &&
@@ -738,7 +838,12 @@ export class CampaignsAdminComponent implements OnInit {
       this.form.priority > 0 &&
       this.form.rules.every((rule) => {
         const capability = this.ruleCapability(rule.field);
-        return !capability?.requiresWindow || Number(rule.windowDays) > 0;
+        const subjectOk = !capability?.subjectOptions.length || !!rule.subject;
+        const filtersOk = (capability?.filters ?? []).every(
+          (filter) => !filter.required || !!rule.filters?.[filter.key]
+        );
+        const windowOk = !capability?.requiresWindow || Number(rule.windowDays) > 0;
+        return subjectOk && filtersOk && windowOk;
       })
     );
   }

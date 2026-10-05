@@ -6,11 +6,24 @@ from conftest import login
 from sqlalchemy import select
 
 from app.accounts.models import Account
+from app.ai.models import AIConnection, AIConnectionOwnerType, AIUsageEvent
 from app.campaigns.models import CampaignGrant
+from app.curriculum.service import get_level
 from app.db import SessionLocal
-from app.learning.models import ClassSession, ClassSessionStatus, SessionKind
+from app.exams.models import LevelCertificate
+from app.learning.models import (
+    Attempt,
+    ClassSession,
+    ClassSessionStatus,
+    EvaluationMode,
+    Exercise,
+    PresentationMode,
+    ResponseMode,
+    SessionKind,
+)
+from app.progress.service import recompute_skill
 from app.study_profiles.models import AccountStudyProfile
-from app.subscriptions.models import Subscription, SubscriptionStatus
+from app.subscriptions.models import Subscription, SubscriptionOrigin, SubscriptionStatus
 
 API = "/api/v1"
 OWNER = "owner@example.com"
@@ -61,8 +74,57 @@ def test_campaign_capabilities_are_single_owner_catalog(client) -> None:
     rules = {rule["key"]: rule for rule in body["rules"]}
     assert rules["DAYS_SINCE_LAST_ACTIVITY"]["operators"] == ["EQ", "GTE", "LTE"]
     assert rules["DAYS_SINCE_SERVICE_EXPIRED"]["valueType"] == "integer"
+    assert rules["DAYS_UNTIL_SERVICE_EXPIRES"]["valueType"] == "integer"
+    assert rules["DOCUMENT_COUNTRY"]["valueType"] == "string"
+    assert rules["SUBSCRIPTION_ORIGIN"]["valueType"] == "enum"
+    assert {option["value"] for option in rules["SUBSCRIPTION_ORIGIN"]["options"]} == {
+        "MANUAL",
+        "CAMPAIGN",
+        "INVITATION",
+        "PAYMENT",
+    }
     assert rules["NEVER_STUDIED"]["valueType"] == "boolean"
     assert rules["CURRENT_LEVEL"]["valueType"] == "enum"
+    assert rules["CERTIFICATE_ISSUED"]["valueType"] == "enum"
+    assert {option["value"] for option in rules["CERTIFICATE_ISSUED"]["options"]} == {
+        "A1",
+        "A2",
+        "B1",
+        "B2",
+        "C1",
+        "C2",
+    }
+    assert rules["EXAMS_FAILED"]["requiresWindow"] is True
+    assert rules["CLASSES_GENERATED"]["requiresWindow"] is True
+    assert rules["CLASSES_STARTED"]["requiresWindow"] is True
+    assert rules["CLASSES_GENERATION_FAILED"]["requiresWindow"] is True
+    assert rules["CLASSES_NOT_COMPLETED"]["requiresWindow"] is True
+    assert rules["LAST_ENDED_STREAK_DAYS"]["valueType"] == "integer"
+    assert rules["DAYS_SINCE_STREAK_BROKEN"]["valueType"] == "integer"
+    assert rules["SKILL_STATUS"]["subjectLabel"] == "Skill"
+    assert rules["SKILL_STATUS"]["subjectOptions"]
+    assert rules["ABILITY_STATUS"]["subjectLabel"] == "Habilidad"
+    assert {option["value"] for option in rules["ABILITY_STATUS"]["subjectOptions"]} >= {
+        "WRITING",
+        "SPEAKING",
+        "LISTENING",
+    }
+    assert rules["APPEALS_COUNT"]["requiresWindow"] is True
+    assert rules["SPEAKING_RESPONSES"]["requiresWindow"] is False
+    assert rules["LISTENING_RESPONSES"]["requiresWindow"] is False
+    assert rules["AI_FAILURES_COUNT"]["requiresWindow"] is True
+    ai_filters = {item["key"]: item for item in rules["AI_FAILURES_COUNT"]["filters"]}
+    assert {option["value"] for option in ai_filters["ownerType"]["options"]} >= {
+        "ACCOUNT",
+        "PLATFORM",
+    }
+    assert {option["value"] for option in ai_filters["errorCode"]["options"]} >= {
+        "CREDENTIAL_OR_QUOTA",
+        "INVALID_CREDENTIALS",
+        "QUOTA_EXCEEDED",
+    }
+    assert ai_filters["operation"]["valueType"] == "string"
+    assert rules["DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS"]["valueType"] == "integer"
 
     actions = {action["key"]: action for action in body["actions"]}
     assert actions["GRANT_BENEFIT"]["available"] is True
@@ -184,6 +246,842 @@ def test_preview_can_segment_by_expired_service_without_confusing_payment(client
     )
     assert response.status_code == 200, response.text
     assert response.json()["eligibleCount"] == 1
+
+
+def test_preview_can_segment_by_days_until_active_service_expires(client) -> None:
+    login(client, "expiring-service@example.com")
+    owner = _owner(client)
+    services = client.get(f"{API}/platform/services", headers=owner).json()
+    plan = next(row for row in services if row["code"] == "INDIVIDUAL_PLATFORM")
+    benefit_id = _welcome_benefit_id(client, owner)
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "expiring-service@example.com"))
+        assert account is not None
+        now = datetime.now(timezone.utc)
+        db.add(
+            Subscription(
+                plan_id=plan["id"],
+                account_id=account.id,
+                status=SubscriptionStatus.ACTIVE,
+                origin=SubscriptionOrigin.MANUAL,
+                started_at=now - timedelta(days=10),
+                expires_at=now + timedelta(days=6, hours=12),
+            )
+        )
+        db.commit()
+
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "DAYS_UNTIL_SERVICE_EXPIRES", "operator": "LTE", "value": 7}],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["field"] == "DAYS_UNTIL_SERVICE_EXPIRES"
+    assert result["actual"] == 7
+    assert result["matched"] is True
+
+
+def test_preview_can_segment_by_document_country(client) -> None:
+    login(client, "argentina-document@example.com")
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "argentina-document@example.com"))
+        assert account is not None
+        account.document_country = "AR"
+        db.commit()
+
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "DOCUMENT_COUNTRY", "operator": "EQ", "value": "ar"}],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] == "AR"
+    assert result["expected"] == "AR"
+    assert result["matched"] is True
+
+    invalid = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "DOCUMENT_COUNTRY", "operator": "EQ", "value": "ARG"}],
+    )
+    assert invalid.status_code == 422
+
+
+def test_preview_can_segment_by_active_subscription_origin(client) -> None:
+    login(client, "invitation-origin@example.com")
+    owner = _owner(client)
+    services = client.get(f"{API}/platform/services", headers=owner).json()
+    plan = next(row for row in services if row["code"] == "INDIVIDUAL_PLATFORM")
+    benefit_id = _welcome_benefit_id(client, owner)
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "invitation-origin@example.com"))
+        assert account is not None
+        now = datetime.now(timezone.utc)
+        db.add(
+            Subscription(
+                plan_id=plan["id"],
+                account_id=account.id,
+                status=SubscriptionStatus.ACTIVE,
+                origin=SubscriptionOrigin.INVITATION,
+                started_at=now - timedelta(days=3),
+                expires_at=now + timedelta(days=20),
+            )
+        )
+        db.commit()
+
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "SUBSCRIPTION_ORIGIN", "operator": "EQ", "value": "INVITATION"}],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] == "INVITATION"
+    assert result["matched"] is True
+
+
+def test_preview_can_segment_by_real_level_certificate(client) -> None:
+    user = login(client, "certificate-campaign@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "certificate-campaign@example.com"))
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert account is not None and link is not None
+        now = datetime.now(timezone.utc)
+        exam = ClassSession(
+            study_profile_id=link.study_profile_id,
+            account_id=account.id,
+            status=ClassSessionStatus.COMPLETED,
+            kind=SessionKind.EXAM,
+            target_level="A1",
+            score=88,
+            exam_result={"passed": True},
+            evaluated_at=now - timedelta(days=1),
+        )
+        db.add(exam)
+        db.flush()
+        db.add(
+            LevelCertificate(
+                code="LI-A1-CAMPAIGN-TEST",
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                exam_session_id=exam.id,
+                holder_name=account.display_name or "Alumno",
+                level="A1",
+                score=88,
+                area_scores={},
+                issued_at=now - timedelta(days=1),
+            )
+        )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "CERTIFICATE_ISSUED", "operator": "EQ", "value": "A1"}],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] == "A1"
+    assert result["expected"] == "A1"
+    assert result["matched"] is True
+
+    other_level = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "CERTIFICATE_ISSUED", "operator": "EQ", "value": "B1"}],
+    )
+    assert other_level.status_code == 200, other_level.text
+    assert other_level.json()["eligibleCount"] == 0
+
+    invalid = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "CERTIFICATE_ISSUED", "operator": "EQ", "value": "A7"}],
+    )
+    assert invalid.status_code == 422
+
+
+def test_preview_can_segment_by_failed_exam_count(client) -> None:
+    user = login(client, "exam-metrics@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "exam-metrics@example.com"))
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert account is not None and link is not None
+        now = datetime.now(timezone.utc)
+        for index, passed in enumerate((False, False, True), start=1):
+            db.add(
+                ClassSession(
+                    study_profile_id=link.study_profile_id,
+                    account_id=account.id,
+                    status=ClassSessionStatus.COMPLETED,
+                    kind=SessionKind.EXAM,
+                    target_level="A1",
+                    score=55 if not passed else 85,
+                    exam_result={"passed": passed},
+                    evaluated_at=now - timedelta(days=index * 3),
+                )
+            )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {"field": "EXAMS_COMPLETED", "operator": "GTE", "value": 3, "windowDays": 30},
+            {"field": "EXAMS_FAILED", "operator": "GTE", "value": 2, "windowDays": 30},
+            {"field": "EXAMS_PASSED", "operator": "EQ", "value": 1, "windowDays": 30},
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = {row["field"]: row["actual"] for row in body["sample"][0]["rules"]}
+    assert values["EXAMS_COMPLETED"] == 3
+    assert values["EXAMS_FAILED"] == 2
+    assert values["EXAMS_PASSED"] == 1
+
+
+def test_preview_can_segment_by_class_lifecycle_metrics(client) -> None:
+    user = login(client, "class-lifecycle@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "class-lifecycle@example.com"))
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert account is not None and link is not None
+        now = datetime.now(timezone.utc)
+
+        rows = [
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.COMPLETED,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=1),
+                generated_at=now - timedelta(days=1),
+                submitted_at=now - timedelta(days=1),
+                evaluated_at=now - timedelta(days=1),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.IN_PROGRESS,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=2),
+                generated_at=now - timedelta(days=2),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.READY,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=3),
+                generated_at=now - timedelta(days=3),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.READY,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=4),
+                generated_at=now - timedelta(days=4),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.READY,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=5),
+                generated_at=now - timedelta(days=5),
+            ),
+            ClassSession(
+                study_profile_id=link.study_profile_id,
+                account_id=account.id,
+                status=ClassSessionStatus.GENERATION_FAILED,
+                kind=SessionKind.CLASS,
+                target_level="A1",
+                created_at=now - timedelta(days=2),
+                generation_error="fallo simulado",
+            ),
+        ]
+        db.add_all(rows)
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {"field": "CLASSES_GENERATED", "operator": "GTE", "value": 5, "windowDays": 7},
+            {"field": "CLASSES_STARTED", "operator": "GTE", "value": 2, "windowDays": 7},
+            {
+                "field": "CLASSES_GENERATION_FAILED",
+                "operator": "GTE",
+                "value": 1,
+                "windowDays": 7,
+            },
+            {"field": "CLASSES_NOT_COMPLETED", "operator": "GTE", "value": 4, "windowDays": 7},
+            {"field": "CLASSES_COMPLETED", "operator": "LTE", "value": 1, "windowDays": 7},
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = {row["field"]: row["actual"] for row in body["sample"][0]["rules"]}
+    assert values["CLASSES_GENERATED"] == 5
+    assert values["CLASSES_STARTED"] == 2
+    assert values["CLASSES_GENERATION_FAILED"] == 1
+    assert values["CLASSES_NOT_COMPLETED"] == 4
+    assert values["CLASSES_COMPLETED"] == 1
+
+
+def test_preview_uses_real_broken_streak_history(client) -> None:
+    user = login(client, "broken-streak@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+    _add_completed_classes(
+        "broken-streak@example.com",
+        day_offsets=[4, 5, 6, 7],
+        classes_per_day=[1, 1, 1, 1],
+    )
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {"field": "STUDY_STREAK_DAYS", "operator": "EQ", "value": 0},
+            {"field": "LAST_ENDED_STREAK_DAYS", "operator": "GTE", "value": 4},
+            {"field": "DAYS_SINCE_STREAK_BROKEN", "operator": "GTE", "value": 2},
+            {"field": "DAYS_SINCE_STREAK_BROKEN", "operator": "LTE", "value": 5},
+            {"field": "DAYS_SINCE_LAST_ACTIVITY", "operator": "EQ", "value": 4},
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = [row for row in body["sample"][0]["rules"]]
+    by_field = {}
+    for row in values:
+        by_field.setdefault(row["field"], []).append(row["actual"])
+    assert by_field["STUDY_STREAK_DAYS"] == [0]
+    assert by_field["LAST_ENDED_STREAK_DAYS"] == [4]
+    assert by_field["DAYS_SINCE_STREAK_BROKEN"] == [3, 3]
+    assert by_field["DAYS_SINCE_LAST_ACTIVITY"] == [4]
+
+
+def test_preview_can_segment_by_skill_and_ability_progress(client) -> None:
+    user = login(client, "progress-campaign@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+
+    curriculum = get_level("A1")
+    assert curriculum is not None
+    writing_skill = next(skill for skill in curriculum.skills if skill.area_key == "writing")
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "progress-campaign@example.com"))
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert account is not None and link is not None
+        now = datetime.now(timezone.utc)
+        session = ClassSession(
+            study_profile_id=link.study_profile_id,
+            account_id=account.id,
+            status=ClassSessionStatus.COMPLETED,
+            kind=SessionKind.CLASS,
+            target_level="A1",
+            evaluated_at=now,
+        )
+        db.add(session)
+        db.flush()
+        exercise = Exercise(
+            class_session_id=session.id,
+            study_profile_id=link.study_profile_id,
+            position=0,
+            level="A1",
+            area="writing",
+            skill_key=writing_skill.key,
+            exercise_type="short_writing",
+            prompt="Write a short answer.",
+            evaluation_mode=EvaluationMode.AI,
+        )
+        db.add(exercise)
+        db.flush()
+        for number, score in enumerate((90, 90, 20, 20), start=1):
+            db.add(
+                Attempt(
+                    exercise_id=exercise.id,
+                    study_profile_id=link.study_profile_id,
+                    account_id=account.id,
+                    attempt_number=number,
+                    raw_answer=f"answer {number}",
+                    normalized_answer=f"answer {number}",
+                    response_mode=ResponseMode.WRITE,
+                    score=score,
+                    evaluated_at=now - timedelta(days=5 - number),
+                )
+            )
+        db.flush()
+        recompute_skill(
+            db,
+            study_profile_id=link.study_profile_id,
+            skill_key=writing_skill.key,
+        )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "SKILL_STATUS",
+                "subject": writing_skill.key,
+                "operator": "EQ",
+                "value": "NEEDS_REVIEW",
+            },
+            {
+                "field": "SKILL_SCORE",
+                "subject": writing_skill.key,
+                "operator": "LTE",
+                "value": 60,
+            },
+            {
+                "field": "SKILL_TREND",
+                "subject": writing_skill.key,
+                "operator": "EQ",
+                "value": "DOWN",
+            },
+            {
+                "field": "ABILITY_STATUS",
+                "subject": "WRITING",
+                "operator": "EQ",
+                "value": "NEEDS_REVIEW",
+            },
+            {
+                "field": "ABILITY_SCORE",
+                "subject": "WRITING",
+                "operator": "LTE",
+                "value": 60,
+            },
+            {
+                "field": "ABILITY_TREND",
+                "subject": "WRITING",
+                "operator": "EQ",
+                "value": "DOWN",
+            },
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    rows = body["sample"][0]["rules"]
+    assert all(row["matched"] for row in rows)
+    assert {row.get("subject") for row in rows} == {writing_skill.key, "WRITING"}
+
+    invalid = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "ABILITY_STATUS", "operator": "EQ", "value": "NEEDS_REVIEW"}],
+    )
+    assert invalid.status_code == 422
+    assert "seleccionar" in invalid.text.lower()
+
+
+def test_preview_can_segment_by_recent_appeals(client) -> None:
+    user = login(client, "appeals-campaign@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+
+    curriculum = get_level("A1")
+    assert curriculum is not None
+    skill = curriculum.skills[0]
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "appeals-campaign@example.com"))
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert account is not None and link is not None
+        now = datetime.now(timezone.utc)
+        session = ClassSession(
+            study_profile_id=link.study_profile_id,
+            account_id=account.id,
+            status=ClassSessionStatus.COMPLETED,
+            kind=SessionKind.CLASS,
+            target_level="A1",
+            evaluated_at=now,
+        )
+        db.add(session)
+        db.flush()
+        exercise = Exercise(
+            class_session_id=session.id,
+            study_profile_id=link.study_profile_id,
+            position=0,
+            level="A1",
+            area=skill.area_key,
+            skill_key=skill.key,
+            exercise_type="fill_blank",
+            prompt="Complete.",
+            evaluation_mode=EvaluationMode.HYBRID,
+        )
+        db.add(exercise)
+        db.flush()
+        for number in range(1, 4):
+            db.add(
+                Attempt(
+                    exercise_id=exercise.id,
+                    study_profile_id=link.study_profile_id,
+                    account_id=account.id,
+                    attempt_number=number,
+                    raw_answer="x",
+                    normalized_answer="x",
+                    score=50,
+                    appealed_at=now - timedelta(days=number),
+                    evaluated_at=now - timedelta(days=number),
+                )
+            )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [{"field": "APPEALS_COUNT", "operator": "GTE", "value": 3, "windowDays": 14}],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] == 3
+    assert result["matched"] is True
+
+
+def test_preview_can_segment_by_speaking_and_listening_usage(client) -> None:
+    user = login(client, "modality-campaign@example.com")
+    assert client.put(f"{API}/me/level", headers=user, json={"level": "A1"}).status_code == 200
+    _add_completed_classes(
+        "modality-campaign@example.com",
+        day_offsets=list(range(20)),
+        classes_per_day=[1] * 20,
+    )
+
+    curriculum = get_level("A1")
+    assert curriculum is not None
+    skill = curriculum.skills[0]
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "modality-campaign@example.com"))
+        link = db.scalar(
+            select(AccountStudyProfile).where(AccountStudyProfile.account_id == account.id)
+        )
+        assert account is not None and link is not None
+        now = datetime.now(timezone.utc)
+        session = ClassSession(
+            study_profile_id=link.study_profile_id,
+            account_id=account.id,
+            status=ClassSessionStatus.COMPLETED,
+            kind=SessionKind.CLASS,
+            target_level="A1",
+            evaluated_at=now,
+        )
+        db.add(session)
+        db.flush()
+        for position in range(2):
+            exercise = Exercise(
+                class_session_id=session.id,
+                study_profile_id=link.study_profile_id,
+                position=position,
+                level="A1",
+                area=skill.area_key,
+                skill_key=skill.key,
+                exercise_type="multiple_choice",
+                prompt=f"Listen {position}",
+                presentation_mode=PresentationMode.LISTEN,
+                response_mode=ResponseMode.SELECT,
+                evaluation_mode=EvaluationMode.DETERMINISTIC,
+            )
+            db.add(exercise)
+            db.flush()
+            db.add(
+                Attempt(
+                    exercise_id=exercise.id,
+                    study_profile_id=link.study_profile_id,
+                    account_id=account.id,
+                    attempt_number=1,
+                    raw_answer="a",
+                    normalized_answer="a",
+                    response_mode=ResponseMode.SELECT,
+                    score=100,
+                    evaluated_at=now,
+                )
+            )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {"field": "CLASSES_COMPLETED", "operator": "GTE", "value": 20, "windowDays": 30},
+            {"field": "SPEAKING_RESPONSES", "operator": "EQ", "value": 0},
+            {"field": "LISTENING_RESPONSES", "operator": "GTE", "value": 2},
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    values = {row["field"]: row["actual"] for row in body["sample"][0]["rules"]}
+    assert values["SPEAKING_RESPONSES"] == 0
+    assert values["LISTENING_RESPONSES"] == 2
+
+
+def test_preview_counts_ai_failures_with_compound_filters(client) -> None:
+    login(client, "ai-failures-campaign@example.com")
+    now = datetime.now(timezone.utc)
+
+    with SessionLocal() as db:
+        account = db.scalar(
+            select(Account).where(Account.email == "ai-failures-campaign@example.com")
+        )
+        assert account is not None
+        selected = [
+            ("INVALID_CREDENTIALS", "generate_class"),
+            ("INVALID_CREDENTIALS", "generate_class"),
+            ("QUOTA_EXCEEDED", "generate_class"),
+        ]
+        excluded = [
+            (AIConnectionOwnerType.ACCOUNT, "NETWORK_ERROR", "generate_class"),
+            (AIConnectionOwnerType.ACCOUNT, "QUOTA_EXCEEDED", "transcribe_audio"),
+            (AIConnectionOwnerType.PLATFORM, "INVALID_CREDENTIALS", "generate_class"),
+        ]
+        for error_code, operation in selected:
+            db.add(
+                AIUsageEvent(
+                    owner_type=AIConnectionOwnerType.ACCOUNT,
+                    provider="MOCK",
+                    account_id=account.id,
+                    operation=operation,
+                    success=False,
+                    error_code=error_code,
+                    created_at=now - timedelta(days=1),
+                )
+            )
+        for owner_type, error_code, operation in excluded:
+            db.add(
+                AIUsageEvent(
+                    owner_type=owner_type,
+                    provider="MOCK",
+                    account_id=account.id,
+                    operation=operation,
+                    success=False,
+                    error_code=error_code,
+                    created_at=now - timedelta(days=1),
+                )
+            )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "AI_FAILURES_COUNT",
+                "filters": {
+                    "ownerType": "ACCOUNT",
+                    "errorCode": "CREDENTIAL_OR_QUOTA",
+                    "operation": "generate_class",
+                },
+                "operator": "GTE",
+                "value": 3,
+                "windowDays": 7,
+            }
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] == 3
+    assert result["matched"] is True
+    assert result["filters"] == {
+        "ownerType": "ACCOUNT",
+        "errorCode": "CREDENTIAL_OR_QUOTA",
+        "operation": "generate_class",
+    }
+
+    invalid = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "AI_FAILURES_COUNT",
+                "filters": {"ownerType": "BYOK"},
+                "operator": "GTE",
+                "value": 1,
+                "windowDays": 7,
+            }
+        ],
+    )
+    assert invalid.status_code == 422
+    assert "filtro" in invalid.text.lower()
+
+
+def test_preview_detects_byok_configured_but_never_used_successfully(client) -> None:
+    login(client, "byok-never-activated@example.com")
+    now = datetime.now(timezone.utc)
+
+    with SessionLocal() as db:
+        account = db.scalar(
+            select(Account).where(Account.email == "byok-never-activated@example.com")
+        )
+        assert account is not None
+        connection = AIConnection(
+            owner_type=AIConnectionOwnerType.ACCOUNT,
+            owner_id=account.id,
+            provider="MOCK",
+            name="BYOK sin activar",
+            model="mock",
+            active=True,
+            created_at=now - timedelta(days=8),
+        )
+        db.add(connection)
+        db.flush()
+        # Un health check exitoso demuestra que la key respondió, pero no que el alumno
+        # haya logrado usarla en una operación real.
+        db.add(
+            AIUsageEvent(
+                connection_id=connection.id,
+                owner_type=AIConnectionOwnerType.ACCOUNT,
+                provider="MOCK",
+                model="mock",
+                account_id=account.id,
+                operation="health_check",
+                success=True,
+                created_at=now - timedelta(days=7),
+            )
+        )
+        db.commit()
+
+    owner = _owner(client)
+    benefit_id = _welcome_benefit_id(client, owner)
+    response = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS",
+                "operator": "GTE",
+                "value": 7,
+            }
+        ],
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["eligibleCount"] == 1
+    result = body["sample"][0]["rules"][0]
+    assert result["actual"] >= 7
+    assert result["matched"] is True
+
+    with SessionLocal() as db:
+        account = db.scalar(
+            select(Account).where(Account.email == "byok-never-activated@example.com")
+        )
+        connection = db.scalar(
+            select(AIConnection).where(
+                AIConnection.owner_type == AIConnectionOwnerType.ACCOUNT,
+                AIConnection.owner_id == account.id,
+            )
+        )
+        assert account is not None and connection is not None
+        db.add(
+            AIUsageEvent(
+                connection_id=connection.id,
+                owner_type=AIConnectionOwnerType.ACCOUNT,
+                provider="MOCK",
+                model="mock",
+                account_id=account.id,
+                operation="generate_class",
+                success=True,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+        db.commit()
+
+    after_success = _preview(
+        client,
+        owner,
+        benefit_id,
+        [
+            {
+                "field": "DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS",
+                "operator": "GTE",
+                "value": 7,
+            }
+        ],
+    )
+    assert after_success.status_code == 200, after_success.text
+    assert after_success.json()["eligibleCount"] == 0
+    result = after_success.json()["sample"][0]["rules"][0]
+    assert result["actual"] is None
+    assert result["matched"] is False
 
 
 def test_unavailable_action_is_rejected_instead_of_faked(client) -> None:
@@ -364,6 +1262,8 @@ def test_campaign_assist_understands_daily_classes_and_keeps_discount_as_warning
     warnings = " ".join(body["warnings"]).lower()
     assert "30 días" in warnings
     assert "descuento" in warnings or "precio" in warnings
+    assert body["executable"] is False
+    assert body["blockingIssues"]
 
 
 
@@ -688,14 +1588,16 @@ def test_fifteen_fidelity_campaigns_are_simulated_and_supported_ones_can_be_crea
                 "name": scenario["name"],
                 "draft": draft,
                 "warnings": body["warnings"],
+                "blockingIssues": body["blockingIssues"],
             }
         )
+        assert body["executable"] is scenario["executable"], (scenario["name"], body)
 
         if not scenario["executable"]:
             warning_text = " ".join(body["warnings"]).lower()
             assert scenario["warning"] in warning_text, (scenario["name"], body)
-            assert draft["benefitId"] is None, (
-                f"{scenario['name']} no debe quedar listo para guardar automáticamente"
+            assert body["blockingIssues"], (
+                f"{scenario['name']} debe quedar explícitamente bloqueada"
             )
             continue
 

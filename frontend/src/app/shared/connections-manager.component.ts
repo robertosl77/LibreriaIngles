@@ -49,7 +49,7 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
       } @else {
         <ul class="list">
           @for (c of connections(); track c.id) {
-            <li class="list-item conn">
+            <li class="list-item conn" [class.focused]="focusConnectionId() === c.id" [attr.id]="'ai-connection-' + c.id">
               <div class="conn-main">
                 <div class="row">
                   <strong>{{ c.name }}</strong>
@@ -224,6 +224,7 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
     :host { display: contents; }
     .note { margin: -0.4rem 0 0.8rem; }
     .conn { align-items: flex-start; flex-wrap: wrap; }
+    .conn.focused { background: var(--warn-bg); border-radius: 0.65rem; padding-inline: 0.7rem; }
     .conn-main { display: flex; flex-direction: column; gap: 0.35rem; flex: 1; min-width: 240px; }
     .conn-actions { justify-content: flex-end; }
     .prio { display: flex; align-items: center; gap: 0.4rem; }
@@ -257,6 +258,8 @@ export class ConnectionsManagerComponent implements OnInit {
   readonly note = input<string | null>(null);
   /** true: el contenedor visual/título lo provee una tarjeta compartida externa. */
   readonly embedded = input(false);
+  /** Conexión a resaltar al llegar desde Consumo. */
+  readonly focusConnectionId = input<number | null>(null);
   readonly changed = output<void>();
 
   private readonly api = inject(ApiService);
@@ -435,10 +438,11 @@ export class ConnectionsManagerComponent implements OnInit {
   }
 
   async saveEdit(c: AiConnection): Promise<void> {
-    const body: { name?: string; model?: string; apiKey?: string } = {};
-    if (this.edit.name.trim() !== c.name) {
-      body.name = this.edit.name.trim();
-    }
+    // El nombre se envía siempre: así una conexión heredada con nombre duplicado
+    // no puede "validarse" silenciosamente al guardar una edición.
+    const body: { name?: string; model?: string; apiKey?: string } = {
+      name: this.edit.name.trim()
+    };
     if (this.edit.model.trim() !== c.model) {
       body.model = this.edit.model.trim();
     }
@@ -488,11 +492,25 @@ export class ConnectionsManagerComponent implements OnInit {
       this.connections.set(list);
       this.form.priority = list.length ? Math.max(...list.map((c) => c.priority)) + 1 : 1;
       await this.auth.refreshMe();
+      this.focusRequestedConnection();
     } catch (err) {
       this.toast.error(errorMessage(err));
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private focusRequestedConnection(): void {
+    const id = this.focusConnectionId();
+    if (id === null || !this.connections().some((connection) => connection.id === id)) {
+      return;
+    }
+    setTimeout(() => {
+      document.getElementById(`ai-connection-${id}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    });
   }
 
   private async afterChange(): Promise<void> {
