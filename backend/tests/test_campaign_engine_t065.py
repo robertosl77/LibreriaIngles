@@ -1,6 +1,7 @@
 """T-065: motor de campañas extensible, segmentación y preview."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from conftest import login
 from sqlalchemy import select
@@ -1214,6 +1215,255 @@ def test_metric_rule_requires_explicit_window(client) -> None:
     )
     assert response.status_code == 422
     assert "ventana" in response.text.lower()
+
+
+def test_campaign_assist_generic_benefit_is_form_selection_not_semantic_blocker(
+    client, monkeypatch
+) -> None:
+    import app.platform.campaigns_api as campaigns_api
+
+    owner = _owner(client)
+    _welcome_benefit_id(client, owner)
+
+    fake = {
+        "draft": {
+            "name": "Argentina · invitación · próximo vencimiento",
+            "benefitId": None,
+            "action": "GRANT_BENEFIT",
+            "actionConfig": {},
+            "trigger": "LOGIN",
+            "rules": [
+                {"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"},
+                {"field": "DOCUMENT_COUNTRY", "operator": "EQ", "value": "AR"},
+                {"field": "SUBSCRIPTION_ORIGIN", "operator": "EQ", "value": "INVITATION"},
+                {"field": "DAYS_UNTIL_SERVICE_EXPIRES", "operator": "LTE", "value": 7},
+            ],
+            "priority": 100,
+            "stackable": False,
+            "maxRecipients": None,
+            "startsAt": None,
+            "endsAt": None,
+            "notification": "IN_APP",
+            "message": None,
+        },
+        "requirements": [
+            {
+                "text": "Usuarios personales",
+                "kind": "RULE",
+                "status": "REPRESENTED",
+                "capability": "ACCOUNT_TYPE",
+            },
+            {
+                "text": "Documento de Argentina",
+                "kind": "RULE",
+                "status": "REPRESENTED",
+                "capability": "DOCUMENT_COUNTRY",
+            },
+            {
+                "text": "Servicio actual mediante invitación",
+                "kind": "RULE",
+                "status": "REPRESENTED",
+                "capability": "SUBSCRIPTION_ORIGIN",
+            },
+            {
+                "text": "Servicio vence dentro de 7 días",
+                "kind": "RULE",
+                "status": "REPRESENTED",
+                "capability": "DAYS_UNTIL_SERVICE_EXPIRES",
+            },
+            {
+                "text": "Ejecutar al ingresar",
+                "kind": "TRIGGER",
+                "status": "REPRESENTED",
+                "capability": "LOGIN",
+            },
+            {
+                "text": "Dar un beneficio",
+                "kind": "ACTION",
+                "status": "REPRESENTED",
+                "capability": "GRANT_BENEFIT",
+            },
+            {
+                "text": "Beneficio a otorgar",
+                "kind": "BENEFIT",
+                "status": "UNSUPPORTED",
+                "capability": None,
+            },
+        ],
+        "warnings": [],
+        "summary": "Borrador representable; falta elegir el beneficio en el formulario.",
+    }
+
+    monkeypatch.setattr(
+        campaigns_api,
+        "run_platform_json_task",
+        lambda *args, **kwargs: SimpleNamespace(data=fake),
+    )
+
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={
+            "description": (
+                "Quiero dar un beneficio a usuarios personales cuyo documento sea de Argentina, "
+                "que hayan obtenido su servicio actual mediante una invitación y cuyo servicio "
+                "venza dentro de 7 días o menos. Ejecutarla cuando vuelvan a ingresar."
+            )
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["draft"]["benefitId"] is None
+    assert body["draft"]["action"] == "GRANT_BENEFIT"
+    assert body["executable"] is True
+    assert body["blockingIssues"] == []
+    benefit_requirement = next(
+        item for item in body["requirements"] if item["kind"] == "BENEFIT"
+    )
+    assert benefit_requirement["status"] == "REPRESENTED"
+    assert benefit_requirement["verified"] is True
+
+
+def test_campaign_assist_specific_unresolved_benefit_remains_blocking(
+    client, monkeypatch
+) -> None:
+    import app.platform.campaigns_api as campaigns_api
+
+    owner = _owner(client)
+    _welcome_benefit_id(client, owner)
+
+    fake = {
+        "draft": {
+            "name": "Beneficio concreto",
+            "benefitId": None,
+            "action": "GRANT_BENEFIT",
+            "actionConfig": {},
+            "trigger": "LOGIN",
+            "rules": [{"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"}],
+            "priority": 100,
+            "stackable": False,
+            "maxRecipients": None,
+            "startsAt": None,
+            "endsAt": None,
+            "notification": "IN_APP",
+            "message": None,
+        },
+        "requirements": [
+            {
+                "text": "Usuarios personales",
+                "kind": "RULE",
+                "status": "REPRESENTED",
+                "capability": "ACCOUNT_TYPE",
+            },
+            {
+                "text": "Ejecutar al ingresar",
+                "kind": "TRIGGER",
+                "status": "REPRESENTED",
+                "capability": "LOGIN",
+            },
+            {
+                "text": "Otorgar beneficio",
+                "kind": "ACTION",
+                "status": "REPRESENTED",
+                "capability": "GRANT_BENEFIT",
+            },
+            {
+                "text": "Beneficio Plataforma 7 días",
+                "kind": "BENEFIT",
+                "status": "UNSUPPORTED",
+                "capability": None,
+            },
+        ],
+        "warnings": [],
+        "summary": "No se pudo resolver el beneficio concreto.",
+    }
+
+    monkeypatch.setattr(
+        campaigns_api,
+        "run_platform_json_task",
+        lambda *args, **kwargs: SimpleNamespace(data=fake),
+    )
+
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={
+            "description": (
+                "Quiero dar exactamente el beneficio Plataforma 7 días "
+                "a usuarios personales cuando ingresen."
+            )
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["executable"] is False
+    assert any("Beneficio Plataforma 7 días" in issue for issue in body["blockingIssues"])
+
+
+def test_campaign_assist_discount_stays_unsupported_instead_of_becoming_benefit(
+    client, monkeypatch
+) -> None:
+    import app.platform.campaigns_api as campaigns_api
+
+    owner = _owner(client)
+    _welcome_benefit_id(client, owner)
+
+    fake = {
+        "draft": {
+            "name": "Descuento inválido",
+            "benefitId": None,
+            "action": "GRANT_BENEFIT",
+            "actionConfig": {},
+            "trigger": "LOGIN",
+            "rules": [{"field": "ACCOUNT_TYPE", "operator": "EQ", "value": "PERSONAL"}],
+            "priority": 100,
+            "stackable": False,
+            "maxRecipients": None,
+            "startsAt": None,
+            "endsAt": None,
+            "notification": "IN_APP",
+            "message": None,
+        },
+        "requirements": [
+            {
+                "text": "Usuarios personales",
+                "kind": "RULE",
+                "status": "REPRESENTED",
+                "capability": "ACCOUNT_TYPE",
+            },
+            {
+                "text": "Ejecutar al ingresar",
+                "kind": "TRIGGER",
+                "status": "REPRESENTED",
+                "capability": "LOGIN",
+            },
+            {
+                "text": "Aplicar 20% de descuento",
+                "kind": "ACTION",
+                "status": "UNSUPPORTED",
+                "capability": None,
+            },
+        ],
+        "warnings": [],
+        "summary": "El descuento no es una acción disponible.",
+    }
+
+    monkeypatch.setattr(
+        campaigns_api,
+        "run_platform_json_task",
+        lambda *args, **kwargs: SimpleNamespace(data=fake),
+    )
+
+    response = client.post(
+        f"{API}/platform/campaigns/assist",
+        headers=owner,
+        json={"description": "Dar 20% de descuento a usuarios personales cuando ingresen."},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["executable"] is False
+    combined = " ".join(body["blockingIssues"] + body["warnings"]).lower()
+    assert "descuento" in combined or "precio" in combined
 
 
 def test_campaign_assist_understands_daily_classes_and_keeps_discount_as_warning(client) -> None:

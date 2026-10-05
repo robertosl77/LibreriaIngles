@@ -1,7 +1,8 @@
 import {
   CampaignNotification,
   CampaignRule,
-  CampaignTrigger
+  CampaignTrigger,
+  PlatformCampaignCapabilities
 } from '../../core/models';
 
 export interface CampaignTemplate {
@@ -18,6 +19,83 @@ export interface CampaignTemplate {
   endsAt?: string;
   notification: CampaignNotification;
   message: string;
+}
+
+
+export function campaignTemplateIssues(
+  template: CampaignTemplate,
+  capabilities: PlatformCampaignCapabilities
+): string[] {
+  const issues: string[] = [];
+  const trigger = capabilities.triggers.find((item) => item.key === template.trigger);
+  if (!trigger?.available) {
+    issues.push(`Trigger no disponible: ${template.trigger}`);
+  }
+
+  const grantAction = capabilities.actions.find((item) => item.key === 'GRANT_BENEFIT');
+  if (!grantAction?.available) {
+    issues.push('La acción GRANT_BENEFIT no está disponible.');
+  }
+
+  for (const rule of template.rules) {
+    const capability = capabilities.rules.find((item) => item.key === rule.field);
+    if (!capability?.available) {
+      issues.push(`Condición no disponible: ${rule.field}`);
+      continue;
+    }
+    if (!capability.operators.includes(rule.operator)) {
+      issues.push(`Operador ${rule.operator} no válido para ${rule.field}`);
+    }
+    if (capability.subjectOptions.length > 0) {
+      if (!rule.subject) {
+        issues.push(`${rule.field} requiere ${capability.subjectLabel ?? 'sujeto'}`);
+      } else if (!capability.subjectOptions.some((option) => option.value === rule.subject)) {
+        issues.push(`Sujeto no válido para ${rule.field}: ${rule.subject}`);
+      }
+    }
+    for (const filter of capability.filters) {
+      const value = rule.filters?.[filter.key];
+      if (filter.required && !value) {
+        issues.push(`${rule.field} requiere filtro ${filter.label}`);
+      }
+      if (
+        value &&
+        filter.valueType === 'enum' &&
+        !filter.options.some((option) => option.value === value)
+      ) {
+        issues.push(`Filtro ${filter.label} no válido para ${rule.field}`);
+      }
+    }
+    if (capability.requiresWindow && (!rule.windowDays || rule.windowDays <= 0)) {
+      issues.push(`${rule.field} requiere una ventana de días`);
+    }
+    if (
+      capability.valueType === 'enum' &&
+      capability.options.length > 0 &&
+      !capability.options.some((option) => option.value === String(rule.value))
+    ) {
+      issues.push(`Valor no válido para ${rule.field}: ${rule.value}`);
+    }
+  }
+
+  if (template.maxRecipients !== null && template.maxRecipients <= 0) {
+    issues.push('El máximo de beneficiarios debe ser mayor que cero.');
+  }
+  if (template.startsAt && Number.isNaN(new Date(template.startsAt).getTime())) {
+    issues.push('Fecha de inicio inválida.');
+  }
+  if (template.endsAt && Number.isNaN(new Date(template.endsAt).getTime())) {
+    issues.push('Fecha de fin inválida.');
+  }
+  if (
+    template.startsAt &&
+    template.endsAt &&
+    new Date(template.endsAt).getTime() <= new Date(template.startsAt).getTime()
+  ) {
+    issues.push('La fecha de fin debe ser posterior a la fecha de inicio.');
+  }
+
+  return issues;
 }
 
 export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
@@ -77,7 +155,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'HAS_GRANTED_SERVICE', operator: 'EQ', value: true }
     ],
     priority: 100,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: ''
@@ -141,7 +219,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'DAYS_SINCE_CREATED', operator: 'GTE', value: 365 }
     ],
     priority: 100,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Gracias por seguir aprendiendo con Librería Inglés.'
@@ -237,7 +315,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'DAYS_UNTIL_SERVICE_EXPIRES', operator: 'LTE', value: 7 }
     ],
     priority: 65,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Tu servicio está próximo a vencer. Tenemos un beneficio para acompañarte.'
@@ -270,7 +348,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'SUBSCRIPTION_ORIGIN', operator: 'EQ', value: 'INVITATION' }
     ],
     priority: 70,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Gracias por seguir aprendiendo con el servicio que recibiste mediante una invitación.'
@@ -327,7 +405,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'writing-needs-review-active',
     title: 'Writing necesita repaso',
-    description: 'Usuarios activos cuyo progreso agregado de Writing está en NEEDS_REVIEW.',
+    description: 'Usuarios con al menos 5 días de actividad en los últimos 14 días cuyo progreso agregado de Writing está en NEEDS_REVIEW.',
     name: 'Recuperación · Writing necesita repaso',
     trigger: 'LOGIN',
     rules: [
@@ -465,7 +543,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'started-not-completed-classes',
     title: 'Dificultad para completar clases',
-    description: 'Usuarios que iniciaron al menos 5 clases en 7 días pero completaron como máximo 1.',
+    description: 'Usuarios que iniciaron al menos 5 clases en 7 días, completaron como máximo 1 y mantienen al menos 4 clases generadas sin completar.',
     name: 'Acompañamiento · clases iniciadas sin completar',
     trigger: 'LOGIN',
     rules: [
@@ -501,7 +579,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'launch-cohort-date-range',
     title: 'Cohorte por fecha',
-    description: 'Cuentas personales registradas dentro de un período concreto y sin membresía otorgada.',
+    description: 'Cuentas personales registradas entre el 1 y el 15 de septiembre de 2026 y sin membresía otorgada.',
     name: 'Cohorte de lanzamiento · sin membresía',
     trigger: 'LOGIN',
     rules: [
@@ -546,7 +624,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'DAYS_SINCE_LAST_ACTIVITY', operator: 'GTE', value: 21 }
     ],
     priority: 45,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Vimos que hace un tiempo no practicás. Tenemos un incentivo para ayudarte a retomar.'
@@ -571,7 +649,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'successful-return-after-expiry',
     title: 'Regreso exitoso',
-    description: 'Usuarios que tuvieron un servicio vencido, hoy vuelven a tener membresía y completaron al menos 10 clases en 14 días.',
+    description: 'Usuarios cuyo servicio anterior venció hace al menos 30 días, hoy vuelven a tener membresía y completaron al menos 10 clases en los últimos 14 días.',
     name: 'Premio por regreso exitoso',
     trigger: 'LOGIN',
     rules: [
@@ -581,7 +659,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
       { field: 'CLASSES_COMPLETED', operator: 'GTE', value: 10, windowDays: 14 }
     ],
     priority: 50,
-    stackable: true,
+    stackable: false,
     maxRecipients: null,
     notification: 'IN_APP',
     message: 'Volviste y recuperaste el ritmo. Queremos reconocer ese regreso.'
@@ -589,7 +667,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: 'seasonal-summer-window',
     title: 'Campaña estacional',
-    description: 'Promoción para cuentas personales durante una ventana estacional concreta. Las fechas quedan precargadas y son editables.',
+    description: 'Promoción para cuentas personales entre el 15 de diciembre de 2026 y el 15 de enero de 2027. Las fechas quedan precargadas y son editables.',
     name: 'Estacional · verano 2026/2027',
     trigger: 'LOGIN',
     rules: [
