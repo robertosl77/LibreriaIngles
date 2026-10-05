@@ -6,11 +6,13 @@ T-059 agregará el scheduler para CampaignTrigger.SCHEDULED sin cambiar este con
 
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from math import ceil
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.accounts.models import Account, AccountStatus, AccountType, PlatformRole
+from app.ai.models import AIConnection, AIConnectionOwnerType, AIUsageEvent
 from app.benefits.models import Benefit
 from app.benefits.service import (
     BenefitApplication,
@@ -28,8 +30,19 @@ from app.campaigns.models import (
     CampaignTrigger,
 )
 from app.core.config import settings
-from app.learning.models import ClassSession, ClassSessionStatus, SessionKind
+from app.exams.models import LevelCertificate
+from app.learning.models import (
+    Attempt,
+    ClassSession,
+    ClassSessionStatus,
+    Exercise,
+    PresentationMode,
+    ResponseMode,
+    SessionKind,
+    StudySkillProgress,
+)
 from app.memberships.models import Membership, MembershipStatus
+from app.progress.service import ability_progress
 from app.study_profiles.models import (
     AccountStudyProfile,
     AccountStudyProfileStatus,
@@ -346,6 +359,13 @@ def _days_since(value: datetime | None, now: datetime) -> int | None:
     return max(0, int((now - value).total_seconds() // 86400))
 
 
+def _days_until(value: datetime | None, now: datetime) -> int | None:
+    value = _as_utc(value)
+    if value is None or value <= now:
+        return None
+    return max(1, ceil((value - now).total_seconds() / 86400))
+
+
 def _last_activity_at(db: Session, account: Account) -> datetime | None:
     return db.scalar(
         select(func.max(ClassSession.evaluated_at)).where(
@@ -373,6 +393,143 @@ def _completed_activity_times(
         query = query.where(ClassSession.evaluated_at >= since)
     values = db.scalars(query.order_by(ClassSession.evaluated_at.asc())).all()
     return [value for value in (_as_utc(item) for item in values) if value is not None]
+
+
+def _streak_history(db: Session, account: Account, *, now: datetime) -> tuple[int, int | None]:
+    days = sorted({value.date() for value in _completed_activity_times(db, account)})
+    if not days:
+        return 0, None
+
+    runs: list[tuple[object, object, int]] = []
+    start = previous = days[0]
+    length = 1
+    for day in days[1:]:
+        if day == previous + timedelta(days=1):
+            length += 1
+        else:
+            runs.append((start, previous, length))
+            start = day
+            length = 1
+        previous = day
+    runs.append((start, previous, length))
+
+    # Una racha que terminó hoy o ayer todavía se considera vigente: aún no hubo un
+    # día calendario completo sin actividad que pruebe que se cortó.
+    ended = [run for run in runs if run[1] < now.date() - timedelta(days=1)]
+    if not ended:
+        return 0, None
+
+    _, ended_at, ended_length = ended[-1]
+    broken_on = ended_at + timedelta(days=1)
+    return ended_length, max(0, (now.date() - broken_on).days)
+
+
+def _exam_metric(
+    db: Session,
+    account: Account,
+    *,
+    field: str,
+    window_days: int | None,
+    now: datetime,
+) -> int | None:
+    if window_days is None:
+        return None
+    since = now - timedelta(days=window_days)
+    rows = db.scalars(
+        select(ClassSession).where(
+            ClassSession.account_id == account.id,
+            ClassSession.kind == SessionKind.EXAM,
+            ClassSession.status == ClassSessionStatus.COMPLETED,
+            ClassSession.evaluated_at.is_not(None),
+            ClassSession.evaluated_at >= since,
+        )
+    ).all()
+    if field == "EXAMS_COMPLETED":
+        return len(rows)
+    if field == "EXAMS_PASSED":
+        return sum(1 for row in rows if (row.exam_result or {}).get("passed") is True)
+    if field == "EXAMS_FAILED":
+        return sum(1 for row in rows if (row.exam_result or {}).get("passed") is False)
+    return None
+
+
+def _class_lifecycle_metric(
+    db: Session,
+    account: Account,
+    *,
+    field: str,
+    window_days: int | None,
+    now: datetime,
+) -> int | None:
+    if window_days is None:
+        return None
+    since = now - timedelta(days=window_days)
+
+    if field == "CLASSES_GENERATED":
+        return int(
+            db.scalar(
+                select(func.count(ClassSession.id)).where(
+                    ClassSession.account_id == account.id,
+                    ClassSession.kind == SessionKind.CLASS,
+                    ClassSession.generated_at.is_not(None),
+                    ClassSession.generated_at >= since,
+                )
+            )
+            or 0
+        )
+
+    if field == "CLASSES_GENERATION_FAILED":
+        # Hoy ClassSession no conserva failed_at; el fallo ocurre en el mismo flujo
+        # inmediato de generación, por lo que created_at es la marca persistente disponible.
+        return int(
+            db.scalar(
+                select(func.count(ClassSession.id)).where(
+                    ClassSession.account_id == account.id,
+                    ClassSession.kind == SessionKind.CLASS,
+                    ClassSession.status == ClassSessionStatus.GENERATION_FAILED,
+                    ClassSession.created_at >= since,
+                )
+            )
+            or 0
+        )
+
+    if field == "CLASSES_NOT_COMPLETED":
+        return int(
+            db.scalar(
+                select(func.count(ClassSession.id)).where(
+                    ClassSession.account_id == account.id,
+                    ClassSession.kind == SessionKind.CLASS,
+                    ClassSession.generated_at.is_not(None),
+                    ClassSession.generated_at >= since,
+                    ClassSession.status != ClassSessionStatus.COMPLETED,
+                )
+            )
+            or 0
+        )
+
+    if field == "CLASSES_STARTED":
+        rows = db.scalars(
+            select(ClassSession).where(
+                ClassSession.account_id == account.id,
+                ClassSession.kind == SessionKind.CLASS,
+                ClassSession.created_at >= since,
+            )
+        ).all()
+        started_statuses = {
+            ClassSessionStatus.IN_PROGRESS,
+            ClassSessionStatus.AWAITING_EVALUATION,
+            ClassSessionStatus.COMPLETED,
+        }
+        return sum(
+            1
+            for row in rows
+            if row.status in started_statuses
+            or row.current_attempt > 1
+            or row.submitted_at is not None
+            or row.evaluated_at is not None
+        )
+
+    return None
 
 
 def _activity_day_counts(
@@ -415,6 +572,30 @@ def _activity_metric(
 ) -> int | float | None:
     if field == "STUDY_STREAK_DAYS":
         return _study_streak_days(db, account, now=now)
+    if field in {"LAST_ENDED_STREAK_DAYS", "DAYS_SINCE_STREAK_BROKEN"}:
+        ended_length, days_since_broken = _streak_history(db, account, now=now)
+        return ended_length if field == "LAST_ENDED_STREAK_DAYS" else days_since_broken
+    if field in {"EXAMS_COMPLETED", "EXAMS_PASSED", "EXAMS_FAILED"}:
+        return _exam_metric(
+            db,
+            account,
+            field=field,
+            window_days=window_days,
+            now=now,
+        )
+    if field in {
+        "CLASSES_GENERATED",
+        "CLASSES_STARTED",
+        "CLASSES_GENERATION_FAILED",
+        "CLASSES_NOT_COMPLETED",
+    }:
+        return _class_lifecycle_metric(
+            db,
+            account,
+            field=field,
+            window_days=window_days,
+            now=now,
+        )
     if window_days is None:
         return None
 
@@ -466,6 +647,199 @@ def _current_level(db: Session, account: Account) -> str | None:
     return profile.operational_level or profile.selected_level or profile.estimated_level
 
 
+def _certificate_level(
+    db: Session,
+    account: Account,
+    *,
+    level: str,
+) -> str | None:
+    linked_profile_ids = select(AccountStudyProfile.study_profile_id).where(
+        AccountStudyProfile.account_id == account.id
+    )
+    return db.scalar(
+        select(LevelCertificate.level).where(
+            LevelCertificate.level == level,
+            or_(
+                LevelCertificate.account_id == account.id,
+                LevelCertificate.study_profile_id.in_(linked_profile_ids),
+            ),
+        )
+    )
+
+
+def _active_study_profile(db: Session, account: Account) -> tuple[AccountStudyProfile, StudyProfile] | None:
+    row = db.execute(
+        select(AccountStudyProfile, StudyProfile)
+        .join(StudyProfile, StudyProfile.id == AccountStudyProfile.study_profile_id)
+        .where(
+            AccountStudyProfile.account_id == account.id,
+            AccountStudyProfile.status == AccountStudyProfileStatus.ACTIVE,
+            StudyProfile.status == StudyProfileStatus.ACTIVE,
+        )
+        .order_by(AccountStudyProfile.linked_at.desc())
+    ).first()
+    return (row[0], row[1]) if row is not None else None
+
+
+def _progress_metric(
+    db: Session,
+    account: Account,
+    *,
+    field: str,
+    subject: str,
+) -> str | float | None:
+    active = _active_study_profile(db, account)
+    if active is None:
+        return None
+    link, profile = active
+
+    if field.startswith("SKILL_"):
+        progress = db.scalar(
+            select(StudySkillProgress).where(
+                StudySkillProgress.study_profile_id == link.study_profile_id,
+                StudySkillProgress.skill_key == subject,
+                StudySkillProgress.organization_id.is_(None),
+            )
+        )
+        if field == "SKILL_STATUS":
+            return progress.status if progress is not None and progress.attempt_count else "NOT_STARTED"
+        if field == "SKILL_SCORE":
+            return progress.score if progress is not None and progress.attempt_count else None
+        if field == "SKILL_TREND":
+            return progress.trend.upper() if progress is not None and progress.trend else None
+        return None
+
+    level = profile.operational_level or profile.selected_level or profile.estimated_level
+    if not level:
+        return None
+    # Campaigns consume el agregado oficial del dominio de progreso; no recalculan
+    # evidencias, estados ni tendencias por su cuenta.
+    item = next(
+        (row for row in ability_progress(db, link.study_profile_id, level) if row["key"] == subject),
+        None,
+    )
+    if item is None:
+        return None
+    if field == "ABILITY_STATUS":
+        return item.get("status")
+    if field == "ABILITY_SCORE":
+        return item.get("score")
+    if field == "ABILITY_TREND":
+        trend = item.get("trend")
+        return str(trend).upper() if trend else None
+    return None
+
+
+def _appeals_count(
+    db: Session,
+    account: Account,
+    *,
+    window_days: int | None,
+    now: datetime,
+) -> int | None:
+    if window_days is None:
+        return None
+    since = now - timedelta(days=window_days)
+    return int(
+        db.scalar(
+            select(func.count(Attempt.id)).where(
+                Attempt.account_id == account.id,
+                Attempt.appealed_at.is_not(None),
+                Attempt.appealed_at >= since,
+            )
+        )
+        or 0
+    )
+
+
+def _modality_response_count(db: Session, account: Account, *, field: str) -> int:
+    query = (
+        select(func.count(Attempt.id))
+        .join(Exercise, Exercise.id == Attempt.exercise_id)
+        .where(Attempt.account_id == account.id)
+    )
+    if field == "SPEAKING_RESPONSES":
+        query = query.where(Attempt.response_mode == ResponseMode.SPEAK)
+    else:
+        query = query.where(Exercise.presentation_mode == PresentationMode.LISTEN)
+    return int(db.scalar(query) or 0)
+
+
+AI_HEALTH_CHECK_OPERATION = "health_check"
+AI_CREDENTIAL_OR_QUOTA_ERRORS = {"INVALID_CREDENTIALS", "QUOTA_EXCEEDED"}
+
+
+def _ai_failures_count(
+    db: Session,
+    account: Account,
+    *,
+    window_days: int | None,
+    filters: dict,
+    now: datetime,
+) -> int | None:
+    if window_days is None:
+        return None
+    since = now - timedelta(days=window_days)
+    query = select(func.count(AIUsageEvent.id)).where(
+        AIUsageEvent.account_id == account.id,
+        AIUsageEvent.success.is_(False),
+        AIUsageEvent.created_at >= since,
+    )
+
+    owner_type = str(filters.get("ownerType") or "").strip().upper()
+    if owner_type:
+        query = query.where(AIUsageEvent.owner_type == AIConnectionOwnerType(owner_type))
+
+    error_code = str(filters.get("errorCode") or "").strip().upper()
+    if error_code == "CREDENTIAL_OR_QUOTA":
+        query = query.where(AIUsageEvent.error_code.in_(AI_CREDENTIAL_OR_QUOTA_ERRORS))
+    elif error_code:
+        query = query.where(AIUsageEvent.error_code == error_code)
+
+    operation = str(filters.get("operation") or "").strip().lower()
+    if operation:
+        query = query.where(AIUsageEvent.operation == operation)
+
+    return int(db.scalar(query) or 0)
+
+
+def _days_since_byok_configured_without_success(
+    db: Session,
+    account: Account,
+    *,
+    now: datetime,
+) -> int | None:
+    connections = list(
+        db.scalars(
+            select(AIConnection).where(
+                AIConnection.owner_type == AIConnectionOwnerType.ACCOUNT,
+                AIConnection.owner_id == account.id,
+                AIConnection.active.is_(True),
+            )
+        ).all()
+    )
+    if not connections:
+        return None
+
+    connection_ids = [connection.id for connection in connections]
+    successful_real_use = db.scalar(
+        select(func.count(AIUsageEvent.id)).where(
+            AIUsageEvent.connection_id.in_(connection_ids),
+            AIUsageEvent.account_id == account.id,
+            AIUsageEvent.success.is_(True),
+            AIUsageEvent.operation != AI_HEALTH_CHECK_OPERATION,
+        )
+    ) or 0
+    if int(successful_real_use) > 0:
+        return None
+
+    oldest = min(
+        (_as_utc(connection.created_at) for connection in connections if connection.created_at),
+        default=None,
+    )
+    return _days_since(oldest, now)
+
+
 def rule_evaluation(
     db: Session,
     account: Account,
@@ -497,6 +871,9 @@ def rule_evaluation(
     elif field == "EMAIL_DOMAIN":
         actual = account.email.rsplit("@", 1)[-1].lower() if "@" in account.email else ""
         matched = operator == "EQ" and actual == str(expected).strip().lower()
+    elif field == "DOCUMENT_COUNTRY":
+        actual = account.document_country.upper() if account.document_country else None
+        matched = operator == "EQ" and actual == str(expected).strip().upper()
     elif field == "DAYS_SINCE_CREATED":
         actual = _days_since(account.created_at, now)
         try:
@@ -532,16 +909,97 @@ def rule_evaluation(
             matched = actual is not None and _compare_number(actual, operator, int(expected))
         except (TypeError, ValueError):
             matched = False
+    elif field == "DAYS_UNTIL_SERVICE_EXPIRES":
+        service = effective_service(db, account)
+        actual = _days_until(service.expires_at, now) if service.granted else None
+        try:
+            matched = actual is not None and _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
+    elif field == "SUBSCRIPTION_ORIGIN":
+        service = effective_service(db, account)
+        actual = service.origin.value if service.granted and service.origin is not None else None
+        matched = operator == "EQ" and actual == str(expected).strip().upper()
     elif field == "CURRENT_LEVEL":
         actual = _current_level(db, account)
         matched = operator == "EQ" and actual == str(expected).upper()
+    elif field == "CERTIFICATE_ISSUED":
+        expected_level = str(expected).upper()
+        actual = _certificate_level(db, account, level=expected_level)
+        matched = operator == "EQ" and actual == expected_level
+    elif field in {
+        "SKILL_STATUS",
+        "SKILL_SCORE",
+        "SKILL_TREND",
+        "ABILITY_STATUS",
+        "ABILITY_SCORE",
+        "ABILITY_TREND",
+    }:
+        subject = str(rule.get("subject") or "").strip()
+        actual = _progress_metric(db, account, field=field, subject=subject)
+        if field.endswith("_SCORE"):
+            try:
+                matched = actual is not None and _compare_number(float(actual), operator, float(expected))
+            except (TypeError, ValueError):
+                matched = False
+        else:
+            matched = operator == "EQ" and actual is not None and str(actual).upper() == str(expected).upper()
+    elif field == "APPEALS_COUNT":
+        window_days = rule.get("windowDays")
+        try:
+            window_days = int(window_days) if window_days is not None else None
+        except (TypeError, ValueError):
+            window_days = None
+        actual = _appeals_count(db, account, window_days=window_days, now=now)
+        try:
+            matched = actual is not None and _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
+    elif field in {"SPEAKING_RESPONSES", "LISTENING_RESPONSES"}:
+        actual = _modality_response_count(db, account, field=field)
+        try:
+            matched = _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
+    elif field == "AI_FAILURES_COUNT":
+        window_days = rule.get("windowDays")
+        try:
+            window_days = int(window_days) if window_days is not None else None
+        except (TypeError, ValueError):
+            window_days = None
+        actual = _ai_failures_count(
+            db,
+            account,
+            window_days=window_days,
+            filters=rule.get("filters") or {},
+            now=now,
+        )
+        try:
+            matched = actual is not None and _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
+    elif field == "DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS":
+        actual = _days_since_byok_configured_without_success(db, account, now=now)
+        try:
+            matched = actual is not None and _compare_number(actual, operator, int(expected))
+        except (TypeError, ValueError):
+            matched = False
     elif field in {
         "CLASSES_COMPLETED",
+        "CLASSES_GENERATED",
+        "CLASSES_STARTED",
+        "CLASSES_GENERATION_FAILED",
+        "CLASSES_NOT_COMPLETED",
+        "EXAMS_COMPLETED",
+        "EXAMS_PASSED",
+        "EXAMS_FAILED",
         "ACTIVE_STUDY_DAYS",
         "MIN_CLASSES_PER_ACTIVE_DAY",
         "AVERAGE_CLASSES_PER_ACTIVE_DAY",
         "AVERAGE_CLASSES_PER_DAY",
         "STUDY_STREAK_DAYS",
+        "LAST_ENDED_STREAK_DAYS",
+        "DAYS_SINCE_STREAK_BROKEN",
     }:
         window_days = rule.get("windowDays")
         try:
@@ -569,6 +1027,10 @@ def rule_evaluation(
         "actual": actual,
         "matched": bool(matched),
     }
+    if rule.get("subject"):
+        result["subject"] = rule.get("subject")
+    if rule.get("filters"):
+        result["filters"] = rule.get("filters")
     if rule.get("windowDays") is not None:
         result["windowDays"] = rule.get("windowDays")
     return result
