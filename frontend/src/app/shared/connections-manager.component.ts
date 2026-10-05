@@ -224,7 +224,7 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
     :host { display: contents; }
     .note { margin: -0.4rem 0 0.8rem; }
     .conn { align-items: flex-start; flex-wrap: wrap; }
-    .conn.focused { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .conn.focused { background: var(--warn-bg); border-radius: 0.65rem; padding-inline: 0.7rem; }
     .conn-main { display: flex; flex-direction: column; gap: 0.35rem; flex: 1; min-width: 240px; }
     .conn-actions { justify-content: flex-end; }
     .prio { display: flex; align-items: center; gap: 0.4rem; }
@@ -438,10 +438,11 @@ export class ConnectionsManagerComponent implements OnInit {
   }
 
   async saveEdit(c: AiConnection): Promise<void> {
-    const body: { name?: string; model?: string; apiKey?: string } = {};
-    if (this.edit.name.trim() !== c.name) {
-      body.name = this.edit.name.trim();
-    }
+    // El nombre se envía siempre: así una conexión heredada con nombre duplicado
+    // no puede "validarse" silenciosamente al guardar una edición.
+    const body: { name?: string; model?: string; apiKey?: string } = {
+      name: this.edit.name.trim()
+    };
     if (this.edit.model.trim() !== c.model) {
       body.model = this.edit.model.trim();
     }
