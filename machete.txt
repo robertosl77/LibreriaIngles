@@ -1,0 +1,25 @@
+Desde la raíz del repo:
+cd backend
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload
+
+Si todavía no existiera el entorno:
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+alembic upgrade head
+uvicorn app.main:app --reload
+
+--------------------------------------------
+
+Desde la raíz:
+cd frontend
+npm install
+npm start
+
+Si ya tenés las dependencias instaladas, alcanza con:
+cd frontend
+npm start
+
+Normalmente queda en http://localhost:4200.
