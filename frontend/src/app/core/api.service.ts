@@ -16,6 +16,7 @@ import {
   CampaignAssistResult,
   CampaignAudiencePreview,
   CampaignNotice,
+  CampaignPolicyBlock,
   ClassDetail,
   ClassSummary,
   ConnectionDraft,
@@ -34,6 +35,9 @@ import {
   PlatformCampaign,
   PlatformCampaignCapabilities,
   PlatformCampaignDraft,
+  PlatformCampaignPolicy,
+  PlatformCampaignPolicyCapabilities,
+  PlatformCampaignPolicyDraft,
   PlatformInvitation,
   PlatformInvitationDraft,
   PlatformOverview,
@@ -384,6 +388,61 @@ export class ApiService {
   }
   deletePlatformCampaign(id: number): Observable<void> {
     return this.http.delete<void>(`${this.base}/platform/campaigns/${id}`);
+  }
+
+  // Políticas globales de Campaigns (T-141)
+  platformCampaignPolicies(): Observable<PlatformCampaignPolicy[]> {
+    return this.http.get<PlatformCampaignPolicy[]>(`${this.base}/platform/campaigns/policies`);
+  }
+
+  platformCampaignPolicyCapabilities(): Observable<PlatformCampaignPolicyCapabilities> {
+    return this.http.get<PlatformCampaignPolicyCapabilities>(
+      `${this.base}/platform/campaigns/policies/capabilities`
+    );
+  }
+
+  platformCampaignPolicyBlocks(limit = 50): Observable<CampaignPolicyBlock[]> {
+    return this.http.get<CampaignPolicyBlock[]>(
+      `${this.base}/platform/campaigns/policies/blocks`,
+      { params: { limit } }
+    );
+  }
+
+  createPlatformCampaignPolicy(
+    draft: PlatformCampaignPolicyDraft
+  ): Observable<PlatformCampaignPolicy> {
+    return this.http.post<PlatformCampaignPolicy>(
+      `${this.base}/platform/campaigns/policies`,
+      draft
+    );
+  }
+
+  updatePlatformCampaignPolicy(
+    id: number,
+    draft: PlatformCampaignPolicyDraft
+  ): Observable<PlatformCampaignPolicy> {
+    return this.http.put<PlatformCampaignPolicy>(
+      `${this.base}/platform/campaigns/policies/${id}`,
+      draft
+    );
+  }
+
+  enablePlatformCampaignPolicy(id: number): Observable<PlatformCampaignPolicy> {
+    return this.http.post<PlatformCampaignPolicy>(
+      `${this.base}/platform/campaigns/policies/${id}/enable`,
+      {}
+    );
+  }
+
+  disablePlatformCampaignPolicy(id: number): Observable<PlatformCampaignPolicy> {
+    return this.http.post<PlatformCampaignPolicy>(
+      `${this.base}/platform/campaigns/policies/${id}/disable`,
+      {}
+    );
+  }
+
+  deletePlatformCampaignPolicy(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.base}/platform/campaigns/policies/${id}`);
   }
 
   campaignNotices(): Observable<CampaignNotice[]> {

@@ -245,6 +245,86 @@ export interface PlatformCampaignCapabilities {
   deliveries: CampaignChoiceCapability[];
 }
 
+export type CampaignPolicyKind = 'SUPPRESSION' | 'EXCLUSION';
+export type CampaignPolicyEffect = 'BLOCK';
+export type CampaignPolicyAppliesToMode = 'ALL' | 'CAMPAIGNS';
+
+export interface CampaignPolicyRule {
+  field: string;
+  operator: string;
+  value: number;
+  windowDays: number;
+}
+
+export interface CampaignPolicyAppliesTo {
+  mode: CampaignPolicyAppliesToMode;
+  campaignIds: number[];
+}
+
+export interface PlatformCampaignPolicy {
+  id: number;
+  name: string;
+  description: string | null;
+  kind: CampaignPolicyKind;
+  effect: CampaignPolicyEffect;
+  enabled: boolean;
+  appliesTo: CampaignPolicyAppliesTo;
+  rules: CampaignPolicyRule[];
+  blockCount: number;
+  lastBlockedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlatformCampaignPolicyDraft {
+  name: string;
+  description: string | null;
+  kind: CampaignPolicyKind;
+  enabled: boolean;
+  appliesTo: CampaignPolicyAppliesTo;
+  rules: CampaignPolicyRule[];
+}
+
+export interface CampaignPolicyChoiceCapability {
+  key: string;
+  label: string;
+  available: boolean;
+  description: string;
+}
+
+export interface CampaignPolicyRuleCapability {
+  key: string;
+  label: string;
+  valueType: 'integer';
+  operators: string[];
+  description: string;
+  requiresWindow: boolean;
+  windowMinDays: number | null;
+  windowMaxDays: number | null;
+  available: boolean;
+}
+
+export interface PlatformCampaignPolicyCapabilities {
+  kinds: CampaignPolicyChoiceCapability[];
+  effects: CampaignPolicyChoiceCapability[];
+  rules: CampaignPolicyRuleCapability[];
+  conditionModes: CampaignPolicyChoiceCapability[];
+  appliesToModes: CampaignPolicyChoiceCapability[];
+}
+
+export interface CampaignPolicyBlock {
+  id: number;
+  policyId: number;
+  policy: string;
+  kind: CampaignPolicyKind;
+  campaignId: number;
+  campaign: string;
+  accountId: number;
+  account: string;
+  reason: string;
+  createdAt: string;
+}
+
 export interface CampaignAudienceRuleResult {
   field: string;
   operator: string;
