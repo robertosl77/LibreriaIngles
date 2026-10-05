@@ -10,6 +10,7 @@ from app.invitations.api import router as invitations_router
 from app.platform.api import router as platform_router
 from app.platform.benefits_api import router as platform_benefits_router
 from app.platform.campaigns_api import router as platform_campaigns_router
+from app.platform.campaign_policies_api import router as platform_campaign_policies_router
 from app.platform.invitations_api import router as platform_invitations_router
 from app.platform.services_api import router as platform_services_router
 from app.progress.api import router as progress_router
@@ -27,6 +28,7 @@ router.include_router(exams_router)
 router.include_router(progress_router)
 router.include_router(platform_router)
 router.include_router(platform_benefits_router)
+router.include_router(platform_campaign_policies_router)
 router.include_router(platform_campaigns_router)
 router.include_router(platform_invitations_router)
 router.include_router(platform_services_router)

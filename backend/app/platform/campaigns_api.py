@@ -880,7 +880,7 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
             usage_context=AIUsageContext(
                 subject_type="CAMPAIGN_ASSIST",
                 subject_label="Asistente de campañas",
-                subject_route="/app/plataforma/configuracion",
+                subject_route="/app/plataforma/campanas",
                 diagnostic={
                     "descriptionChars": len(payload.description.strip()),
                     "benefitCount": len(benefit_options),

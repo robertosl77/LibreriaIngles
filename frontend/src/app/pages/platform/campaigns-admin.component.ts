@@ -23,6 +23,7 @@ import {
   CampaignTemplate,
   campaignTemplateIssues
 } from './campaign-templates';
+import { CampaignPoliciesAdminComponent } from './campaign-policies-admin.component';
 
 type NewCampaignMode = 'choose' | 'templates' | 'ai' | null;
 
@@ -85,7 +86,7 @@ function isoDate(value: string): string | null {
 
 @Component({
   selector: 'app-campaigns-admin',
-  imports: [FormsModule, CollapseCardComponent],
+  imports: [FormsModule, CollapseCardComponent, CampaignPoliciesAdminComponent],
   template: `
     <app-collapse-card
       title="Campañas"
@@ -544,6 +545,8 @@ function isoDate(value: string): string | null {
         </div>
       }
     </app-collapse-card>
+
+    <app-campaign-policies-admin />
   `,
   styles: `
     :host { display: contents; }
