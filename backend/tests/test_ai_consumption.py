@@ -215,6 +215,44 @@ def test_connection_names_are_unique_per_owner_scope_after_normalization(client)
     assert platform.status_code == 201, platform.text
 
 
+def test_edit_rejects_legacy_duplicate_name_even_when_name_is_unchanged(client) -> None:
+    headers = login(client, "legacy-duplicate@example.com")
+
+    with SessionLocal() as db:
+        account = _account(db, "legacy-duplicate@example.com")
+        first = AIConnection(
+            owner_type=AIConnectionOwnerType.ACCOUNT,
+            owner_id=account.id,
+            provider="MOCK",
+            name="Google Gemini",
+            model="mock",
+            priority=1,
+            active=True,
+            status=AIConnectionStatus.AVAILABLE,
+        )
+        second = AIConnection(
+            owner_type=AIConnectionOwnerType.ACCOUNT,
+            owner_id=account.id,
+            provider="MOCK",
+            name="Google Gemini",
+            model="mock",
+            priority=2,
+            active=True,
+            status=AIConnectionStatus.AVAILABLE,
+        )
+        db.add_all([first, second])
+        db.commit()
+        duplicate_id = first.id
+
+    response = client.patch(
+        f"{API}/ai/connections/{duplicate_id}",
+        json={"name": "Google Gemini"},
+        headers=headers,
+    )
+    assert response.status_code == 409
+    assert "ese nombre" in response.json()["detail"]
+
+
 def test_personal_consumption_masks_platform_engine_details(client) -> None:
     headers = login(client, "student@example.com")
 
