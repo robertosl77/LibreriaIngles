@@ -793,8 +793,9 @@ export class ConsumptionComponent implements OnInit {
       const available = scopes ?? [];
       this.scopes.set(available);
       const preferred =
-        available.find((item) => item.kind === 'PLATFORM') ??
+        available.find((item) => item.kind === 'ME') ??
         available.find((item) => item.kind === 'ORGANIZATION') ??
+        available.find((item) => item.kind === 'PLATFORM') ??
         available[0];
       if (preferred) {
         this.selectedKey.set(this.scopeKey(preferred));
