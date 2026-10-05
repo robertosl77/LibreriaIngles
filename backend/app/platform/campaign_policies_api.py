@@ -5,6 +5,7 @@ habilitada; EXCLUSION queda reservada hasta cerrar su semántica.
 """
 
 from datetime import datetime, timezone
+import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -12,6 +13,8 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
 from app.accounts.models import Account
+from app.ai.service import NoAIAvailable, run_platform_json_task
+from app.ai.usage import AIUsageContext
 from app.campaigns.models import (
     Campaign,
     CampaignPolicy,
@@ -36,6 +39,58 @@ class CampaignPolicyRuleIn(BaseModel):
     operator: str = Field(default="GTE", min_length=2, max_length=12)
     value: int = Field(ge=0, le=10_000_000)
     windowDays: int = Field(ge=1, le=3650)
+
+
+class CampaignPolicyAssistIn(BaseModel):
+    description: str = Field(min_length=8, max_length=2000)
+
+
+CAMPAIGN_POLICY_ASSIST_SYSTEM = """Sos un asistente de configuración de políticas globales de Campaigns.
+Tu trabajo es transformar la intención del Administrador de Plataforma en un borrador REVISABLE.
+Nunca persistas ni habilites nada. No inventes capacidades, campañas, categorías ni estados.
+
+Actualmente solo existe el tipo SUPPRESSION y el efecto técnico es BLOCK.
+EXCLUSION sigue en análisis: si la intención depende de una exclusión, marcala UNSUPPORTED.
+Solo podés usar las condiciones y operadores presentes en el catálogo recibido.
+Si algo no puede representarse exactamente, declaralo UNSUPPORTED; no lo aproximes.
+
+Devolvé SOLO JSON:
+{
+  "draft": {
+    "name": "nombre claro",
+    "description": "explicación breve o null",
+    "kind": "SUPPRESSION",
+    "enabled": true,
+    "appliesTo": {
+      "mode": "ALL" | "CAMPAIGNS",
+      "campaignIds": [IDs válidos del catálogo]
+    },
+    "rules": [
+      {
+        "field": "capacidad exacta",
+        "operator": "operador exacto",
+        "value": número,
+        "windowDays": número
+      }
+    ]
+  },
+  "requirements": [
+    {
+      "text": "requisito material pedido",
+      "kind": "TYPE" | "SCOPE" | "RULE",
+      "status": "REPRESENTED" | "UNSUPPORTED",
+      "capability": "clave exacta o null",
+      "reason": "motivo o null"
+    }
+  ],
+  "warnings": ["advertencias informativas"],
+  "summary": "resumen breve"
+}
+
+requirements debe enumerar todos los requisitos materiales de la intención. Si un requisito no
+puede expresarse con el catálogo actual, debe quedar UNSUPPORTED. Una respuesta con requisitos
+UNSUPPORTED no será ejecutable aunque tenga un draft parcial.
+"""
 
 
 class CampaignPolicyAppliesToIn(BaseModel):
@@ -91,6 +146,149 @@ def _platform_campaign(db: DbSession, campaign_id: int) -> Campaign:
     ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaña inexistente.")
     return campaign
+
+
+def _unique_texts(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        clean = value.strip()
+        if clean and clean not in seen:
+            seen.add(clean)
+            result.append(clean)
+    return result
+
+
+def _normalize_policy_assist(
+    raw: dict[str, Any],
+    *,
+    valid_campaign_ids: set[int],
+) -> dict[str, Any]:
+    draft_raw = raw.get("draft") if isinstance(raw.get("draft"), dict) else {}
+    blocking: list[str] = []
+    warnings = [
+        str(item).strip()
+        for item in (raw.get("warnings") or [])
+        if str(item).strip()
+    ]
+
+    name = str(draft_raw.get("name") or "").strip()
+    if len(name) < 2:
+        blocking.append("La IA no propuso un nombre válido para la política.")
+        name = "Política de supresión"
+
+    description_raw = draft_raw.get("description")
+    description = str(description_raw).strip()[:500] if description_raw else None
+
+    kind = str(draft_raw.get("kind") or "SUPPRESSION").strip().upper()
+    if kind not in available_policy_kind_values():
+        blocking.append(
+            f"El tipo {kind or 'vacío'} no está disponible. Hoy solo puede configurarse SUPPRESSION."
+        )
+        kind = "SUPPRESSION"
+
+    enabled = bool(draft_raw.get("enabled", True))
+
+    applies_raw = (
+        draft_raw.get("appliesTo") if isinstance(draft_raw.get("appliesTo"), dict) else {}
+    )
+    applies_mode = str(applies_raw.get("mode") or "ALL").strip().upper()
+    if applies_mode not in {"ALL", "CAMPAIGNS"}:
+        blocking.append(f"Alcance no soportado: {applies_mode or 'vacío'}.")
+        applies_mode = "ALL"
+
+    campaign_ids: list[int] = []
+    invalid_campaign_ids: list[str] = []
+    if applies_mode == "CAMPAIGNS":
+        for raw_id in applies_raw.get("campaignIds") or []:
+            try:
+                campaign_id = int(raw_id)
+            except (TypeError, ValueError):
+                invalid_campaign_ids.append(str(raw_id))
+                continue
+            if campaign_id not in valid_campaign_ids:
+                invalid_campaign_ids.append(str(campaign_id))
+                continue
+            if campaign_id not in campaign_ids:
+                campaign_ids.append(campaign_id)
+        if invalid_campaign_ids:
+            blocking.append(
+                "La IA referenció campañas inexistentes o fuera del scope: "
+                + ", ".join(invalid_campaign_ids)
+                + "."
+            )
+        if not campaign_ids:
+            blocking.append(
+                "La política pide campañas seleccionadas pero no quedó ninguna campaña válida."
+            )
+    else:
+        campaign_ids = []
+
+    normalized_rules: list[dict[str, Any]] = []
+    raw_rules = draft_raw.get("rules") if isinstance(draft_raw.get("rules"), list) else []
+    if len(raw_rules) > 10:
+        blocking.append("El borrador supera el máximo de 10 condiciones.")
+    for raw_rule in raw_rules[:10]:
+        if not isinstance(raw_rule, dict):
+            blocking.append("La IA devolvió una condición inválida.")
+            continue
+        try:
+            normalized_rules.append(validate_policy_rule(raw_rule))
+        except CampaignPolicyCapabilityError as exc:
+            blocking.append(str(exc))
+    if not normalized_rules:
+        blocking.append("La política necesita al menos una condición de supresión válida.")
+
+    requirements: list[dict[str, Any]] = []
+    raw_requirements = raw.get("requirements")
+    if not isinstance(raw_requirements, list):
+        blocking.append("La IA no devolvió la cobertura de requisitos de la intención.")
+        raw_requirements = []
+    for item in raw_requirements:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        status_value = str(item.get("status") or "UNSUPPORTED").strip().upper()
+        status_value = "REPRESENTED" if status_value == "REPRESENTED" else "UNSUPPORTED"
+        capability = item.get("capability")
+        reason = item.get("reason")
+        requirement = {
+            "text": text,
+            "kind": str(item.get("kind") or "RULE").strip().upper(),
+            "status": status_value,
+            "capability": str(capability).strip() if capability else None,
+            "reason": str(reason).strip() if reason else None,
+            "verified": status_value == "REPRESENTED",
+        }
+        requirements.append(requirement)
+        if status_value != "REPRESENTED":
+            blocking.append(
+                requirement["reason"]
+                or f"No se puede representar exactamente: {requirement['text']}."
+            )
+
+    blocking = _unique_texts(blocking)
+    return {
+        "draft": {
+            "name": name[:120],
+            "description": description,
+            "kind": kind,
+            "enabled": enabled,
+            "appliesTo": {
+                "mode": applies_mode,
+                "campaignIds": sorted(campaign_ids),
+            },
+            "rules": normalized_rules,
+        },
+        "requirements": requirements,
+        "warnings": _unique_texts(warnings),
+        "blockingIssues": blocking,
+        "executable": len(blocking) == 0,
+        "summary": str(raw.get("summary") or "").strip()
+        or "Borrador de política generado por IA.",
+    }
 
 
 def _validated_rules(payload: CampaignPolicyIn) -> list[dict[str, Any]]:
@@ -203,6 +401,78 @@ def policy_blocks(
         }
         for block, campaign, account in rows
     ]
+
+
+@router.post("/assist")
+def assist_policy(
+    payload: CampaignPolicyAssistIn,
+    owner: PlatformOwner,
+    db: DbSession,
+) -> dict[str, Any]:
+    """Interpreta lenguaje natural y devuelve un borrador; nunca persiste la política."""
+    campaigns = db.scalars(
+        select(Campaign)
+        .where(
+            Campaign.organization_id.is_(None),
+            Campaign.deleted_at.is_(None),
+        )
+        .order_by(Campaign.priority.asc(), Campaign.id.asc())
+    ).all()
+    campaign_options = [
+        {
+            "id": campaign.id,
+            "name": campaign.name,
+            "status": campaign.status.value,
+            "priority": campaign.priority,
+        }
+        for campaign in campaigns
+    ]
+    capabilities = policy_capabilities_payload()
+    description = payload.description.strip()
+    task = {
+        "kind": "campaign_policy_assist",
+        "description": description,
+        "campaigns": campaign_options,
+        "capabilities": capabilities,
+    }
+    user_prompt = (
+        "Intención del Administrador de Plataforma:\n"
+        + description
+        + "\n\nCatálogo de políticas disponible:\n"
+        + json.dumps(capabilities, ensure_ascii=False)
+        + "\n\nCampañas disponibles (solo podés usar estos IDs):\n"
+        + json.dumps(campaign_options, ensure_ascii=False)
+    )
+    try:
+        result = run_platform_json_task(
+            db,
+            owner,
+            system=CAMPAIGN_POLICY_ASSIST_SYSTEM,
+            user=user_prompt,
+            task=task,
+            usage_context=AIUsageContext(
+                subject_type="CAMPAIGN_POLICY_ASSIST",
+                subject_label="Asistente de políticas de Campaigns",
+                subject_route="/app/plataforma/campanas",
+                diagnostic={
+                    "descriptionChars": len(description),
+                    "campaignCount": len(campaign_options),
+                    "policyRuleCapabilityCount": len(capabilities.get("rules") or []),
+                },
+            ),
+        )
+    except NoAIAvailable as exc:
+        detail = "No hay una conexión de IA de plataforma disponible para interpretar la política."
+        if exc.errors:
+            detail += " " + "; ".join(exc.errors)
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
+
+    if not isinstance(result.data, dict):
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "La IA devolvió un borrador inválido.")
+    return _normalize_policy_assist(
+        result.data,
+        valid_campaign_ids={campaign.id for campaign in campaigns},
+    )
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
