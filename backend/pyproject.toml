@@ -22,7 +22,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.3,<9.0"
+  "pytest>=8.3,<9.0",
+  "agent-dev-kit[openai,mcp] @ git+https://github.com/robertosl77/agent-dev-kit.git@v0.1.0"
 ]
 
 [tool.setuptools.packages.find]
