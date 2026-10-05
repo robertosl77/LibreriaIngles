@@ -105,7 +105,17 @@ class MockProvider:
         description = str(task.get("description") or "").strip()
         lower = description.lower()
         benefits = task.get("benefits") or []
-        benefit_id = benefits[0].get("id") if benefits else None
+        wants_benefit = any(
+            term in lower
+            for term in (
+                "beneficio",
+                "días gratis",
+                "dias gratis",
+                "días de plataforma",
+                "dias de plataforma",
+            )
+        )
+        benefit_id = benefits[0].get("id") if benefits and wants_benefit else None
         warnings = []
 
         trigger = "FIRST_LOGIN" if any(
@@ -304,10 +314,93 @@ class MockProvider:
                 "El motor actual no tiene una condición por antigüedad de una suscripción paga."
             )
 
+        notification = "EMAIL" if "email" in lower or "correo" in lower else "IN_APP"
+        requirements = [
+            {
+                "text": f"Condición {rule['field']}",
+                "kind": "RULE",
+                "status": "REPRESENTED",
+                "capability": rule["field"],
+            }
+            for rule in rules
+        ]
+        requirements.append(
+            {
+                "text": f"Disparador {trigger}",
+                "kind": "TRIGGER",
+                "status": "REPRESENTED",
+                "capability": trigger,
+            }
+        )
+        if wants_benefit:
+            requirements.append(
+                {
+                    "text": "Otorgar un beneficio existente",
+                    "kind": "BENEFIT",
+                    "status": "REPRESENTED" if benefit_id is not None else "UNSUPPORTED",
+                    "capability": "BENEFIT" if benefit_id is not None else None,
+                }
+            )
+            requirements.append(
+                {
+                    "text": "Otorgar beneficio",
+                    "kind": "ACTION",
+                    "status": "REPRESENTED",
+                    "capability": "GRANT_BENEFIT",
+                }
+            )
+        if notification == "EMAIL":
+            requirements.append(
+                {
+                    "text": "Enviar por email",
+                    "kind": "DELIVERY",
+                    "status": "REPRESENTED",
+                    "capability": "EMAIL",
+                }
+            )
+        if any(term in lower for term in ("reclamo", "queja", "ticket de soporte")):
+            requirements.append(
+                {
+                    "text": "Segmentar por reclamo o soporte",
+                    "kind": "RULE",
+                    "status": "UNSUPPORTED",
+                    "capability": None,
+                }
+            )
+        if any(term in lower for term in ("referid", "invitó a", "invito a", "invitaron a", "invitar a", "recomendó a", "recomendo a")):
+            requirements.append(
+                {
+                    "text": "Segmentar por referido o invitación exitosa",
+                    "kind": "RULE",
+                    "status": "UNSUPPORTED",
+                    "capability": None,
+                }
+            )
+        if "%" in description or "descuento" in lower or "bonific" in lower:
+            requirements.append(
+                {
+                    "text": "Aplicar descuento o precio promocional",
+                    "kind": "ACTION",
+                    "status": "UNSUPPORTED",
+                    "capability": None,
+                }
+            )
+        if payment_tenure:
+            requirements.append(
+                {
+                    "text": "Segmentar por antigüedad de pago o suscripción",
+                    "kind": "RULE",
+                    "status": "UNSUPPORTED",
+                    "capability": None,
+                }
+            )
+
         return {
             "draft": {
                 "name": "Campaña sugerida por IA",
                 "benefitId": benefit_id,
+                "action": "GRANT_BENEFIT",
+                "actionConfig": {},
                 "trigger": trigger,
                 "rules": rules,
                 "priority": 100,
@@ -315,9 +408,10 @@ class MockProvider:
                 "maxRecipients": None,
                 "startsAt": None,
                 "endsAt": None,
-                "notification": "IN_APP",
+                "notification": notification,
                 "message": description[:500] if description else None,
             },
+            "requirements": requirements,
             "warnings": warnings,
             "summary": "Borrador generado con las capacidades actuales del motor de campañas.",
         }
