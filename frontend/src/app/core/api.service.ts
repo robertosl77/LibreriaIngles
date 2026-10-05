@@ -16,6 +16,7 @@ import {
   CampaignAssistResult,
   CampaignAudiencePreview,
   CampaignNotice,
+  CampaignPolicyAssistResult,
   CampaignPolicyBlock,
   ClassDetail,
   ClassSummary,
@@ -405,6 +406,13 @@ export class ApiService {
     return this.http.get<CampaignPolicyBlock[]>(
       `${this.base}/platform/campaigns/policies/blocks`,
       { params: { limit } }
+    );
+  }
+
+  assistPlatformCampaignPolicy(description: string): Observable<CampaignPolicyAssistResult> {
+    return this.http.post<CampaignPolicyAssistResult>(
+      `${this.base}/platform/campaigns/policies/assist`,
+      { description }
     );
   }
 
