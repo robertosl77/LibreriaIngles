@@ -121,6 +121,8 @@ export type CampaignAction =
 
 export interface CampaignRule {
   field: string;
+  subject?: string | null;
+  filters?: Record<string, string>;
   operator: string;
   value: string | number | boolean;
   windowDays?: number | null;
@@ -185,12 +187,32 @@ export interface CampaignAssistDraft {
   message: string | null;
 }
 
+export interface CampaignAssistRequirement {
+  text: string;
+  kind: 'RULE' | 'TRIGGER' | 'ACTION' | 'DELIVERY' | 'BENEFIT' | 'LIMIT' | 'DATE' | 'UNKNOWN';
+  status: 'REPRESENTED' | 'UNSUPPORTED' | 'INVALID';
+  capability: string | null;
+  verified: boolean;
+  reason: string | null;
+}
+
 export interface CampaignAssistResult {
   draft: CampaignAssistDraft;
+  requirements: CampaignAssistRequirement[];
   warnings: string[];
+  blockingIssues: string[];
+  executable: boolean;
   summary: string;
 }
 
+
+export interface CampaignRuleFilterCapability {
+  key: string;
+  label: string;
+  valueType: 'enum' | 'string';
+  options: { value: string; label: string }[];
+  required: boolean;
+}
 
 export interface CampaignRuleCapability {
   key: string;
@@ -199,6 +221,9 @@ export interface CampaignRuleCapability {
   operators: string[];
   description: string;
   options: { value: string; label: string }[];
+  subjectLabel: string | null;
+  subjectOptions: { value: string; label: string }[];
+  filters: CampaignRuleFilterCapability[];
   available: boolean;
   requiresWindow: boolean;
   windowMinDays: number | null;
@@ -225,6 +250,8 @@ export interface CampaignAudienceRuleResult {
   operator: string;
   expected: string | number | boolean;
   actual: string | number | boolean | null;
+  subject?: string | null;
+  filters?: Record<string, string>;
   matched: boolean;
   windowDays?: number | null;
 }
