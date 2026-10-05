@@ -325,6 +325,24 @@ export interface CampaignPolicyBlock {
   createdAt: string;
 }
 
+export interface CampaignPolicyAssistRequirement {
+  text: string;
+  kind: 'TYPE' | 'SCOPE' | 'RULE' | string;
+  status: 'REPRESENTED' | 'UNSUPPORTED';
+  capability: string | null;
+  reason: string | null;
+  verified: boolean;
+}
+
+export interface CampaignPolicyAssistResult {
+  draft: PlatformCampaignPolicyDraft;
+  requirements: CampaignPolicyAssistRequirement[];
+  warnings: string[];
+  blockingIssues: string[];
+  executable: boolean;
+  summary: string;
+}
+
 export interface CampaignAudienceRuleResult {
   field: string;
   operator: string;
