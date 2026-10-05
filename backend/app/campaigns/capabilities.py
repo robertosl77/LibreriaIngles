@@ -9,10 +9,29 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.campaigns.models import CampaignNotification, CampaignTrigger
+from app.curriculum.service import available_levels, get_level
 
 
 class CampaignCapabilityError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class RuleFilterCapability:
+    key: str
+    label: str
+    value_type: str
+    options: tuple[tuple[str, str], ...] = ()
+    required: bool = False
+
+    def payload(self) -> dict:
+        return {
+            "key": self.key,
+            "label": self.label,
+            "valueType": self.value_type,
+            "options": [{"value": value, "label": label} for value, label in self.options],
+            "required": self.required,
+        }
 
 
 @dataclass(frozen=True)
@@ -23,6 +42,9 @@ class RuleCapability:
     operators: tuple[str, ...]
     description: str
     options: tuple[tuple[str, str], ...] = ()
+    subject_label: str | None = None
+    subject_options: tuple[tuple[str, str], ...] = ()
+    filters: tuple[RuleFilterCapability, ...] = ()
     available: bool = True
     requires_window: bool = False
     window_min_days: int = 1
@@ -36,11 +58,93 @@ class RuleCapability:
             "operators": list(self.operators),
             "description": self.description,
             "options": [{"value": value, "label": label} for value, label in self.options],
+            "subjectLabel": self.subject_label,
+            "subjectOptions": [
+                {"value": value, "label": label} for value, label in self.subject_options
+            ],
+            "filters": [item.payload() for item in self.filters],
             "available": self.available,
             "requiresWindow": self.requires_window,
             "windowMinDays": self.window_min_days if self.requires_window else None,
             "windowMaxDays": self.window_max_days if self.requires_window else None,
         }
+
+
+ABILITY_OPTIONS = (
+    ("GRAMMAR", "Grammar"),
+    ("VOCABULARY", "Vocabulary"),
+    ("LISTENING", "Listening"),
+    ("SPEAKING", "Speaking"),
+    ("PRONUNCIATION", "Pronunciation"),
+    ("READING", "Reading"),
+    ("WRITING", "Writing"),
+)
+
+PROGRESS_STATUS_OPTIONS = (
+    ("NOT_STARTED", "Sin empezar"),
+    ("LEARNING", "Aprendiendo"),
+    ("MASTERED", "Dominada"),
+    ("NEEDS_REVIEW", "Necesita repaso"),
+)
+
+PROGRESS_TREND_OPTIONS = (
+    ("UP", "Mejorando"),
+    ("STABLE", "Estable"),
+    ("DOWN", "Bajando"),
+)
+
+AI_OWNER_FILTER_OPTIONS = (
+    ("ACCOUNT", "Propias keys (cuenta)"),
+    ("PLATFORM", "IA de plataforma"),
+    ("ORGANIZATION", "IA de organización"),
+)
+
+AI_ERROR_FILTER_OPTIONS = (
+    ("CREDENTIAL_OR_QUOTA", "Credencial inválida o cuota excedida"),
+    ("INVALID_CREDENTIALS", "Credenciales inválidas"),
+    ("QUOTA_EXCEEDED", "Cuota excedida"),
+    ("RATE_LIMITED", "Rate limit"),
+    ("PROVIDER_DOWN", "Proveedor caído"),
+    ("NETWORK_ERROR", "Error de red"),
+    ("UNKNOWN_ERROR", "Error desconocido"),
+)
+
+AI_FAILURE_FILTERS = (
+    RuleFilterCapability(
+        "ownerType",
+        "Origen de IA",
+        "enum",
+        AI_OWNER_FILTER_OPTIONS,
+    ),
+    RuleFilterCapability(
+        "errorCode",
+        "Código de error",
+        "enum",
+        AI_ERROR_FILTER_OPTIONS,
+    ),
+    RuleFilterCapability(
+        "operation",
+        "Operación",
+        "string",
+    ),
+)
+
+
+def _skill_options() -> tuple[tuple[str, str], ...]:
+    found: dict[str, str] = {}
+    for level in available_levels():
+        curriculum = get_level(level)
+        if curriculum is None:
+            continue
+        for skill in curriculum.skills:
+            found.setdefault(
+                skill.key,
+                f"{level} · {skill.area_name} · {skill.topic_name} · {skill.name}",
+            )
+    return tuple(sorted(found.items(), key=lambda item: item[1]))
+
+
+SKILL_OPTIONS = _skill_options()
 
 
 RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
@@ -83,6 +187,13 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         "Dominio del correo de la cuenta, sin @.",
     ),
     RuleCapability(
+        "DOCUMENT_COUNTRY",
+        "País documental",
+        "string",
+        ("EQ",),
+        "Código ISO de 2 letras del país del documento declarado en la cuenta. No representa residencia ni ubicación actual.",
+    ),
+    RuleCapability(
         "DAYS_SINCE_CREATED",
         "Días desde registro",
         "integer",
@@ -119,6 +230,26 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         "Días desde el último servicio vencido. No equivale a antigüedad de pago.",
     ),
     RuleCapability(
+        "DAYS_UNTIL_SERVICE_EXPIRES",
+        "Días hasta vencimiento de servicio",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Días restantes hasta el vencimiento del servicio otorgado vigente. Requiere un vencimiento real.",
+    ),
+    RuleCapability(
+        "SUBSCRIPTION_ORIGIN",
+        "Origen de la suscripción vigente",
+        "enum",
+        ("EQ",),
+        "Origen real del servicio otorgado que rige actualmente.",
+        (
+            ("MANUAL", "Manual"),
+            ("CAMPAIGN", "Campaña"),
+            ("INVITATION", "Invitación"),
+            ("PAYMENT", "Pago"),
+        ),
+    ),
+    RuleCapability(
         "CURRENT_LEVEL",
         "Nivel actual",
         "enum",
@@ -127,11 +258,133 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         tuple((level, level) for level in ("A1", "A2", "B1", "B2", "C1", "C2")),
     ),
     RuleCapability(
+        "CERTIFICATE_ISSUED",
+        "Certificado de nivel emitido",
+        "enum",
+        ("EQ",),
+        "Indica que la cuenta ya obtuvo un certificado real para el nivel seleccionado.",
+        tuple((level, level) for level in ("A1", "A2", "B1", "B2", "C1", "C2")),
+    ),
+    RuleCapability(
+        "SKILL_STATUS",
+        "Estado de skill",
+        "enum",
+        ("EQ",),
+        "Estado ya calculado por el dominio de progreso para una skill concreta.",
+        PROGRESS_STATUS_OPTIONS,
+        subject_label="Skill",
+        subject_options=SKILL_OPTIONS,
+    ),
+    RuleCapability(
+        "SKILL_SCORE",
+        "Puntaje de skill",
+        "number",
+        ("EQ", "GTE", "LTE"),
+        "Puntaje ya calculado por el dominio de progreso para una skill concreta.",
+        subject_label="Skill",
+        subject_options=SKILL_OPTIONS,
+    ),
+    RuleCapability(
+        "SKILL_TREND",
+        "Tendencia de skill",
+        "enum",
+        ("EQ",),
+        "Tendencia ya calculada por el dominio de progreso para una skill concreta.",
+        PROGRESS_TREND_OPTIONS,
+        subject_label="Skill",
+        subject_options=SKILL_OPTIONS,
+    ),
+    RuleCapability(
+        "ABILITY_STATUS",
+        "Estado de habilidad",
+        "enum",
+        ("EQ",),
+        "Estado del progreso agregado de una habilidad del idioma.",
+        PROGRESS_STATUS_OPTIONS,
+        subject_label="Habilidad",
+        subject_options=ABILITY_OPTIONS,
+    ),
+    RuleCapability(
+        "ABILITY_SCORE",
+        "Puntaje de habilidad",
+        "number",
+        ("EQ", "GTE", "LTE"),
+        "Puntaje agregado de una habilidad del idioma calculado por el dominio de progreso.",
+        subject_label="Habilidad",
+        subject_options=ABILITY_OPTIONS,
+    ),
+    RuleCapability(
+        "ABILITY_TREND",
+        "Tendencia de habilidad",
+        "enum",
+        ("EQ",),
+        "Tendencia agregada de una habilidad del idioma calculada por el dominio de progreso.",
+        PROGRESS_TREND_OPTIONS,
+        subject_label="Habilidad",
+        subject_options=ABILITY_OPTIONS,
+    ),
+    RuleCapability(
         "CLASSES_COMPLETED",
         "Clases completadas",
         "integer",
         ("EQ", "GTE", "LTE"),
         "Cantidad de clases de práctica completadas dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "CLASSES_GENERATED",
+        "Clases generadas",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de clases de práctica generadas correctamente dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "CLASSES_STARTED",
+        "Clases iniciadas",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de clases de práctica en las que hubo interacción real del alumno dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "CLASSES_GENERATION_FAILED",
+        "Clases con generación fallida",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de clases de práctica cuya generación falló dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "CLASSES_NOT_COMPLETED",
+        "Clases generadas no completadas",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de clases generadas dentro de una ventana de N días que actualmente no están completadas.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "EXAMS_COMPLETED",
+        "Exámenes completados",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de exámenes de nivel completados dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "EXAMS_PASSED",
+        "Exámenes aprobados",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de exámenes de nivel aprobados dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "EXAMS_FAILED",
+        "Exámenes desaprobados",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de exámenes de nivel desaprobados dentro de una ventana de N días.",
         requires_window=True,
     ),
     RuleCapability(
@@ -172,6 +425,58 @@ RULE_CAPABILITIES: tuple[RuleCapability, ...] = (
         "integer",
         ("EQ", "GTE", "LTE"),
         "Cantidad de días consecutivos con clases completadas, terminando hoy o ayer.",
+    ),
+    RuleCapability(
+        "LAST_ENDED_STREAK_DAYS",
+        "Última racha terminada",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de días consecutivos de la racha más reciente que ya fue interrumpida.",
+    ),
+    RuleCapability(
+        "DAYS_SINCE_STREAK_BROKEN",
+        "Días desde que se cortó la última racha",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Días completos desde el primer día sin actividad que interrumpió la última racha terminada.",
+    ),
+    RuleCapability(
+        "APPEALS_COUNT",
+        "Apelaciones realizadas",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad real de correcciones apeladas dentro de una ventana de N días.",
+        requires_window=True,
+    ),
+    RuleCapability(
+        "SPEAKING_RESPONSES",
+        "Respuestas habladas",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad histórica de respuestas efectivamente enviadas en modalidad SPEAK.",
+    ),
+    RuleCapability(
+        "LISTENING_RESPONSES",
+        "Respuestas a ejercicios escuchados",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad histórica de respuestas enviadas a ejercicios presentados en modalidad LISTEN.",
+    ),
+    RuleCapability(
+        "AI_FAILURES_COUNT",
+        "Fallos de IA",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Cantidad de llamadas de IA fallidas dentro de una ventana, con filtros opcionales por origen, código y operación.",
+        filters=AI_FAILURE_FILTERS,
+        requires_window=True,
+    ),
+    RuleCapability(
+        "DAYS_SINCE_BYOK_CONFIGURED_WITHOUT_SUCCESS",
+        "Días con BYOK configurado sin uso exitoso",
+        "integer",
+        ("EQ", "GTE", "LTE"),
+        "Días desde la primera conexión propia activa cuando ninguna conexión propia activa logró todavía un uso real exitoso. Los health checks no cuentan como activación.",
     ),
 )
 
@@ -277,12 +582,60 @@ def _as_utc(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def validate_rule(field: str, operator: str, value: Any, window_days: Any = None) -> dict:
+def validate_rule(
+    field: str,
+    operator: str,
+    value: Any,
+    window_days: Any = None,
+    subject: Any = None,
+    filters: Any = None,
+) -> dict:
     field = field.strip().upper()
     operator = operator.strip().upper()
     capability = RULES_BY_KEY.get(field)
     if capability is None or not capability.available or operator not in capability.operators:
         raise CampaignCapabilityError(f"Condición no soportada: {field} {operator}.")
+
+    normalized_subject: str | None = None
+    if capability.subject_options:
+        raw_subject = str(subject or "").strip()
+        allowed_subjects = {option.lower(): option for option, _ in capability.subject_options}
+        normalized_subject = allowed_subjects.get(raw_subject.lower())
+        if normalized_subject is None:
+            raise CampaignCapabilityError(f"{field} requiere seleccionar {capability.subject_label or 'un sujeto'} válido.")
+
+    raw_filters = filters if isinstance(filters, dict) else {}
+    filter_capabilities = {item.key: item for item in capability.filters}
+    unknown_filters = set(raw_filters) - set(filter_capabilities)
+    if unknown_filters:
+        raise CampaignCapabilityError(
+            f"Filtro no soportado para {field}: {sorted(unknown_filters)[0]}."
+        )
+    normalized_filters: dict[str, str] = {}
+    for filter_key, filter_capability in filter_capabilities.items():
+        raw_filter = raw_filters.get(filter_key)
+        if raw_filter in (None, ""):
+            if filter_capability.required:
+                raise CampaignCapabilityError(
+                    f"{field} requiere el filtro {filter_capability.label}."
+                )
+            continue
+        filter_value = str(raw_filter).strip()
+        if filter_capability.value_type == "enum":
+            filter_value = filter_value.upper()
+            allowed_values = {option for option, _ in filter_capability.options}
+            if filter_value not in allowed_values:
+                raise CampaignCapabilityError(
+                    f"Valor inválido para el filtro {filter_capability.label}."
+                )
+        elif filter_capability.value_type == "string":
+            if not filter_value:
+                raise CampaignCapabilityError(
+                    f"El filtro {filter_capability.label} no puede quedar vacío."
+                )
+            if filter_key == "operation":
+                filter_value = filter_value.lower()
+        normalized_filters[filter_key] = filter_value
 
     normalized_window: int | None = None
     if capability.requires_window:
@@ -333,10 +686,18 @@ def validate_rule(field: str, operator: str, value: Any, window_days: Any = None
             value = value.lower()
             if "@" not in value or "." not in value.rsplit("@", 1)[-1]:
                 raise CampaignCapabilityError("Email inválido.")
+        elif field == "DOCUMENT_COUNTRY":
+            value = value.upper()
+            if len(value) != 2 or not value.isalpha():
+                raise CampaignCapabilityError("País documental inválido: usá un código ISO de 2 letras.")
         elif not value:
             raise CampaignCapabilityError(f"{field} no puede quedar vacío.")
 
     result = {"field": field, "operator": operator, "value": value}
+    if normalized_subject is not None:
+        result["subject"] = normalized_subject
+    if normalized_filters:
+        result["filters"] = normalized_filters
     if normalized_window is not None:
         result["windowDays"] = normalized_window
     return result
@@ -350,8 +711,24 @@ def ai_capabilities_text() -> str:
         if rule.options:
             options = " valores=" + ",".join(value for value, _ in rule.options)
         window = "; requiere windowDays" if rule.requires_window else ""
+        subject = (
+            f"; requiere subject ({rule.subject_label})"
+            if rule.subject_options
+            else ""
+        )
+        filters = ""
+        if rule.filters:
+            filter_parts = []
+            for item in rule.filters:
+                if item.options:
+                    filter_parts.append(
+                        f"{item.key}=" + "/".join(value for value, _ in item.options)
+                    )
+                else:
+                    filter_parts.append(f"{item.key}=texto")
+            filters = "; filtros opcionales: " + ", ".join(filter_parts)
         lines.append(
-            f"- {rule.key}: {ops}; tipo={rule.value_type}{options}{window}. {rule.description}"
+            f"- {rule.key}: {ops}; tipo={rule.value_type}{options}{subject}{filters}{window}. {rule.description}"
         )
     lines.append(
         "- Triggers disponibles ahora: "
