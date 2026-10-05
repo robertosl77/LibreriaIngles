@@ -22,3 +22,6 @@ dist/
 .DS_Store
 Thumbs.db
 
+
+# Agent Dev Kit runtime state
+.agent-dev-kit/runtime/
