@@ -5,6 +5,7 @@ import { ShellComponent } from './layout/shell.component';
 import { AiSettingsComponent } from './pages/ai-settings/ai-settings.component';
 import { CertificateComponent } from './pages/certificate/certificate.component';
 import { ClassComponent } from './pages/class/class.component';
+import { ConsumptionComponent } from './pages/consumption/consumption.component';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { HistoryComponent } from './pages/history/history.component';
 import { InvitationComponent } from './pages/invitation/invitation.component';
@@ -34,6 +35,7 @@ export const routes: Routes = [
       { path: 'clase/:id', component: ClassComponent, title: 'Clase · Librería Inglés' },
       { path: 'progreso', component: DashboardComponent, title: 'Progreso · Librería Inglés' },
       { path: 'historial', component: HistoryComponent, title: 'Historial · Librería Inglés' },
+      { path: 'consumo', component: ConsumptionComponent, title: 'Consumo · Librería Inglés' },
       {
         path: 'plataforma',
         component: PlatformComponent,

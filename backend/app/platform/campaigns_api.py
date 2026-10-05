@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
 from app.ai.service import NoAIAvailable, run_platform_json_task
+from app.ai.usage import AIUsageContext
 from app.benefits.models import Benefit
 from app.benefits.service import benefit_duration, seed_benefits
 from app.campaigns.capabilities import (
@@ -822,6 +823,16 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
             system=CAMPAIGN_ASSIST_SYSTEM + "\n\n" + ai_capabilities_text(),
             user=user_prompt,
             task=task,
+            usage_context=AIUsageContext(
+                subject_type="CAMPAIGN_ASSIST",
+                subject_label="Asistente de campañas",
+                subject_route="/app/plataforma/configuracion",
+                diagnostic={
+                    "descriptionChars": len(payload.description.strip()),
+                    "benefitCount": len(benefit_options),
+                    "capabilityCount": len(capabilities_payload()),
+                },
+            ),
         )
     except NoAIAvailable as exc:
         detail = "No hay una conexión de IA de plataforma disponible para generar el borrador."

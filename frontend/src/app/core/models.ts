@@ -579,6 +579,205 @@ export interface AbilityProgress {
   practiceLast?: number | null;
 }
 
+export type AiUsageScopeKind = 'ME' | 'ORGANIZATION' | 'PLATFORM';
+
+export interface AiUsageScope {
+  kind: AiUsageScopeKind;
+  id: number | null;
+  label: string;
+}
+
+export interface AiUsageSubject {
+  type: string | null;
+  id: number | null;
+  label: string | null;
+  route: string | null;
+  classId: number | null;
+  exerciseNumber: number | null;
+  previewable: boolean;
+}
+
+export interface AiUsageExecution {
+  id: string;
+  attempt: number | null;
+  attempts: number;
+  status: 'OK' | 'RECOVERED_BY_FAILOVER' | 'INTERRUPTED';
+}
+
+export interface AiUsageRow {
+  id: number;
+  createdAt: string;
+  accountId: number | null;
+  accountEmail: string | null;
+  accountName: string | null;
+  organizationId: number | null;
+  operation: string;
+  provider: string;
+  model: string | null;
+  connectionName: string | null;
+  connectionRoute: string | null;
+  connectionId: number | null;
+  connectionOwnerType: 'ACCOUNT' | 'PLATFORM' | 'ORGANIZATION';
+  serviceSource: AiSource | 'OWNER' | null;
+  actualSource: 'BYOK' | 'PLATFORM' | 'ORGANIZATION';
+  inputTokens: number | null;
+  reasoningTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  success: boolean;
+  errorCode: string | null;
+  execution: AiUsageExecution | null;
+  subject: AiUsageSubject | null;
+}
+
+
+export interface AiUsageDiagnosticSnapshot {
+  version: number;
+  requestKind: 'TEXT_JSON' | 'AUDIO' | string;
+  systemChars?: number;
+  userChars?: number;
+  systemFingerprint?: string;
+  responseJsonChars?: number;
+  transcriptChars?: number;
+  audioBytes?: number;
+  mimeType?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface AiUsageDiagnosticMetric {
+  key: string;
+  label: string;
+  value: number;
+  median: number;
+  ratio: number | null;
+  sampleSize: number;
+}
+
+export interface AiUsageDiagnosticResponse {
+  eventId: number;
+  operation: string;
+  createdAt: string;
+  subject: Omit<AiUsageSubject, 'route'> | null;
+  execution: AiUsageExecution | null;
+  diagnostic: {
+    tokens: {
+      input: number | null;
+      reasoning: number | null;
+      output: number | null;
+      total: number | null;
+    };
+    snapshot: AiUsageDiagnosticSnapshot | null;
+    comparison: {
+      sampleSize: number;
+      enoughSample: boolean;
+      medianTotalTokens: number | null;
+      p90TotalTokens: number | null;
+      totalVsMedian: number | null;
+      cohort: {
+        operation: string;
+        subjectType: string | null;
+        provider: string;
+        model: string | null;
+        exerciseType: string | null;
+        promptFingerprint: string | null;
+      };
+      metrics: AiUsageDiagnosticMetric[];
+      signals: AiUsageDiagnosticMetric[];
+    };
+    note: string;
+  };
+}
+
+export interface AiUsageExecutionContext {
+  operation: string;
+  presentationMode: string;
+  responseMode: string;
+  evaluationMode: string;
+  evaluationSource: string | null;
+  audioDurationMs: number | null;
+  listenPlays: number;
+  listenSlowPlays: number;
+  speakRetakes: number;
+  pronunciationPracticeScores: number[];
+  pronunciationEvaluated: boolean;
+  assistance: string;
+  contextStats: {
+    instructionChars: number;
+    questionChars: number;
+    passageChars: number;
+    answerChars: number;
+    options: number;
+    expectedConcepts: number;
+  };
+}
+
+export interface AiUsageReferenceExercise {
+  id: number;
+  number: number;
+  type: string;
+  area: string | null;
+  skillKey?: string | null;
+  instruction: string | null;
+  question: string;
+  passage: string | null;
+  options?: string[] | null;
+  conversation: { turn?: number; total?: number; closing?: string } | null;
+  presentation?: string;
+  responseMode?: string;
+  answer: string | null;
+  score: number | null;
+  result?: string | null;
+  feedback: string | null;
+  correctAnswer?: string | null;
+  executionContext?: AiUsageExecutionContext;
+}
+
+export interface AiUsageReference {
+  eventId: number;
+  kind: 'EXERCISE' | 'CLASS';
+  operation?: string;
+  class: {
+    id: number;
+    kind: 'CLASS' | 'EXAM';
+    label: string;
+    title: string | null;
+    targetLevel: string | null;
+    status?: string;
+    score?: number | null;
+  };
+  exercise?: AiUsageReferenceExercise;
+  exercises?: AiUsageReferenceExercise[];
+  generationSummary?: {
+    logicalExercises: number;
+    storedExerciseRows: number;
+    types: Record<string, number>;
+    presentationModes: Record<string, number>;
+    responseModes: Record<string, number>;
+  };
+  fullClassRoute: string | null;
+}
+
+export interface AiUsageReport {
+  scope: AiUsageScopeKind;
+  organizationId: number | null;
+  scopes: AiUsageScope[];
+  summary: {
+    executions: number;
+    requests: number;
+    successful: number;
+    errors: number;
+    measuredRequests: number;
+    inputTokens: number;
+    reasoningTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  offset: number;
+  limit: number;
+  total: number;
+  rows: AiUsageRow[];
+}
+
 export interface UsageCounts {
   requests: number;
   successful: number;

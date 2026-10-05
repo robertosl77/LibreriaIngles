@@ -11,7 +11,7 @@ import { Component, input } from '@angular/core';
 @Component({
   selector: 'app-collapse-card',
   template: `
-    <details class="card ui-collapse">
+    <details class="card ui-collapse" [open]="open()">
       <summary>
         @if (title()) {
           <div class="default-heading">
@@ -112,4 +112,5 @@ import { Component, input } from '@angular/core';
 export class CollapseCardComponent {
   readonly title = input('');
   readonly description = input('');
+  readonly open = input(false);
 }

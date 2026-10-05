@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.ai.api import router as ai_router
+from app.ai.usage_api import router as ai_usage_router
 from app.auth.api import router as auth_router
 from app.classes.api import router as classes_router
 from app.campaigns.api import router as campaign_notices_router
@@ -18,6 +19,7 @@ router = APIRouter()
 router.include_router(system_router)
 router.include_router(auth_router)
 router.include_router(ai_router)
+router.include_router(ai_usage_router)
 router.include_router(classes_router)
 router.include_router(campaign_notices_router)
 router.include_router(invitations_router)

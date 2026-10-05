@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session
 from app.accounts.models import Account
 from app.ai.models import utcnow
 from app.ai.service import NoAIAvailable, connection_snapshot, run_json_task
+from app.ai.usage import AIUsageContext
+from app.classes.reference import exercise_display_number
 from app.classes.normalize import fill_blank_variants, normalize_answer
 from app.classes.prompts import EVALUATION_SYSTEM, evaluation_user_prompt
 from app.classes.spelling import SPELLING_SCORE, spelling_slips
@@ -524,6 +526,42 @@ def _ai_payload(db: Session, exercise: Exercise, answer: str) -> dict:
     }
 
 
+def _text_list_chars(values) -> int:
+    return sum(len(str(value or "")) for value in (values or []))
+
+
+def _evaluation_diagnostic(payload: dict) -> dict:
+    """Métricas del payload real de evaluación, sin conservar su contenido textual."""
+    conversation = [item for item in (payload.get("conversationContext") or []) if isinstance(item, dict)]
+    conversation_chars = sum(
+        len(str(item.get("partner") or "")) + len(str(item.get("student") or ""))
+        for item in conversation
+    )
+    options = payload.get("options") or []
+    references = payload.get("referenceAnswers") or []
+    objectives = payload.get("objectives") or []
+    return {
+        "exerciseType": payload.get("type"),
+        "presentationMode": payload.get("presentation"),
+        "responseMode": payload.get("response"),
+        "instructionChars": len(str(payload.get("instruction") or "")),
+        "questionChars": len(str(payload.get("question") or "")),
+        "passageChars": len(str(payload.get("passage") or "")),
+        "stimulusChars": len(str(payload.get("stimulus") or "")),
+        "answerChars": len(str(payload.get("studentAnswer") or "")),
+        "optionCount": len(options),
+        "optionsChars": _text_list_chars(options),
+        "referenceAnswerCount": len(references),
+        "referenceAnswersChars": _text_list_chars(references),
+        "objectiveCount": len(objectives),
+        "objectivesChars": _text_list_chars(objectives),
+        "expectedConceptCount": len(payload.get("expectedConcepts") or []),
+        "secondarySkillCount": len(payload.get("secondarySkillCandidates") or []),
+        "conversationTurns": len(conversation),
+        "conversationChars": conversation_chars,
+    }
+
+
 def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: str) -> dict:
     payload = _ai_payload(db, exercise, answer)
     result = run_json_task(
@@ -541,6 +579,18 @@ def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: 
             },
             "answer": answer,
         },
+        usage_context=AIUsageContext(
+            organization_id=exercise.organization_id,
+            membership_id=exercise.membership_id,
+            subject_type="EXERCISE",
+            subject_id=exercise.id,
+            subject_label=(
+                f"{'Examen' if (session := db.get(ClassSession, exercise.class_session_id)) and session.kind.value == 'EXAM' else 'Clase'} "
+                f"#{exercise.class_session_id} · Ejercicio {exercise_display_number(db, exercise)}"
+            ),
+            subject_route=f"/app/clase/{exercise.class_session_id}",
+            diagnostic=_evaluation_diagnostic(payload),
+        ),
     )
     sanitized = _sanitize_ai_result(exercise, result.data)
     spoken = bool(

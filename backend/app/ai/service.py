@@ -14,7 +14,10 @@ Reglas (documento funcional §24–§29):
 """
 
 from dataclasses import dataclass, field
+from hashlib import sha256
+import json
 from datetime import timedelta
+from uuid import uuid4
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -28,6 +31,7 @@ from app.ai.models import (
     utcnow,
 )
 from app.ai.providers import PROVIDERS, ProviderError, build_provider
+from app.ai.usage import AIUsageContext, build_usage_event
 from app.core.security import decrypt_secret
 from app.subscriptions.models import AISource
 from app.subscriptions.service import effective_service
@@ -242,6 +246,49 @@ def _mark_success(connection: AIConnection, *, used: bool = True) -> None:
 # ------------------------------------------------------------------ consumo
 
 
+def _with_domain_diagnostics(base: dict, usage_context: AIUsageContext | None) -> dict:
+    details = dict(usage_context.diagnostic or {}) if usage_context else {}
+    if details:
+        base["details"] = details
+    return base
+
+
+def _text_diagnostic_snapshot(
+    system: str,
+    user: str,
+    usage_context: AIUsageContext | None,
+) -> dict:
+    """Huella de la llamada real, sin conservar el contenido de los prompts."""
+    return _with_domain_diagnostics(
+        {
+            "version": 1,
+            "requestKind": "TEXT_JSON",
+            "systemChars": len(system),
+            "userChars": len(user),
+            "systemFingerprint": sha256(system.encode("utf-8")).hexdigest()[:16],
+        },
+        usage_context,
+    )
+
+
+def _audio_diagnostic_snapshot(
+    audio: bytes,
+    mime_type: str,
+    usage_context: AIUsageContext | None,
+) -> dict:
+    """Huella de audio sin persistir audio ni transcripción."""
+    return _with_domain_diagnostics(
+        {
+            "version": 1,
+            "requestKind": "AUDIO",
+            "audioBytes": len(audio),
+            "mimeType": mime_type[:80],
+        },
+        usage_context,
+    )
+
+
+
 def record_usage(
     db: Session,
     connection: AIConnection,
@@ -249,17 +296,28 @@ def record_usage(
     account: Account | None,
     operation: str,
     error: ProviderError | None = None,
+    usage_payload: dict | None = None,
+    usage_context: AIUsageContext | None = None,
+    execution_id: str | None = None,
+    attempt_index: int | None = None,
+    diagnostic_snapshot: dict | None = None,
 ) -> None:
+    info = PROVIDERS.get(connection.provider.upper())
+    actual_model = connection.model or (info.default_model if info else None)
     db.add(
-        AIUsageEvent(
-            connection_id=connection.id,
-            owner_type=connection.owner_type,
-            provider=connection.provider,
-            model=connection.model,
-            account_id=account.id if account else None,
+        build_usage_event(
+            db,
+            connection,
+            account=account,
             operation=operation,
             success=error is None,
             error_code=error.code.value if error else None,
+            usage_payload=usage_payload,
+            context=usage_context,
+            model=actual_model,
+            execution_id=execution_id,
+            attempt_index=attempt_index,
+            diagnostic_snapshot=diagnostic_snapshot,
         )
     )
 
@@ -326,34 +384,72 @@ def _run_json_task_with_connections(
     system: str,
     user: str,
     task: dict,
+    usage_context: AIUsageContext | None = None,
 ) -> AIResult:
     errors: list[str] = []
     failed: list[str] = []
-    operation = str(task.get("kind") or "unknown")[:40]
+    operation = str(task.get("kind") or "unknown")[:80]
+    execution_id = uuid4().hex
+    attempt_index = 0
+    diagnostic_snapshot = _text_diagnostic_snapshot(system, user, usage_context)
     for connection in connections:
         reason = limit_reason(db, connection, account)
         if reason:
             # Límite de consumo: se saltea sin marcarla como caída.
             errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
+        attempt_index += 1
+        provider = None
         try:
-            data = provider_for(connection).complete_json(system, user, task)
+            provider = provider_for(connection)
+            data = provider.complete_json(system, user, task)
         except ProviderError as exc:
             _mark_failure(connection, exc)
-            record_usage(db, connection, account=account, operation=operation, error=exc)
+            record_usage(
+                db,
+                connection,
+                account=account,
+                operation=operation,
+                error=exc,
+                usage_payload=getattr(provider, "last_usage_payload", None),
+                usage_context=usage_context,
+                execution_id=execution_id,
+                attempt_index=attempt_index,
+                diagnostic_snapshot=diagnostic_snapshot,
+            )
             failed.append(connection.name)
             errors.append(f"{connection_label(connection, account)}: {exc.message}")
             db.commit()
             continue
         _mark_success(connection)
-        record_usage(db, connection, account=account, operation=operation)
+        success_diagnostic = dict(diagnostic_snapshot)
+        success_diagnostic["responseJsonChars"] = len(
+            json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        )
+        record_usage(
+            db,
+            connection,
+            account=account,
+            operation=operation,
+            usage_payload=getattr(provider, "last_usage_payload", None),
+            usage_context=usage_context,
+            execution_id=execution_id,
+            attempt_index=attempt_index,
+            diagnostic_snapshot=success_diagnostic,
+        )
         db.commit()
         return AIResult(data=data, connection=connection, failed_connections=failed)
     raise NoAIAvailable(errors)
 
 
 def run_json_task(
-    db: Session, account: Account, *, system: str, user: str, task: dict
+    db: Session,
+    account: Account,
+    *,
+    system: str,
+    user: str,
+    task: dict,
+    usage_context: AIUsageContext | None = None,
 ) -> AIResult:
     return _run_json_task_with_connections(
         db,
@@ -362,11 +458,18 @@ def run_json_task(
         system=system,
         user=user,
         task=task,
+        usage_context=usage_context,
     )
 
 
 def run_platform_json_task(
-    db: Session, account: Account, *, system: str, user: str, task: dict
+    db: Session,
+    account: Account,
+    *,
+    system: str,
+    user: str,
+    task: dict,
+    usage_context: AIUsageContext | None = None,
 ) -> AIResult:
     """Tarea administrativa que consume únicamente conexiones PLATFORM.
 
@@ -388,6 +491,7 @@ def run_platform_json_task(
         system=system,
         user=user,
         task=task,
+        usage_context=usage_context,
     )
 
 
@@ -397,31 +501,59 @@ def transcribe_audio(
     *,
     audio: bytes,
     mime_type: str,
+    usage_context: AIUsageContext | None = None,
 ) -> AudioTranscriptionResult:
     """Transcribe sin persistir el audio y con el mismo failover/límites del router de IA."""
     errors: list[str] = []
     failed: list[str] = []
+    execution_id = uuid4().hex
+    attempt_index = 0
+    diagnostic_snapshot = _audio_diagnostic_snapshot(audio, mime_type, usage_context)
     for connection in audio_connections(db, account):
         reason = limit_reason(db, connection, account)
         if reason:
             errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
+        attempt_index += 1
+        provider = None
         try:
-            analysis = provider_for(connection).analyze_speech(audio, mime_type)
+            provider = provider_for(connection)
+            analysis = provider.analyze_speech(audio, mime_type)
             text = analysis.text.strip()
             if not text:
                 raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "No se detectó voz.")
         except ProviderError as exc:
             _mark_failure(connection, exc)
             record_usage(
-                db, connection, account=account, operation="transcribe_audio", error=exc
+                db,
+                connection,
+                account=account,
+                operation="transcribe_audio",
+                error=exc,
+                usage_payload=getattr(provider, "last_usage_payload", None),
+                usage_context=usage_context,
+                execution_id=execution_id,
+                attempt_index=attempt_index,
+                diagnostic_snapshot=diagnostic_snapshot,
             )
             failed.append(connection.name)
             errors.append(f"{connection_label(connection, account)}: {exc.message}")
             db.commit()
             continue
         _mark_success(connection)
-        record_usage(db, connection, account=account, operation="transcribe_audio")
+        success_diagnostic = dict(diagnostic_snapshot)
+        success_diagnostic["transcriptChars"] = len(text)
+        record_usage(
+            db,
+            connection,
+            account=account,
+            operation="transcribe_audio",
+            usage_payload=getattr(provider, "last_usage_payload", None),
+            usage_context=usage_context,
+            execution_id=execution_id,
+            attempt_index=attempt_index,
+            diagnostic_snapshot=success_diagnostic,
+        )
         db.commit()
         return AudioTranscriptionResult(
             text=text,

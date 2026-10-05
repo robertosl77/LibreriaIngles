@@ -79,6 +79,41 @@ def _owner_filter(account: Account, scope: Scope):
     return AIConnectionOwnerType.ACCOUNT, account.id
 
 
+def _normalized_connection_name(value: str) -> tuple[str, str]:
+    """Nombre visible + clave de comparación estable para un mismo owner/scope."""
+    display = " ".join(value.split())
+    if not display:
+        raise HTTPException(422, "Ingresá un nombre para la conexión.")
+    return display, display.casefold()
+
+
+def _validate_unique_connection_name(
+    db,
+    owner_type: AIConnectionOwnerType,
+    owner_id: int | None,
+    value: str,
+    *,
+    exclude_id: int | None = None,
+) -> str:
+    display, normalized = _normalized_connection_name(value)
+    query = select(AIConnection).where(AIConnection.owner_type == owner_type)
+    query = query.where(
+        AIConnection.owner_id.is_(None)
+        if owner_id is None
+        else AIConnection.owner_id == owner_id
+    )
+    if exclude_id is not None:
+        query = query.where(AIConnection.id != exclude_id)
+    for connection in db.scalars(query).all():
+        _, existing = _normalized_connection_name(connection.name)
+        if existing == normalized:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Ya existe una conexión con ese nombre en este ámbito.",
+            )
+    return display
+
+
 LIMIT_FIELDS = {
     "dailyRequestLimit": "daily_request_limit",
     "perAccountDailyLimit": "per_account_daily_limit",
@@ -273,11 +308,14 @@ def create_connection(
 
     owner_type, owner_id = _owner_filter(account, payload.scope)
     _reject_limits_outside_platform(owner_type, payload)
+    connection_name = _validate_unique_connection_name(
+        db, owner_type, owner_id, payload.name
+    )
     connection = AIConnection(
         owner_type=owner_type,
         owner_id=owner_id,
         provider=provider,
-        name=payload.name.strip(),
+        name=connection_name,
         model=(payload.model or "").strip() or info.default_model,
         priority=payload.priority,
         active=True,
@@ -310,7 +348,13 @@ def update_connection(
         if field_name in payload.model_fields_set:
             setattr(connection, column, getattr(payload, field_name))
     if payload.name is not None:
-        connection.name = payload.name.strip()
+        connection.name = _validate_unique_connection_name(
+            db,
+            connection.owner_type,
+            connection.owner_id,
+            payload.name,
+            exclude_id=connection.id,
+        )
     if payload.model is not None:
         connection.model = payload.model.strip() or PROVIDERS[connection.provider].default_model
     if payload.priority is not None:
