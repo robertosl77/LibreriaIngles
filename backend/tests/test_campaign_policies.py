@@ -1,5 +1,7 @@
 """T-141: políticas globales reutilizables de Campaigns."""
 
+from types import SimpleNamespace
+
 from conftest import login
 
 API = "/api/v1"
@@ -317,3 +319,128 @@ def test_policy_can_be_disabled_reenabled_and_soft_deleted(client) -> None:
     assert deleted.status_code == 204
     listed = client.get(f"{API}/platform/campaigns/policies", headers=owner)
     assert all(row["id"] != policy["id"] for row in listed.json())
+
+
+
+def test_policy_ai_assist_builds_reviewable_draft_and_usage_context(client, monkeypatch) -> None:
+    owner, _ = _owner_and_service(client)
+    captured: dict = {}
+
+    def fake_run(_db, _owner, **kwargs):
+        captured["task"] = kwargs["task"]
+        captured["usage_context"] = kwargs["usage_context"]
+        return SimpleNamespace(
+            data={
+                "draft": {
+                    "name": "Enfriamiento general · 30 días",
+                    "description": "No activar otra campaña si hubo una reciente.",
+                    "kind": "SUPPRESSION",
+                    "enabled": True,
+                    "appliesTo": {"mode": "ALL", "campaignIds": []},
+                    "rules": [
+                        {
+                            "field": "CAMPAIGN_GRANTS_COUNT",
+                            "operator": "GTE",
+                            "value": 1,
+                            "windowDays": 30,
+                        }
+                    ],
+                },
+                "requirements": [
+                    {
+                        "text": "Bloquear si recibió una campaña en los últimos 30 días",
+                        "kind": "RULE",
+                        "status": "REPRESENTED",
+                        "capability": "CAMPAIGN_GRANTS_COUNT",
+                        "reason": None,
+                    }
+                ],
+                "warnings": [],
+                "summary": "Supresión global de 30 días.",
+            }
+        )
+
+    monkeypatch.setattr(
+        "app.platform.campaign_policies_api.run_platform_json_task",
+        fake_run,
+    )
+
+    response = client.post(
+        f"{API}/platform/campaigns/policies/assist",
+        headers=owner,
+        json={
+            "description": "No actives una campaña si recibió otra durante los últimos 30 días."
+        },
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["executable"] is True
+    assert result["draft"]["kind"] == "SUPPRESSION"
+    assert result["draft"]["rules"] == [
+        {
+            "field": "CAMPAIGN_GRANTS_COUNT",
+            "operator": "GTE",
+            "value": 1,
+            "windowDays": 30,
+        }
+    ]
+    assert result["requirements"][0]["verified"] is True
+
+    assert captured["task"]["kind"] == "campaign_policy_assist"
+    usage = captured["usage_context"]
+    assert usage.subject_type == "CAMPAIGN_POLICY_ASSIST"
+    assert usage.subject_label == "Asistente de políticas de Campaigns"
+    assert usage.subject_route == "/app/plataforma/campanas"
+
+
+def test_policy_ai_assist_refuses_unsupported_exclusion(client, monkeypatch) -> None:
+    owner, _ = _owner_and_service(client)
+
+    def fake_run(_db, _owner, **_kwargs):
+        return SimpleNamespace(
+            data={
+                "draft": {
+                    "name": "Excluir campaña A",
+                    "description": "Exclusión todavía no soportada.",
+                    "kind": "EXCLUSION",
+                    "enabled": True,
+                    "appliesTo": {"mode": "ALL", "campaignIds": []},
+                    "rules": [
+                        {
+                            "field": "CAMPAIGN_GRANTS_COUNT",
+                            "operator": "GTE",
+                            "value": 1,
+                            "windowDays": 30,
+                        }
+                    ],
+                },
+                "requirements": [
+                    {
+                        "text": "Excluir una campaña concreta por una regla de exclusión",
+                        "kind": "TYPE",
+                        "status": "UNSUPPORTED",
+                        "capability": None,
+                        "reason": "Exclusión sigue en análisis y no está habilitada.",
+                    }
+                ],
+                "warnings": [],
+                "summary": "La intención requiere exclusión.",
+            }
+        )
+
+    monkeypatch.setattr(
+        "app.platform.campaign_policies_api.run_platform_json_task",
+        fake_run,
+    )
+
+    response = client.post(
+        f"{API}/platform/campaigns/policies/assist",
+        headers=owner,
+        json={"description": "Quiero excluir una campaña específica cuando se haya recibido otra."},
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["executable"] is False
+    assert result["draft"]["kind"] == "SUPPRESSION"
+    assert any("Exclusión" in issue or "EXCLUSION" in issue for issue in result["blockingIssues"])
+    assert result["requirements"][0]["verified"] is False
