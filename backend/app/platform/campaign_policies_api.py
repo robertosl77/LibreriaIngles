@@ -244,6 +244,8 @@ def _normalize_policy_assist(
     if not isinstance(raw_requirements, list):
         blocking.append("La IA no devolvió la cobertura de requisitos de la intención.")
         raw_requirements = []
+
+    represented_rule_capabilities = {rule["field"] for rule in normalized_rules}
     for item in raw_requirements:
         if not isinstance(item, dict):
             continue
@@ -252,21 +254,36 @@ def _normalize_policy_assist(
             continue
         status_value = str(item.get("status") or "UNSUPPORTED").strip().upper()
         status_value = "REPRESENTED" if status_value == "REPRESENTED" else "UNSUPPORTED"
-        capability = item.get("capability")
-        reason = item.get("reason")
+        requirement_kind = str(item.get("kind") or "RULE").strip().upper()
+        capability = str(item.get("capability") or "").strip() or None
+        reason = str(item.get("reason") or "").strip() or None
+
+        verified = False
+        if status_value == "REPRESENTED":
+            if requirement_kind == "RULE":
+                verified = capability in represented_rule_capabilities
+            elif requirement_kind == "TYPE":
+                verified = capability == kind
+            elif requirement_kind == "SCOPE":
+                verified = capability == applies_mode
+
         requirement = {
             "text": text,
-            "kind": str(item.get("kind") or "RULE").strip().upper(),
+            "kind": requirement_kind,
             "status": status_value,
-            "capability": str(capability).strip() if capability else None,
-            "reason": str(reason).strip() if reason else None,
-            "verified": status_value == "REPRESENTED",
+            "capability": capability,
+            "reason": reason,
+            "verified": verified,
         }
         requirements.append(requirement)
+
         if status_value != "REPRESENTED":
             blocking.append(
-                requirement["reason"]
-                or f"No se puede representar exactamente: {requirement['text']}."
+                reason or f"No se puede representar exactamente: {text}."
+            )
+        elif not verified:
+            blocking.append(
+                f"La IA marcó como representado un requisito que no coincide con el borrador: {text}."
             )
 
     blocking = _unique_texts(blocking)
