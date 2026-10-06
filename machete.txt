@@ -1,0 +1,56 @@
+Desde la raíz del repo:
+cd backend
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload
+
+Si todavía no existiera el entorno:
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+alembic upgrade head
+uvicorn app.main:app --reload
+
+--------------------------------------------
+
+Desde la raíz:
+cd frontend
+npm install
+npm start
+
+Si ya tenés las dependencias instaladas, alcanza con:
+cd frontend
+npm start
+
+Normalmente queda en http://localhost:4200.
+
+--------------------------------------------
+
+Agent Dev Kit por consola (desde la raíz del repo):
+.\backend\.venv\Scripts\Activate.ps1
+agent-dev-kit run .
+
+El menú pregunta en este orden:
+1. proveedor (Enter = Anthropic, el preferido)
+2. key: pegarla (no se ve al pegar y no se guarda)
+   Anthropic: https://platform.claude.com/settings/keys
+   Gemini:    https://aistudio.google.com/apikey
+   OpenAI:    https://platform.openai.com/api-keys
+3. modelo: número de la lista
+
+Dentro de la sesión (you>):
+/task <pedido>   plan + propuesta de cada agente
+/exit            salir
+
+Tarea suelta sin entrar a la sesión:
+agent-dev-kit task . "pedido"
+
+Sin menú (proveedor y modelo fijos):
+agent-dev-kit run . --provider anthropic --model claude-haiku-4-5
+
+Si todavía no existiera el entorno o agent-dev-kit no se reconoce:
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+cd ..

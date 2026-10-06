@@ -22,8 +22,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.3,<9.0",
-     "agent-dev-kit[openai,anthropic,gemini,mcp] @ git+https://github.com/robertosl77/agent-dev-kit.git@v0.2.0"
+  "pytest>=8.3,<9.0"
+]
+pronunciation = [
+  "openpronounce==0.3.0"
 ]
 
 [tool.setuptools.packages.find]

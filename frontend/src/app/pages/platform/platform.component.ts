@@ -6,7 +6,8 @@ import { TabNavComponent, TabNavItem } from '../../shared/ui/tab-nav.component';
 
 const PLATFORM_TABS: TabNavItem[] = [
   { label: 'Resumen', route: 'resumen' },
-  { label: 'Configuración', route: 'configuracion' }
+  { label: 'Configuración', route: 'configuracion' },
+  { label: 'Campañas', route: 'campanas' }
 ];
 
 @Component({
@@ -64,8 +65,12 @@ export class PlatformComponent implements OnDestroy {
   }
 
   private descriptionFor(url: string): string {
-    return url.includes('/configuracion')
-      ? 'Configuración de fuentes, servicios, membresías, cuentas, beneficios, campañas, invitaciones y conexiones.'
-      : 'Información general, estadísticas, cuentas y estado actual de la plataforma.';
+    if (url.includes('/campanas')) {
+      return 'Creación, segmentación, prioridad, convivencia, vigencia y seguimiento de campañas.';
+    }
+    if (url.includes('/configuracion')) {
+      return 'Configuración de fuentes, servicios, membresías, cuentas, beneficios, invitaciones y conexiones.';
+    }
+    return 'Información general, estadísticas, cuentas y estado actual de la plataforma.';
   }
 }

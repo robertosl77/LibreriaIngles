@@ -29,6 +29,7 @@ from app.campaigns.models import (
     CampaignStatus,
     CampaignTrigger,
 )
+from app.campaigns.policy_service import evaluate_campaign_policies
 from app.core.config import settings
 from app.exams.models import LevelCertificate
 from app.learning.models import (
@@ -1176,6 +1177,7 @@ def apply_campaign(
     account: Account,
     *,
     conditions_prechecked: bool = False,
+    policies_prechecked: bool = False,
 ) -> CampaignGrant | None:
     """Reserva cupo, aplica el beneficio y registra nunca_recibió(campaña)."""
     locked = db.scalar(select(Campaign).where(Campaign.id == campaign.id).with_for_update())
@@ -1184,6 +1186,10 @@ def apply_campaign(
         return None
     if not conditions_prechecked and not eligible(db, locked, account, now=now):
         return None
+    if not policies_prechecked:
+        decision = evaluate_campaign_policies(db, locked, account, now=now)
+        if not decision.allowed:
+            return None
     if locked.max_recipients is not None:
         used = db.scalar(
             select(func.count(CampaignGrant.id)).where(CampaignGrant.campaign_id == locked.id)
@@ -1246,11 +1252,22 @@ def _evaluate_campaigns(
     applied: list[CampaignGrant] = []
     applied_campaigns: list[Campaign] = []
     for campaign in candidates:
+        # T-141: una candidatura suprimida nunca ocupa lugar en convivencia.
+        # La prioridad ordena el recorrido, pero no decide si una política aplica.
+        policy_decision = evaluate_campaign_policies(db, campaign, account, now=now)
+        if not policy_decision.allowed:
+            continue
         if applied_campaigns and (
             not campaign.stackable or any(not previous.stackable for previous in applied_campaigns)
         ):
             continue
-        grant = apply_campaign(db, campaign, account, conditions_prechecked=True)
+        grant = apply_campaign(
+            db,
+            campaign,
+            account,
+            conditions_prechecked=True,
+            policies_prechecked=True,
+        )
         if grant is None:
             continue
         applied.append(grant)

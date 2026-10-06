@@ -22,6 +22,6 @@ dist/
 .DS_Store
 Thumbs.db
 
-
-# Agent Dev Kit runtime state
-.agent-dev-kit/runtime/
+# Dependencias binarias locales de pronunciación (se descargan con setup-pronunciation.ps1)
+/ffmpeg/
+/espeak-ng/

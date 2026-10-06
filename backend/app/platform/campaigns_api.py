@@ -128,6 +128,14 @@ AI_FAILURES_COUNT puede combinar ownerType, errorCode y operation en la MISMA re
 corresponda exactamente al mismo conjunto de eventos. Para “cuota o credencial” usá
 errorCode=CREDENTIAL_OR_QUOTA. No reemplaces un filtro combinado por varias métricas independientes.
 
+PRIORIDAD y CONVIVENCIA:
+- priority solo ordena campañas que resultan elegibles en la misma evaluación; un número menor se intenta primero.
+- stackable=false es el valor conservador por defecto.
+- stackable=true significa únicamente que la campaña puede convivir con otra campaña elegible en ESA MISMA evaluación.
+- stackable NO significa ignorar campañas recibidas anteriormente, frequency caps ni supresiones históricas.
+- Si el usuario pide excluir por campañas/beneficios recibidos previamente y el catálogo no ofrece esa condición,
+  declaralo UNSUPPORTED. Nunca lo sustituyas por stackable=false ni por priority.
+
 Para métricas de estudio usá las capacidades del catálogo:
 - CLASSES_COMPLETED cuenta clases completadas dentro de windowDays.
 - ACTIVE_STUDY_DAYS cuenta días distintos con actividad dentro de windowDays.
@@ -313,7 +321,28 @@ def _normalize_assist(data: dict, benefit_ids: set[int]) -> dict:
     }
 
 
-def _apply_requirement_coverage(data: dict, normalized: dict) -> dict:
+def _specific_benefit_requested(description: str, benefit_names: set[str]) -> bool:
+    lower = description.lower()
+    if any(name.lower() in lower for name in benefit_names if name.strip()):
+        return True
+    if "beneficio" not in lower:
+        return False
+    return bool(
+        re.search(
+            r"(?:exactamente|exacto|espec[ií]fico|llamado|denominado)\s+(?:el\s+)?beneficio"
+            r"|beneficio\s+(?:exacto|espec[ií]fico|llamado|denominado|[\"“'])",
+            lower,
+        )
+    )
+
+
+def _apply_requirement_coverage(
+    data: dict,
+    normalized: dict,
+    *,
+    description: str = "",
+    benefit_names: set[str] | None = None,
+) -> dict:
     """Verifica que cada requisito material declarado por IA exista realmente en el draft."""
     raw_requirements = data.get("requirements")
     blocking_issues = normalized["blockingIssues"]
@@ -331,6 +360,10 @@ def _apply_requirement_coverage(data: dict, normalized: dict) -> dict:
     available_deliveries = {
         item["key"] for item in catalog["deliveries"] if item.get("available")
     }
+    specific_benefit_requested = _specific_benefit_requested(
+        description,
+        benefit_names or set(),
+    )
 
     if not isinstance(raw_requirements, list) or not raw_requirements:
         _append_blocking_issue(
@@ -379,11 +412,24 @@ def _apply_requirement_coverage(data: dict, normalized: dict) -> dict:
                 "La IA devolvió una declaración de cobertura inválida; revisá la intención.",
             )
         elif status_value == "UNSUPPORTED":
-            reason = "El requisito no tiene una capacidad exacta disponible."
-            _append_blocking_issue(
-                blocking_issues,
-                f"Requisito no soportado: {text}",
-            )
+            if (
+                kind == "BENEFIT"
+                and not specific_benefit_requested
+                and draft["action"] == CampaignAction.GRANT_BENEFIT.value
+            ):
+                # "Dar un beneficio" ya está representado por GRANT_BENEFIT. Que todavía
+                # no se haya elegido benefitId es un dato normal del formulario, no una
+                # pérdida semántica de la intención.
+                status_value = "REPRESENTED"
+                capability = CampaignAction.GRANT_BENEFIT.value
+                verified = True
+                reason = "Beneficio genérico representado por GRANT_BENEFIT; se selecciona en el formulario."
+            else:
+                reason = "El requisito no tiene una capacidad exacta disponible."
+                _append_blocking_issue(
+                    blocking_issues,
+                    f"Requisito no soportado: {text}",
+                )
         elif kind == "RULE":
             verified = capability in available_rules and capability in rule_fields
             reason = "" if verified else "La condición declarada no está presente en el draft."
@@ -397,8 +443,16 @@ def _apply_requirement_coverage(data: dict, normalized: dict) -> dict:
             verified = capability in available_deliveries and capability == draft["notification"]
             reason = "" if verified else "El delivery declarado no coincide con el draft."
         elif kind == "BENEFIT":
-            verified = draft["benefitId"] is not None
-            reason = "" if verified else "El requisito exige un Benefit y el draft no tiene uno válido."
+            if specific_benefit_requested:
+                verified = draft["benefitId"] is not None
+                reason = "" if verified else "El requisito exige un Benefit concreto y el draft no tiene uno válido."
+            else:
+                verified = draft["action"] == CampaignAction.GRANT_BENEFIT.value
+                reason = (
+                    ""
+                    if verified
+                    else "El pedido genérico de beneficio no quedó representado por GRANT_BENEFIT."
+                )
         elif kind == "LIMIT":
             verified = capability == "MAX_RECIPIENTS" and draft["maxRecipients"] is not None
             reason = "" if verified else "El límite declarado no está representado en el draft."
@@ -826,7 +880,7 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
             usage_context=AIUsageContext(
                 subject_type="CAMPAIGN_ASSIST",
                 subject_label="Asistente de campañas",
-                subject_route="/app/plataforma/configuracion",
+                subject_route="/app/plataforma/campanas",
                 diagnostic={
                     "descriptionChars": len(payload.description.strip()),
                     "benefitCount": len(benefit_options),
@@ -844,7 +898,12 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
         raise HTTPException(502, "La IA devolvió un borrador inválido.")
     normalized = _normalize_assist(result.data, {item["id"] for item in benefit_options})
     normalized = _apply_description_capability_guards(payload.description.strip(), normalized)
-    return _apply_requirement_coverage(result.data, normalized)
+    return _apply_requirement_coverage(
+        result.data,
+        normalized,
+        description=payload.description.strip(),
+        benefit_names={item["name"] for item in benefit_options},
+    )
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

@@ -4,11 +4,42 @@ Plataforma de aprendizaje adaptativo de inglés.
 
 La implementación se guía por los documentos funcionales y técnicos incluidos en este repositorio.
 
-## Rama de desarrollo actual
+## Flujo de Ramas (Branching Workflow)
 
-`fix/mvp-funcional` (sobre `feat/mvp-foundation-v0.1`)
+El proyecto sigue un flujo de ramas estructurado con las siguientes reglas:
 
-La rama `main` no se modifica directamente durante el desarrollo.
+### Ramas principales
+
+| Rama | Rol | Protección |
+|------|-----|------------|
+| `main` | Rama de **producción**. Contiene únicamente código estable y listo para release. | **Protegida** — no se permiten escrituras directas. |
+| `develop` | Rama de **integración**. Aquí se consolidan todas las funcionalidades antes de un release. | **Protegida** — no se permiten escrituras directas. |
+
+### Ramas de tarea
+
+Cada tarea o corrección se trabaja en una rama dedicada creada **a partir de `develop`**, siguiendo la convención de nombres:
+
+```
+{kind}/{issue}-{slug}
+```
+
+Ejemplos: `feat/T-042-crud-libros`, `fix/T-066-readme-workflow`.
+
+### Flujo de trabajo
+
+1. **Crear la rama de tarea** desde `develop` (asegurarse de que `develop` esté actualizado).
+2. **Desarrollar** los cambios en la rama de tarea.
+3. **Abrir un Pull Request** con destino a `develop`.
+   - El PR **debe referenciar el issue** correspondiente (e.g., `T-066`).
+   - La rama de tarea debe estar actualizada con `develop` antes de fusionar.
+4. **Revisión y merge** a `develop`.
+5. **Release**: cuando `develop` está listo para producción, se abre un PR de `develop` → `main`.
+
+### Reglas importantes
+
+- **No se permite escribir directamente** en `main` ni en `develop` (salvo autorización humana explícita).
+- Toda modificación llega a las ramas protegidas exclusivamente mediante Pull Requests.
+- Antes de crear una rama de tarea, se debe sincronizar con la última versión de `develop`.
 
 ## Stack inicial
 

@@ -44,6 +44,20 @@ class CampaignAction(str, Enum):
     APPLY_DISCOUNT = "APPLY_DISCOUNT"
 
 
+class CampaignPolicyKind(str, Enum):
+    """Familia semántica de una política; todas pasan por el mismo motor."""
+
+    SUPPRESSION = "SUPPRESSION"
+    # Reservada: su semántica se cerrará con story times antes de habilitarla.
+    EXCLUSION = "EXCLUSION"
+
+
+class CampaignPolicyEffect(str, Enum):
+    """Efecto técnico común del motor de políticas."""
+
+    BLOCK = "BLOCK"
+
+
 class CampaignSeedMarker(Base):
     """Marca que una campaña ejemplo ya fue creada una vez."""
 
@@ -120,3 +134,63 @@ class CampaignGrant(Base):
     in_app_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # T-051 consumirá los PENDING; el motor de campaña no envía correo directamente.
     email_status: Mapped[str | None] = mapped_column(String(24), nullable=True)
+
+
+
+class CampaignPolicy(Base):
+    """Política global reusable evaluada antes de prioridad/convivencia."""
+
+    __tablename__ = "campaign_policies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # NULL = políticas de PLATFORM_OWNER. Futuras empresas tendrán copias propias.
+    organization_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True, index=True
+    )
+    # Permite conservar trazabilidad de una futura copia/snapshot heredada.
+    source_policy_id: Mapped[int | None] = mapped_column(
+        ForeignKey("campaign_policies.id"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    kind: Mapped[CampaignPolicyKind] = mapped_column(
+        SqlEnum(CampaignPolicyKind, native_enum=False, length=40),
+        default=CampaignPolicyKind.SUPPRESSION,
+        index=True,
+    )
+    effect: Mapped[CampaignPolicyEffect] = mapped_column(
+        SqlEnum(CampaignPolicyEffect, native_enum=False, length=24),
+        default=CampaignPolicyEffect.BLOCK,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    # {"mode": "ALL" | "CAMPAIGNS", "campaignIds": [1, 2, ...]}
+    applies_to: Mapped[dict] = mapped_column(
+        JSON, default=lambda: {"mode": "ALL", "campaignIds": []}
+    )
+    # V1: ALL/AND. El catálogo decide qué fields/operators son válidos.
+    conditions: Mapped[dict] = mapped_column(JSON, default=lambda: {"mode": "ALL", "rules": []})
+    created_by_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class CampaignPolicyBlock(Base):
+    """Auditoría de una candidatura bloqueada por una CampaignPolicy."""
+
+    __tablename__ = "campaign_policy_blocks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    policy_id: Mapped[int] = mapped_column(ForeignKey("campaign_policies.id"), index=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id"), index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    # Snapshot mínimo: una política puede editarse o eliminarse después.
+    policy_kind: Mapped[str] = mapped_column(String(40))
+    policy_name: Mapped[str] = mapped_column(String(120))
+    reason: Mapped[str] = mapped_column(String(500))
+    rule_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
