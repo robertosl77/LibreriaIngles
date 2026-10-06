@@ -162,3 +162,51 @@ def test_lookup_accepts_real_world_valid_cuit_from_manual_test(client) -> None:
     assert body["source"] == "DEV_MOCK"
     assert body["taxId"] == "30655116202"
     assert body["developmentSimulation"] is True
+
+
+def test_dev_purge_removes_incomplete_onboarding_by_cuit(client) -> None:
+    created = client.post(f"{API}/organization-onboarding", json=_payload())
+    assert created.status_code == 201, created.text
+
+    lookup = client.post(
+        f"{API}/organization-onboarding/company/lookup",
+        json={"country": "AR", "taxIdType": "CUIT", "taxId": VALID_CUIT},
+    )
+    assert lookup.status_code == 200
+    assert lookup.json()["platform"]["onboardingInProgress"] is True
+
+    deleted = client.delete(
+        f"{API}/organization-onboarding/dev-purge",
+        params={"country": "AR", "taxIdType": "CUIT", "taxId": VALID_CUIT},
+    )
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["deletedOnboardings"] == 1
+
+    with SessionLocal() as db:
+        assert db.scalar(select(OrganizationOnboarding.id)) is None
+
+
+def test_dev_purge_never_deletes_provisioned_organization(client) -> None:
+    normalized = normalize_tax_id(VALID_CUIT)
+    with SessionLocal() as db:
+        db.add(
+            Organization(
+                slug="kakatua-test",
+                legal_name="Kakatua Test S.A.",
+                display_name="Kakatua Test",
+                tax_id=normalized,
+                country="AR",
+                active=True,
+            )
+        )
+        db.commit()
+
+    response = client.delete(
+        f"{API}/organization-onboarding/dev-purge",
+        params={"country": "AR", "taxIdType": "CUIT", "taxId": VALID_CUIT},
+    )
+    assert response.status_code == 409
+    assert "no elimina organizaciones reales" in response.json()["detail"]
+
+    with SessionLocal() as db:
+        assert db.scalar(select(Organization.id)) is not None
