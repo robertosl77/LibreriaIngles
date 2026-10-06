@@ -70,12 +70,32 @@ import {
               (ngModelChange)="resetLookup()"
               placeholder="30-12345678-1"
               autocomplete="off"
+              [disabled]="companyLocked()"
             />
           </label>
 
-          <button class="btn primary" type="button" (click)="lookupCompany()" [disabled]="lookupBusy() || !taxId.trim()">
-            {{ lookupBusy() ? 'Consultando…' : 'Buscar empresa' }}
-          </button>
+          <div class="search-actions">
+            <button
+              class="btn primary"
+              type="button"
+              (click)="lookupCompany()"
+              [disabled]="lookupBusy() || companyLocked() || !taxId.trim()"
+            >
+              {{
+                companyLocked()
+                  ? 'Empresa seleccionada'
+                  : lookupBusy()
+                    ? 'Consultando…'
+                    : 'Buscar empresa'
+              }}
+            </button>
+
+            @if (companyLocked()) {
+              <button class="btn secondary-btn" type="button" (click)="resetCompanySearch()">
+                Cambiar empresa / Limpiar
+              </button>
+            }
+          </div>
 
           @if (lookup(); as companyLookup) {
             <article
@@ -251,7 +271,9 @@ import {
     .input { width: 100%; box-sizing: border-box; padding: 0.78rem 0.85rem; border: 1px solid #bbb; border-radius: 0.65rem; font: inherit; background: #fff; }
     .btn { width: fit-content; border-radius: 0.7rem; padding: 0.8rem 1.1rem; font: inherit; font-weight: 700; cursor: pointer; }
     .btn.primary { border: 1px solid #111; background: #111; color: #fff; }
+    .btn.secondary-btn { border: 1px solid #bbb; background: #fff; color: #111; }
     .btn:disabled { cursor: not-allowed; opacity: 0.5; }
+    .search-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
     .verification { padding: 1rem; border: 1px solid #bbb; border-radius: 0.8rem; }
     .verification.good { border-color: #55966f; background: #f4fbf6; }
     .verification.pending { border-color: #b79755; background: #fffaf0; }
@@ -310,12 +332,32 @@ export class OrganizationOnboardingComponent implements OnInit {
   }
 
   resetLookup(): void {
+    if (this.companyLocked()) {
+      return;
+    }
     this.lookup.set(null);
     this.result.set(null);
     this.error.set(null);
   }
 
+  companyLocked(): boolean {
+    const value = this.lookup();
+    return Boolean(value?.state === 'VERIFIED' && value.company.legalName);
+  }
+
+  resetCompanySearch(): void {
+    this.lookup.set(null);
+    this.result.set(null);
+    this.taxId = '';
+    this.displayName = '';
+    this.website = '';
+    this.error.set(null);
+  }
+
   async lookupCompany(): Promise<void> {
+    if (this.companyLocked()) {
+      return;
+    }
     this.lookupBusy.set(true);
     this.error.set(null);
     this.result.set(null);
