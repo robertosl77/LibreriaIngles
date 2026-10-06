@@ -1001,6 +1001,7 @@ export interface OrganizationOnboardingConfig {
   }>;
   actingCapacities: Array<{ code: OrganizationActingCapacity; name: string }>;
   emailVerificationImplemented: boolean;
+  devPurgeAllowed: boolean;
 }
 
 export interface OrganizationCompanyLookupRequest {
@@ -1090,4 +1091,12 @@ export interface OrganizationOnboardingResult {
     | 'EMAIL_VERIFICATION_PENDING_P02'
     | 'COMPANY_VERIFICATION_PENDING'
     | 'MANUAL_REVIEW_REQUIRED';
+}
+
+
+export interface OrganizationOnboardingDevPurgeResult {
+  country: string;
+  taxIdType: string;
+  taxId: string;
+  deletedOnboardings: number;
 }
