@@ -32,6 +32,7 @@ import {
   OrganizationCompanyLookupResult,
   OrganizationOnboardingConfig,
   OrganizationOnboardingDraft,
+  OrganizationOnboardingDevPurgeResult,
   OrganizationOnboardingResult,
   InvitationPreview,
   InvitationRedemption,
@@ -96,6 +97,17 @@ export class ApiService {
     return this.http.post<OrganizationOnboardingResult>(
       `${this.base}/organization-onboarding`,
       draft
+    );
+  }
+
+  purgeOrganizationOnboardingDev(
+    country: string,
+    taxIdType: string,
+    taxId: string
+  ): Observable<OrganizationOnboardingDevPurgeResult> {
+    return this.http.delete<OrganizationOnboardingDevPurgeResult>(
+      `${this.base}/organization-onboarding/dev-purge`,
+      { params: { country, taxIdType, taxId } }
     );
   }
 
