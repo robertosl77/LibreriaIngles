@@ -61,6 +61,8 @@ En conversaciones de producto, **membresía** refiere a la combinación `Servici
 
 La arquitectura debe privilegiar configuración/catálogos/capacidades sobre condicionales hardcodeados por tipo de cliente. Persona, empresa o futuros contextos (por ejemplo universidad) deben reutilizar los mismos motores base cuando la responsabilidad sea la misma.
 
+**Diagrama conceptual SaaS / contextos / tenants:** `docs/architecture/saas-tenant-context-model.drawio`.
+
 ## Stack inicial
 
 - Frontend: Angular
