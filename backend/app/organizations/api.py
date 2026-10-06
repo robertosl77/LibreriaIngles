@@ -326,6 +326,7 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
             "firstName": onboarding.contact_first_name,
             "lastName": onboarding.contact_last_name,
             "email": onboarding.contact_email,
+            "jobTitleId": onboarding.contact_job_title_id,
             "jobTitle": onboarding.contact_job_title,
             "phone": onboarding.contact_phone,
             "actingCapacity": onboarding.acting_capacity.value,
