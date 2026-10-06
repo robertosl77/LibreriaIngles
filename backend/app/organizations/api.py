@@ -95,6 +95,7 @@ def onboarding_config() -> dict:
             for item in OrganizationActingCapacity
         ],
         "emailVerificationImplemented": False,
+        "devPurgeAllowed": settings.dev_account_purge_allowed,
     }
 
 
