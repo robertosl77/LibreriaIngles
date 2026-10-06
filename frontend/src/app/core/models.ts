@@ -1042,6 +1042,8 @@ export interface OrganizationOnboardingDraft extends OrganizationCompanyLookupRe
     firstName: string;
     lastName: string;
     email: string;
+    jobTitleId: number | null;
+    jobTitleId?: number | null;
     jobTitle: string;
     phone: string;
     actingCapacity: OrganizationActingCapacity;
@@ -1099,4 +1101,17 @@ export interface OrganizationOnboardingDevPurgeResult {
   taxIdType: string;
   taxId: string;
   deletedOnboardings: number;
+}
+
+
+export interface JobTitleOption {
+  id: number;
+  name: string;
+  score?: number;
+}
+
+export interface JobTitleResolveResult {
+  status: 'EXISTING' | 'CREATED' | 'SIMILAR';
+  item: JobTitleOption | null;
+  similar: JobTitleOption[];
 }
