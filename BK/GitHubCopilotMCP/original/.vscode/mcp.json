@@ -1,0 +1,10 @@
+{
+  "servers": {
+    "agentDevKit": {
+      "type": "stdio",
+      "command": "${workspaceFolder}\\backend\\.venv\\Scripts\\agent-dev-kit.exe",
+      "args": ["mcp", "."],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
