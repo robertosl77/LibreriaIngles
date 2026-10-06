@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import AnyHttpUrl, BaseModel, EmailStr, Field
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from app.core.config import settings
 
