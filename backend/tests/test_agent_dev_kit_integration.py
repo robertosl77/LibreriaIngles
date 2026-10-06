@@ -9,9 +9,9 @@ def test_agent_dev_kit_v010_is_integrated():
 
     config = load_project_config(project_root)
 
-    assert version("agent-dev-kit") == "0.1.0"
+    assert version("agent-dev-kit") == "0.2.0"
     assert config.name == "LibreriaIngles"
-    assert config.provider.provider == "openai"
+    assert config.provider.provider == "anthropic"
     assert config.git_workflow.integration_branch == "develop"
     assert config.git_workflow.production_branch == "main"
     assert "triage" in config.enabled_agents
