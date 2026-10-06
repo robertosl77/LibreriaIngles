@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     mock_ai_enabled: bool = False
     ai_timeout_seconds: float = 60.0
 
-    # P01 B2B: simulación de verificación empresarial. Nunca en production.
+    # P01 B2B: padrón oficial RNS sincronizado localmente + fallback DEV.
+    organization_registry_path: str = "data/rns_registry.db"
     organization_verification_mock_enabled: bool = True
 
     model_config = SettingsConfigDict(
@@ -64,6 +65,13 @@ class Settings(BaseSettings):
     @property
     def organization_verification_mock_allowed(self) -> bool:
         return self.organization_verification_mock_enabled and not self.is_production
+
+    @property
+    def resolved_organization_registry_path(self) -> Path:
+        path = Path(self.organization_registry_path)
+        if not path.is_absolute():
+            path = (BACKEND_DIR / path).resolve()
+        return path
 
     @property
     def dev_account_purge_allowed(self) -> bool:
