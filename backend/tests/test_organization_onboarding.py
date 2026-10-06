@@ -1,3 +1,5 @@
+import sqlite3
+
 from sqlalchemy import select
 
 from app.db import SessionLocal
@@ -210,3 +212,81 @@ def test_dev_purge_never_deletes_provisioned_organization(client) -> None:
 
     with SessionLocal() as db:
         assert db.scalar(select(Organization.id)) is not None
+
+
+def test_lookup_prefers_official_rns_cache_over_dev_mock(client, monkeypatch, tmp_path) -> None:
+    from app.organizations import verification
+
+    registry = tmp_path / "rns_registry.db"
+    with sqlite3.connect(registry) as db:
+        db.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        db.execute(
+            """
+            CREATE TABLE companies (
+                cuit TEXT PRIMARY KEY,
+                legal_name TEXT NOT NULL,
+                legal_entity_type TEXT,
+                contract_date TEXT,
+                updated_at TEXT,
+                registry_number TEXT,
+                fiscal_address TEXT,
+                legal_address TEXT,
+                fiscal_province TEXT,
+                legal_province TEXT,
+                activity_code TEXT,
+                activity_description TEXT,
+                activity_state TEXT,
+                activity_order INTEGER,
+                activity_rank INTEGER NOT NULL
+            )
+            """
+        )
+        db.executemany(
+            "INSERT INTO metadata(key, value) VALUES (?, ?)",
+            [
+                ("source", "RNS_OPEN_DATA"),
+                ("source_updated_at", "2026-09-18"),
+            ],
+        )
+        db.execute(
+            """
+            INSERT INTO companies(
+                cuit, legal_name, legal_entity_type, fiscal_address, legal_address,
+                fiscal_province, legal_province, activity_code, activity_description,
+                activity_state, activity_order, activity_rank
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                normalize_tax_id(REAL_VALID_CUIT),
+                "KAKATUA S.A.",
+                "SOCIEDAD ANONIMA",
+                "Av. Siempre Viva 123 · CABA",
+                "Av. Siempre Viva 123 · CABA",
+                "CIUDAD AUTONOMA BUENOS AIRES",
+                "CIUDAD AUTONOMA BUENOS AIRES",
+                "854990",
+                "SERVICIOS DE ENSEÑANZA",
+                "AC",
+                1,
+                1,
+            ),
+        )
+        db.commit()
+
+    monkeypatch.setattr(
+        verification.settings,
+        "organization_registry_path",
+        str(registry),
+    )
+
+    response = client.post(
+        f"{API}/organization-onboarding/company/lookup",
+        json={"country": "AR", "taxIdType": "CUIT", "taxId": REAL_VALID_CUIT},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["state"] == "VERIFIED"
+    assert body["source"] == "RNS_OPEN_DATA"
+    assert body["developmentSimulation"] is False
+    assert body["company"]["legalName"] == "KAKATUA S.A."
+    assert body["company"]["primaryActivity"] == "SERVICIOS DE ENSEÑANZA"
