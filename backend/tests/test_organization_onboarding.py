@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 from sqlalchemy import select
 
 from app.db import SessionLocal
@@ -9,6 +11,17 @@ from app.organizations.verification import is_valid_argentina_cuit, normalize_ta
 API = "/api/v1"
 VALID_CUIT = "30-12345678-1"
 REAL_VALID_CUIT = "30-65511620-2"
+
+
+@pytest.fixture(autouse=True)
+def isolate_rns_registry(monkeypatch, tmp_path):
+    from app.organizations import verification
+
+    monkeypatch.setattr(
+        verification.settings,
+        "organization_registry_path",
+        str(tmp_path / "missing-rns.db"),
+    )
 
 
 def _payload(**overrides):
@@ -92,6 +105,8 @@ def test_create_onboarding_does_not_create_organization_yet(client) -> None:
     assert body["company"]["taxId"] == "30123456781"
     assert body["company"]["displayName"] == "Kakatua"
     assert body["referent"]["email"] == "maria@kakatua.example"
+    assert body["referent"]["jobTitleId"] is not None
+    assert body["referent"]["jobTitle"] == "Responsable de Capacitación"
     assert body["referent"]["actingCapacity"] == "AUTHORIZED_EMPLOYEE"
     assert body["referent"]["emailVerified"] is False
     assert body["verification"]["developmentSimulation"] is True
@@ -290,3 +305,47 @@ def test_lookup_prefers_official_rns_cache_over_dev_mock(client, monkeypatch, tm
     assert body["developmentSimulation"] is False
     assert body["company"]["legalName"] == "KAKATUA S.A."
     assert body["company"]["primaryActivity"] == "SERVICIOS DE ENSEÑANZA"
+
+
+def test_job_title_catalog_detects_similar_entries(client) -> None:
+    seeded = client.get(
+        f"{API}/organization-onboarding/job-titles",
+        params={"q": "recursos humanos"},
+    )
+    assert seeded.status_code == 200
+    assert any("Recursos Humanos" in row["name"] for row in seeded.json())
+
+    similar = client.post(
+        f"{API}/organization-onboarding/job-titles/resolve",
+        json={"name": "Responsable Recursos Humanos", "confirmSimilar": False},
+    )
+    assert similar.status_code == 200
+    body = similar.json()
+    assert body["status"] == "SIMILAR"
+    assert body["item"] is None
+    assert body["similar"]
+
+    created = client.post(
+        f"{API}/organization-onboarding/job-titles/resolve",
+        json={"name": "Responsable Recursos Humanos", "confirmSimilar": True},
+    )
+    assert created.status_code == 200
+    assert created.json()["status"] == "CREATED"
+    assert created.json()["item"]["id"]
+
+
+def test_job_title_catalog_reuses_exact_normalized_title(client) -> None:
+    first = client.post(
+        f"{API}/organization-onboarding/job-titles/resolve",
+        json={"name": "CAPO", "confirmSimilar": False},
+    )
+    assert first.status_code == 200
+    assert first.json()["status"] == "CREATED"
+
+    second = client.post(
+        f"{API}/organization-onboarding/job-titles/resolve",
+        json={"name": "  capo  ", "confirmSimilar": False},
+    )
+    assert second.status_code == 200
+    assert second.json()["status"] == "EXISTING"
+    assert second.json()["item"]["id"] == first.json()["item"]["id"]
