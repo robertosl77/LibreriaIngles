@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, JSON, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, JSON, String
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,6 +29,18 @@ class Organization(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
+
+
+class JobTitle(Base):
+    """Catálogo reutilizable de cargos/funciones declarados por referentes."""
+
+    __tablename__ = "job_titles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(160))
+    normalized_name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class OrganizationOnboardingStatus(str, Enum):
@@ -81,6 +93,10 @@ class OrganizationOnboarding(Base):
     contact_first_name: Mapped[str] = mapped_column(String(100))
     contact_last_name: Mapped[str] = mapped_column(String(100))
     contact_email: Mapped[str] = mapped_column(String(320), index=True)
+    contact_job_title_id: Mapped[int | None] = mapped_column(
+        ForeignKey("job_titles.id"), nullable=True, index=True
+    )
+    # Snapshot histórico del nombre aunque el catálogo cambie en el futuro.
     contact_job_title: Mapped[str] = mapped_column(String(160))
     contact_phone: Mapped[str] = mapped_column(String(64))
     acting_capacity: Mapped[OrganizationActingCapacity] = mapped_column(
