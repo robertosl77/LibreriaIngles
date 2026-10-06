@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, status
 from pydantic import AnyHttpUrl, BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
+
+from app.core.config import settings
 
 from app.core.deps import DbSession
 from app.organizations.models import (
@@ -259,4 +261,55 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
             "developmentSimulation": result.development_simulation,
         },
         "nextStep": next_step,
+    }
+
+
+@router.delete("/dev-purge")
+def dev_purge_onboarding(
+    country: str,
+    taxIdType: str,
+    taxId: str,
+    db: DbSession,
+) -> dict:
+    """Borra físicamente onboardings de prueba por identificación fiscal.
+
+    Solo local/dev/test. Nunca elimina una Organization provisionada.
+    """
+    if not settings.dev_account_purge_allowed:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No disponible.")
+
+    normalized_country = country.strip().upper()
+    normalized_tax_id_type = taxIdType.strip().upper()
+    normalized_tax_id = normalize_tax_id(taxId)
+
+    existing_org = db.scalar(
+        select(Organization).where(
+            Organization.country == normalized_country,
+            Organization.tax_id == normalized_tax_id,
+        )
+    )
+    if existing_org is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El CUIT pertenece a una organización ya provisionada. P01 no elimina organizaciones reales.",
+        )
+
+    rows = db.scalars(
+        select(OrganizationOnboarding).where(
+            OrganizationOnboarding.country == normalized_country,
+            OrganizationOnboarding.tax_id_type == normalized_tax_id_type,
+            OrganizationOnboarding.tax_id == normalized_tax_id,
+        )
+    ).all()
+
+    deleted = len(rows)
+    for row in rows:
+        db.delete(row)
+    db.commit()
+
+    return {
+        "country": normalized_country,
+        "taxIdType": normalized_tax_id_type,
+        "taxId": normalized_tax_id,
+        "deletedOnboardings": deleted,
     }
