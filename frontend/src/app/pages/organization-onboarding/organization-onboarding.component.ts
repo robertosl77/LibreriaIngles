@@ -189,8 +189,19 @@ import {
               </span>
             </label>
 
-            <button class="btn primary" type="button" (click)="save()" [disabled]="saveBusy() || !canSave()">
-              {{ saveBusy() ? 'Guardando…' : 'Guardar solicitud de alta' }}
+            <button
+              class="btn primary"
+              type="button"
+              (click)="save()"
+              [disabled]="saveBusy() || result() !== null || !canSave()"
+            >
+              {{
+                result()
+                  ? 'Solicitud guardada'
+                  : saveBusy()
+                    ? 'Guardando…'
+                    : 'Guardar solicitud de alta'
+              }}
             </button>
           </section>
         }
@@ -332,6 +343,9 @@ export class OrganizationOnboardingComponent implements OnInit {
   }
 
   canSave(): boolean {
+    if (this.result() !== null) {
+      return false;
+    }
     return Boolean(
       this.lookup() &&
       this.lookup()!.state !== 'REVIEW_REQUIRED' &&
@@ -346,7 +360,7 @@ export class OrganizationOnboardingComponent implements OnInit {
   }
 
   async save(): Promise<void> {
-    if (!this.canSave()) return;
+    if (this.result() !== null || !this.canSave()) return;
     this.saveBusy.set(true);
     this.error.set(null);
     try {
