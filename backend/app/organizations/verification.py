@@ -4,6 +4,8 @@ from enum import Enum
 from typing import Protocol
 
 from app.core.config import settings
+from app.organizations.rns_registry import lookup_company as lookup_rns_company
+from app.organizations.rns_registry import registry_available
 
 
 def utcnow() -> datetime:
@@ -57,6 +59,74 @@ def is_valid_argentina_cuit(value: str) -> bool:
     if check == 10:
         return False
     return check == int(digits[-1])
+
+
+class OfficialRnsVerificationProvider:
+    """Consulta el padrón oficial RNS previamente sincronizado."""
+
+    def lookup(self, *, country: str, tax_id_type: str, tax_id: str) -> OrganizationVerificationResult:
+        normalized = normalize_tax_id(tax_id)
+        company = lookup_rns_company(normalized)
+
+        if company is None:
+            return OrganizationVerificationResult(
+                state=VerificationState.PENDING,
+                country=country,
+                tax_id_type=tax_id_type,
+                tax_id=normalized,
+                source="RNS_OPEN_DATA",
+                message=(
+                    "El CUIT es válido pero no aparece en el padrón RNS sincronizado. "
+                    "No se considera inexistente automáticamente; requiere revisión o una fuente adicional."
+                ),
+                checked_at=utcnow(),
+                official_data={
+                    "source": "RNS_OPEN_DATA",
+                    "sourceUpdatedAt": None,
+                    "found": False,
+                },
+            )
+
+        official = {
+            "source": "RNS_OPEN_DATA",
+            "sourceUpdatedAt": company.source_updated_at,
+            "country": country,
+            "taxIdType": tax_id_type,
+            "taxId": normalized,
+            "legalName": company.legal_name,
+            "legalEntityType": company.legal_entity_type,
+            "contractDate": company.contract_date,
+            "registryNumber": company.registry_number,
+            "fiscalAddress": company.fiscal_address,
+            "legalAddress": company.legal_address,
+            "fiscalProvince": company.fiscal_province,
+            "legalProvince": company.legal_province,
+            "activityCode": company.activity_code,
+            "activityDescription": company.activity_description,
+            "activityState": company.activity_state,
+            "recordUpdatedAt": company.updated_at,
+            "found": True,
+        }
+        return OrganizationVerificationResult(
+            state=VerificationState.VERIFIED,
+            country=country,
+            tax_id_type=tax_id_type,
+            tax_id=normalized,
+            source="RNS_OPEN_DATA",
+            message=(
+                "Empresa encontrada en el padrón oficial del Registro Nacional de Sociedades."
+            ),
+            checked_at=utcnow(),
+            legal_name=company.legal_name,
+            legal_entity_type=company.legal_entity_type,
+            registry_jurisdiction=company.legal_province or company.fiscal_province,
+            registry_number=company.registry_number,
+            fiscal_address=company.fiscal_address,
+            legal_address=company.legal_address,
+            primary_activity=company.activity_description,
+            official_data=official,
+            development_simulation=False,
+        )
 
 
 class DevelopmentArgentinaVerificationProvider:
@@ -127,6 +197,8 @@ def provider_for(country: str, tax_id_type: str) -> OrganizationVerificationProv
     tax_id_type = tax_id_type.upper().strip()
     if country != "AR" or tax_id_type != "CUIT":
         raise ValueError("P01 solo habilita Argentina + CUIT en la interfaz inicial.")
+    if registry_available():
+        return OfficialRnsVerificationProvider()
     if settings.organization_verification_mock_allowed:
         return DevelopmentArgentinaVerificationProvider()
     return PendingArgentinaVerificationProvider()
