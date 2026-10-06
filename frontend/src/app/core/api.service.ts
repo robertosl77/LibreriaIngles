@@ -36,6 +36,8 @@ import {
   OrganizationOnboardingResult,
   InvitationPreview,
   InvitationRedemption,
+  JobTitleOption,
+  JobTitleResolveResult,
   PlatformAccount,
   PlatformBenefit,
   PlatformBenefitDraft,
@@ -79,6 +81,23 @@ export class ApiService {
   organizationOnboardingConfig(): Observable<OrganizationOnboardingConfig> {
     return this.http.get<OrganizationOnboardingConfig>(
       `${this.base}/organization-onboarding/config`
+    );
+  }
+
+  organizationJobTitles(query = '', limit = 8): Observable<JobTitleOption[]> {
+    return this.http.get<JobTitleOption[]>(
+      `${this.base}/organization-onboarding/job-titles`,
+      { params: { q: query, limit } }
+    );
+  }
+
+  resolveOrganizationJobTitle(
+    name: string,
+    confirmSimilar = false
+  ): Observable<JobTitleResolveResult> {
+    return this.http.post<JobTitleResolveResult>(
+      `${this.base}/organization-onboarding/job-titles/resolve`,
+      { name, confirmSimilar }
     );
   }
 
