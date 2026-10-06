@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../../core/api.service';
 import {
+  JobTitleOption,
   OrganizationActingCapacity,
   OrganizationCompanyLookupResult,
   OrganizationOnboardingConfig,
@@ -159,8 +160,11 @@ import {
 
             <div class="grid two">
               <label class="field">
-                Nombre de fantasía (opcional)
+                Nombre visible / de fantasía (editable)
                 <input class="input" name="displayName" [(ngModel)]="displayName" maxlength="120" />
+                <span class="field-help">
+                  Se precarga con la razón social cuando está disponible. Cambialo si la empresa usa otra marca.
+                </span>
               </label>
               <label class="field">
                 Sitio web (opcional)
@@ -202,15 +206,74 @@ import {
             </div>
 
             <div class="grid two">
-              <label class="field">
-                Cargo o función
+              <div class="field">
+                <label for="jobTitle">Cargo o función</label>
                 <input
+                  id="jobTitle"
                   class="input"
                   name="jobTitle"
                   [(ngModel)]="jobTitle"
-                  placeholder="Responsable de Capacitación"
+                  (ngModelChange)="onJobTitleInput($event)"
+                  (focus)="loadJobTitleSuggestions()"
+                  placeholder="Ej. Responsable de Capacitación"
+                  autocomplete="off"
                 />
-              </label>
+
+                @if (jobTitleId !== null) {
+                  <span class="catalog-selected">Seleccionado del catálogo.</span>
+                }
+
+                @if (jobTitleSuggestions().length > 0 && jobTitleId === null) {
+                  <div class="catalog-options">
+                    @for (item of jobTitleSuggestions(); track item.id) {
+                      <button
+                        class="catalog-option"
+                        type="button"
+                        (click)="selectJobTitle(item)"
+                      >
+                        {{ item.name }}
+                      </button>
+                    }
+                  </div>
+                }
+
+                @if (jobTitle.trim().length >= 2 && jobTitleId === null) {
+                  <button
+                    class="btn secondary-btn compact"
+                    type="button"
+                    (click)="resolveJobTitle(false)"
+                    [disabled]="jobTitleResolveBusy()"
+                  >
+                    {{ jobTitleResolveBusy() ? 'Revisando…' : 'Agregar / validar cargo' }}
+                  </button>
+                }
+
+                @if (jobTitleSimilar().length > 0) {
+                  <div class="similar-warning">
+                    <strong>Encontramos cargos parecidos.</strong>
+                    <span>Elegí uno para evitar duplicados o confirmá que querés crear uno nuevo.</span>
+                    <div class="catalog-options">
+                      @for (item of jobTitleSimilar(); track item.id) {
+                        <button
+                          class="catalog-option"
+                          type="button"
+                          (click)="selectJobTitle(item)"
+                        >
+                          {{ item.name }}
+                        </button>
+                      }
+                    </div>
+                    <button
+                      class="btn secondary-btn compact"
+                      type="button"
+                      (click)="resolveJobTitle(true)"
+                      [disabled]="jobTitleResolveBusy()"
+                    >
+                      Crear "{{ jobTitle }}" igualmente
+                    </button>
+                  </div>
+                }
+              </div>
               <label class="field">
                 Carácter en que actúa
                 <select class="input" name="actingCapacity" [(ngModel)]="actingCapacity">
@@ -303,6 +366,7 @@ import {
     h2 { margin: 0.3rem 0; }
     .muted { color: #666; line-height: 1.5; }
     .field { display: grid; gap: 0.4rem; font-size: 0.9rem; font-weight: 650; }
+    .field-help { color: #666; font-size: 0.76rem; font-weight: 400; line-height: 1.35; }
     .input { width: 100%; box-sizing: border-box; padding: 0.78rem 0.85rem; border: 1px solid #bbb; border-radius: 0.65rem; font: inherit; background: #fff; }
     .btn { width: fit-content; border-radius: 0.7rem; padding: 0.8rem 1.1rem; font: inherit; font-weight: 700; cursor: pointer; }
     .btn.primary { border: 1px solid #111; background: #111; color: #fff; }
@@ -310,6 +374,12 @@ import {
     .btn.danger-btn { border: 1px solid #b45a54; background: #fff; color: #8f1e18; }
     .btn:disabled { cursor: not-allowed; opacity: 0.5; }
     .search-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .compact { padding: 0.55rem 0.75rem; font-size: 0.82rem; }
+    .catalog-options { display: flex; gap: 0.45rem; flex-wrap: wrap; }
+    .catalog-option { border: 1px solid #bbb; border-radius: 999px; padding: 0.35rem 0.6rem; background: #fff; cursor: pointer; font: inherit; font-size: 0.8rem; }
+    .catalog-option:hover { border-color: #111; }
+    .catalog-selected { color: #285f3c; font-size: 0.78rem; font-weight: 650; }
+    .similar-warning { display: grid; gap: 0.55rem; padding: 0.75rem; border-radius: 0.65rem; background: #fff8e8; color: #735200; font-size: 0.8rem; font-weight: 500; }
     .verification { padding: 1rem; border: 1px solid #bbb; border-radius: 0.8rem; }
     .verification.good { border-color: #55966f; background: #f4fbf6; }
     .verification.pending { border-color: #b79755; background: #fffaf0; }
@@ -345,6 +415,10 @@ export class OrganizationOnboardingComponent implements OnInit {
   readonly lookupBusy = signal(false);
   readonly saveBusy = signal(false);
   readonly purgeBusy = signal(false);
+  readonly jobTitleBusy = signal(false);
+  readonly jobTitleResolveBusy = signal(false);
+  readonly jobTitleSuggestions = signal<JobTitleOption[]>([]);
+  readonly jobTitleSimilar = signal<JobTitleOption[]>([]);
   readonly notice = signal<string | null>(null);
   readonly error = signal<string | null>(null);
 
@@ -359,6 +433,8 @@ export class OrganizationOnboardingComponent implements OnInit {
   email = '';
   phone = '';
   jobTitle = '';
+  jobTitleId: number | null = null;
+  private jobTitleTimer: ReturnType<typeof setTimeout> | null = null;
   actingCapacity: OrganizationActingCapacity = 'AUTHORIZED_EMPLOYEE';
   authorityDeclared = false;
 
@@ -446,20 +522,97 @@ export class OrganizationOnboardingComponent implements OnInit {
     this.error.set(null);
     this.result.set(null);
     try {
-      this.lookup.set(
-        await firstValueFrom(
-          this.api.lookupOrganizationCompany({
-            country: this.country,
-            taxIdType: this.taxIdType,
-            taxId: this.taxId
-          })
-        )
+      const found = await firstValueFrom(
+        this.api.lookupOrganizationCompany({
+          country: this.country,
+          taxIdType: this.taxIdType,
+          taxId: this.taxId
+        })
       );
+      this.lookup.set(found);
+      if (!this.displayName.trim() && found.company.legalName) {
+        this.displayName = found.company.legalName;
+      }
     } catch (err) {
       this.error.set(errorMessage(err, 'No se pudo consultar la empresa.'));
     } finally {
       this.lookupBusy.set(false);
     }
+  }
+
+  onJobTitleInput(value: string): void {
+    this.jobTitle = value;
+    this.jobTitleId = null;
+    this.jobTitleSimilar.set([]);
+
+    if (this.jobTitleTimer !== null) {
+      clearTimeout(this.jobTitleTimer);
+    }
+    if (value.trim().length < 2) {
+      this.jobTitleSuggestions.set([]);
+      return;
+    }
+    this.jobTitleTimer = setTimeout(() => {
+      void this.loadJobTitleSuggestions();
+    }, 250);
+  }
+
+  async loadJobTitleSuggestions(): Promise<void> {
+    if (this.jobTitleBusy()) return;
+    this.jobTitleBusy.set(true);
+    try {
+      const rows = await firstValueFrom(
+        this.api.organizationJobTitles(this.jobTitle.trim(), 8)
+      );
+      this.jobTitleSuggestions.set(
+        rows.filter((item) => item.id !== this.jobTitleId)
+      );
+    } catch {
+      this.jobTitleSuggestions.set([]);
+    } finally {
+      this.jobTitleBusy.set(false);
+    }
+  }
+
+  selectJobTitle(item: JobTitleOption): void {
+    this.jobTitleId = item.id;
+    this.jobTitle = item.name;
+    this.jobTitleSuggestions.set([]);
+    this.jobTitleSimilar.set([]);
+  }
+
+  async resolveJobTitle(confirmSimilar: boolean): Promise<boolean> {
+    const value = this.jobTitle.trim();
+    if (value.length < 2) return false;
+
+    this.jobTitleResolveBusy.set(true);
+    this.error.set(null);
+    try {
+      const response = await firstValueFrom(
+        this.api.resolveOrganizationJobTitle(value, confirmSimilar)
+      );
+      if (response.status === 'SIMILAR') {
+        this.jobTitleSimilar.set(response.similar);
+        return false;
+      }
+      if (response.item) {
+        this.selectJobTitle(response.item);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      this.error.set(errorMessage(err, 'No se pudo validar el cargo o función.'));
+      return false;
+    } finally {
+      this.jobTitleResolveBusy.set(false);
+    }
+  }
+
+  async ensureJobTitle(): Promise<boolean> {
+    if (this.jobTitleId !== null) {
+      return true;
+    }
+    return this.resolveJobTitle(false);
   }
 
   verificationTitle(value: OrganizationCompanyLookupResult): string {
@@ -486,6 +639,9 @@ export class OrganizationOnboardingComponent implements OnInit {
 
   async save(): Promise<void> {
     if (this.result() !== null || !this.canSave()) return;
+    if (!(await this.ensureJobTitle())) {
+      return;
+    }
     this.saveBusy.set(true);
     this.error.set(null);
     try {
@@ -501,6 +657,7 @@ export class OrganizationOnboardingComponent implements OnInit {
               firstName: this.firstName.trim(),
               lastName: this.lastName.trim(),
               email: this.email.trim(),
+              jobTitleId: this.jobTitleId,
               jobTitle: this.jobTitle.trim(),
               phone: this.phone.trim(),
               actingCapacity: this.actingCapacity,
