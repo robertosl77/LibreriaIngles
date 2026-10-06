@@ -1027,6 +1027,11 @@ export interface OrganizationCompanyLookupResult {
     legalAddress: string | null;
     primaryActivity: string | null;
   };
+  platform: {
+    alreadyRegistered: boolean;
+    onboardingInProgress: boolean;
+    onboardingPublicId: string | null;
+  };
 }
 
 export interface OrganizationOnboardingDraft extends OrganizationCompanyLookupRequest {
