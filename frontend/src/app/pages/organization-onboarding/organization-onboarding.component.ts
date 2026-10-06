@@ -169,6 +169,9 @@ import {
               <label class="field">
                 Sitio web (opcional)
                 <input class="input" name="website" [(ngModel)]="website" placeholder="https://empresa.com" />
+                <span class="field-help">
+                  El RNS no informa el sitio web. Completalo si lo conocés; más adelante servirá para branding.
+                </span>
               </label>
             </div>
           </section>
