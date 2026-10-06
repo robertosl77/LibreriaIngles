@@ -115,9 +115,19 @@ import {
                   Esta organización ya está registrada en Librería Inglés. No se puede iniciar un alta duplicada.
                 </p>
               } @else if (companyLookup.platform.onboardingInProgress) {
-                <p class="platform-warning">
-                  Ya existe una solicitud de alta en curso para esta organización.
-                </p>
+                <div class="platform-warning stack-small">
+                  <span>Ya existe una solicitud de alta en curso para esta organización.</span>
+                  @if (config()?.devPurgeAllowed) {
+                    <button
+                      class="btn danger-btn"
+                      type="button"
+                      (click)="purgeCurrentOnboarding()"
+                      [disabled]="purgeBusy()"
+                    >
+                      {{ purgeBusy() ? 'Eliminando…' : 'DEV · Eliminar alta incompleta por CUIT' }}
+                    </button>
+                  }
+                </div>
               }
 
               @if (companyLookup.developmentSimulation) {
@@ -251,7 +261,22 @@ import {
             } @else {
               <p>La solicitud requiere revisión antes de continuar.</p>
             }
+
+            @if (config()?.devPurgeAllowed) {
+              <button
+                class="btn danger-btn"
+                type="button"
+                (click)="purgeCurrentOnboarding()"
+                [disabled]="purgeBusy()"
+              >
+                {{ purgeBusy() ? 'Eliminando…' : 'DEV · Eliminar esta alta por CUIT' }}
+              </button>
+            }
           </section>
+        }
+
+        @if (notice()) {
+          <p class="notice">{{ notice() }}</p>
         }
 
         @if (error()) {
@@ -282,6 +307,7 @@ import {
     .btn { width: fit-content; border-radius: 0.7rem; padding: 0.8rem 1.1rem; font: inherit; font-weight: 700; cursor: pointer; }
     .btn.primary { border: 1px solid #111; background: #111; color: #fff; }
     .btn.secondary-btn { border: 1px solid #bbb; background: #fff; color: #111; }
+    .btn.danger-btn { border: 1px solid #b45a54; background: #fff; color: #8f1e18; }
     .btn:disabled { cursor: not-allowed; opacity: 0.5; }
     .search-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
     .verification { padding: 1rem; border: 1px solid #bbb; border-radius: 0.8rem; }
@@ -292,6 +318,7 @@ import {
     .badge { font-size: 0.72rem; padding: 0.2rem 0.45rem; border: 1px solid currentColor; border-radius: 999px; }
     .dev-warning { padding: 0.7rem; border-radius: 0.6rem; background: #fff0c7; font-size: 0.85rem; font-weight: 650; }
     .platform-warning { padding: 0.7rem; border-radius: 0.6rem; background: #fff1f0; color: #8f1e18; font-size: 0.9rem; font-weight: 700; }
+    .stack-small { display: grid; gap: 0.65rem; justify-items: start; }
     .company-data { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1rem; margin: 1rem 0 0; }
     .company-data div { min-width: 0; }
     dt { font-size: 0.75rem; color: #666; }
@@ -299,6 +326,7 @@ import {
     .authority { display: flex; gap: 0.75rem; align-items: flex-start; line-height: 1.45; }
     .authority input { margin-top: 0.25rem; }
     .result { border-color: #55966f; background: #f4fbf6; }
+    .notice { margin-top: 1rem; padding: 0.9rem; border-radius: 0.7rem; color: #285f3c; background: #f1faf4; }
     .error { margin-top: 1rem; padding: 0.9rem; border-radius: 0.7rem; color: #8f1e18; background: #fff1f0; }
     @media (max-width: 700px) {
       .grid.two, .company-data { grid-template-columns: 1fr; }
@@ -316,6 +344,8 @@ export class OrganizationOnboardingComponent implements OnInit {
   readonly loading = signal(true);
   readonly lookupBusy = signal(false);
   readonly saveBusy = signal(false);
+  readonly purgeBusy = signal(false);
+  readonly notice = signal<string | null>(null);
   readonly error = signal<string | null>(null);
 
   country = 'AR';
@@ -372,7 +402,39 @@ export class OrganizationOnboardingComponent implements OnInit {
     this.taxId = '';
     this.displayName = '';
     this.website = '';
+    this.notice.set(null);
     this.error.set(null);
+  }
+
+  async purgeCurrentOnboarding(): Promise<void> {
+    if (!this.taxId.trim() || !this.config()?.devPurgeAllowed) {
+      return;
+    }
+    this.purgeBusy.set(true);
+    this.error.set(null);
+    this.notice.set(null);
+    const taxId = this.taxId;
+    try {
+      const response = await firstValueFrom(
+        this.api.purgeOrganizationOnboardingDev(
+          this.country,
+          this.taxIdType,
+          taxId
+        )
+      );
+      this.resetCompanySearch();
+      this.notice.set(
+        response.deletedOnboardings > 0
+          ? `DEV · Se eliminaron ${response.deletedOnboardings} alta(s) incompleta(s) para el CUIT ${taxId}.`
+          : `DEV · No había altas incompletas para el CUIT ${taxId}.`
+      );
+    } catch (err) {
+      this.error.set(
+        errorMessage(err, 'No se pudo eliminar el alta incompleta.')
+      );
+    } finally {
+      this.purgeBusy.set(false);
+    }
   }
 
   async lookupCompany(): Promise<void> {
@@ -380,6 +442,7 @@ export class OrganizationOnboardingComponent implements OnInit {
       return;
     }
     this.lookupBusy.set(true);
+    this.notice.set(null);
     this.error.set(null);
     this.result.set(null);
     try {
