@@ -1043,7 +1043,6 @@ export interface OrganizationOnboardingDraft extends OrganizationCompanyLookupRe
     lastName: string;
     email: string;
     jobTitleId: number | null;
-    jobTitleId?: number | null;
     jobTitle: string;
     phone: string;
     actingCapacity: OrganizationActingCapacity;
@@ -1078,6 +1077,7 @@ export interface OrganizationOnboardingResult {
     firstName: string;
     lastName: string;
     email: string;
+    jobTitleId: number | null;
     jobTitle: string;
     phone: string;
     actingCapacity: OrganizationActingCapacity;
