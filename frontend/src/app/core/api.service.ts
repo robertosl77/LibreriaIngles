@@ -28,6 +28,11 @@ import {
   LessonResponse,
   Me,
   ModelOption,
+  OrganizationCompanyLookupRequest,
+  OrganizationCompanyLookupResult,
+  OrganizationOnboardingConfig,
+  OrganizationOnboardingDraft,
+  OrganizationOnboardingResult,
   InvitationPreview,
   InvitationRedemption,
   PlatformAccount,
@@ -68,6 +73,31 @@ export function errorMessage(error: unknown, fallback = 'Ocurrió un error inesp
 export class ApiService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
+
+  // Alta corporativa P01
+  organizationOnboardingConfig(): Observable<OrganizationOnboardingConfig> {
+    return this.http.get<OrganizationOnboardingConfig>(
+      `${this.base}/organization-onboarding/config`
+    );
+  }
+
+  lookupOrganizationCompany(
+    draft: OrganizationCompanyLookupRequest
+  ): Observable<OrganizationCompanyLookupResult> {
+    return this.http.post<OrganizationCompanyLookupResult>(
+      `${this.base}/organization-onboarding/company/lookup`,
+      draft
+    );
+  }
+
+  createOrganizationOnboarding(
+    draft: OrganizationOnboardingDraft
+  ): Observable<OrganizationOnboardingResult> {
+    return this.http.post<OrganizationOnboardingResult>(
+      `${this.base}/organization-onboarding`,
+      draft
+    );
+  }
 
   // Auth
   authConfig(): Observable<AuthConfig> {
