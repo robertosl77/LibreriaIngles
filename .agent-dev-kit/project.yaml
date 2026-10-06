@@ -14,7 +14,7 @@ stack:
     engine: SQLite
 
 provider:
-  name: openai
+  name: anthropic
 
 git_workflow:
   branches:
