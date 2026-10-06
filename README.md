@@ -41,6 +41,26 @@ Ejemplos: `feat/T-042-crud-libros`, `fix/T-066-readme-workflow`.
 - Toda modificación llega a las ramas protegidas exclusivamente mediante Pull Requests.
 - Antes de crear una rama de tarea, se debe sincronizar con la última versión de `develop`.
 
+## Terminología de negocio
+
+Para evitar ambigüedades entre conceptos comerciales y modelos técnicos, el proyecto usa esta nomenclatura:
+
+| Término | Significado | Ejemplos / notas |
+|---|---|---|
+| **Servicio** | Fila del modelo de negocio: qué tipo de servicio se ofrece. | Hoy: `PERSONAL`, `CORPORATE`. Debe poder evolucionar a futuros tipos sin duplicar motores. |
+| **Fuente IA** | Columna del modelo: de dónde salen las conexiones de IA permitidas para ese servicio. | `BYOK`, `PLATFORM`, `HYBRID`. |
+| **Membresía comercial** | Intersección **Servicio × Fuente IA**. Describe una combinación comercial habilitable. | Ej.: `CORPORATE × HYBRID`. No representa una persona dentro de una empresa. |
+| **Suscripción / Contrato** | Instancia efectiva que habilita una membresía comercial durante una vigencia y bajo condiciones económicas. | Puede incluir pago, renovación, seats/licencias, cuotas de asistencias IA, excedentes y otros entitlements. |
+| **OrganizationMembership** | Vínculo entre una `Account` y una `Organization`, con rol y estado dentro de esa organización. | Ej.: Roberto pertenece a Kakatua como `ADMIN`; otra persona pertenece como `STUDENT`. |
+| **Tenant** | Contexto aislado de una organización dentro de la misma aplicación. | Kakatua es un tenant: sus personas, datos, branding, campañas, conexiones y reportes no se mezclan con otra organización. |
+| **Onboarding** | Flujo guiado de alta y configuración inicial. | En B2B: desde “Crear empresa” hasta dejar la organización operativa. |
+
+### Regla de nomenclatura
+
+En conversaciones de producto, **membresía** refiere a la combinación `Servicio × Fuente IA`. El modelo técnico histórico `Membership` representa actualmente el vínculo cuenta ↔ organización; cuando se trabaje esa capa se debe evaluar renombrarlo a `OrganizationMembership` para evitar la colisión semántica.
+
+La arquitectura debe privilegiar configuración/catálogos/capacidades sobre condicionales hardcodeados por tipo de cliente. Persona, empresa o futuros contextos (por ejemplo universidad) deben reutilizar los mismos motores base cuando la responsabilidad sea la misma.
+
 ## Stack inicial
 
 - Frontend: Angular
