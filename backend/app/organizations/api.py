@@ -5,7 +5,13 @@ from sqlalchemy import select
 from app.core.config import settings
 
 from app.core.deps import DbSession
+from app.organizations.job_titles import (
+    get_job_title,
+    resolve_job_title,
+    search_job_titles,
+)
 from app.organizations.models import (
+    JobTitle,
     Organization,
     OrganizationActingCapacity,
     OrganizationOnboarding,
@@ -32,10 +38,52 @@ class ReferentIn(BaseModel):
     firstName: str = Field(min_length=1, max_length=100)
     lastName: str = Field(min_length=1, max_length=100)
     email: EmailStr
+    jobTitleId: int | None = Field(default=None, ge=1)
     jobTitle: str = Field(min_length=1, max_length=160)
     phone: str = Field(min_length=6, max_length=64)
     actingCapacity: OrganizationActingCapacity
     authorityDeclared: bool
+
+
+class JobTitleResolveIn(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    confirmSimilar: bool = False
+
+
+def _job_title_payload(row: JobTitle, score: float | None = None) -> dict:
+    payload = {"id": row.id, "name": row.name}
+    if score is not None:
+        payload["score"] = round(score, 3)
+    return payload
+
+
+@router.get("/job-titles")
+def list_job_titles(db: DbSession, q: str = "", limit: int = 8) -> list[dict]:
+    limit = max(1, min(limit, 20))
+    rows = search_job_titles(db, q, limit=limit)
+    db.commit()
+    return [_job_title_payload(row, score) for row, score in rows]
+
+
+@router.post("/job-titles/resolve")
+def resolve_job_title_endpoint(payload: JobTitleResolveIn, db: DbSession) -> dict:
+    try:
+        result = resolve_job_title(
+            db,
+            payload.name,
+            confirm_similar=payload.confirmSimilar,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+    item = result["item"]
+    similar = result["similar"]
+    db.commit()
+    return {
+        "status": result["status"],
+        "item": _job_title_payload(item) if item is not None else None,
+        "similar": [_job_title_payload(row, score) for row, score in similar],
+    }
 
 
 class OnboardingCreateIn(CompanyLookupIn):
@@ -190,6 +238,33 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
             "Ya existe una solicitud de alta en curso para esta organización.",
         )
 
+    job_title = (
+        get_job_title(db, payload.referent.jobTitleId)
+        if payload.referent.jobTitleId is not None
+        else None
+    )
+    if payload.referent.jobTitleId is not None and job_title is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "El cargo o función seleccionado ya no está disponible.",
+        )
+
+    if job_title is None:
+        resolved_title = resolve_job_title(
+            db,
+            payload.referent.jobTitle,
+            confirm_similar=False,
+        )
+        if resolved_title["status"] == "SIMILAR":
+            candidates = ", ".join(
+                row.name for row, _ in resolved_title["similar"][:3]
+            )
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"El cargo se parece a opciones existentes: {candidates}. Seleccioná una o confirmá el alta.",
+            )
+        job_title = resolved_title["item"]
+
     display_name = (payload.displayName or "").strip() or result.legal_name
     onboarding = OrganizationOnboarding(
         status=_status_for(result),
@@ -208,7 +283,8 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
         contact_first_name=payload.referent.firstName.strip(),
         contact_last_name=payload.referent.lastName.strip(),
         contact_email=str(payload.referent.email).strip().lower(),
-        contact_job_title=payload.referent.jobTitle.strip(),
+        contact_job_title_id=job_title.id,
+        contact_job_title=job_title.name,
         contact_phone=payload.referent.phone.strip(),
         acting_capacity=payload.referent.actingCapacity,
         authority_declared=True,
