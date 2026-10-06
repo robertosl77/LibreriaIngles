@@ -110,6 +110,16 @@ import {
               </div>
               <p>{{ companyLookup.message }}</p>
 
+              @if (companyLookup.platform.alreadyRegistered) {
+                <p class="platform-warning">
+                  Esta organización ya está registrada en Librería Inglés. No se puede iniciar un alta duplicada.
+                </p>
+              } @else if (companyLookup.platform.onboardingInProgress) {
+                <p class="platform-warning">
+                  Ya existe una solicitud de alta en curso para esta organización.
+                </p>
+              }
+
               @if (companyLookup.developmentSimulation) {
                 <p class="dev-warning">
                   DEV · Los datos empresariales son simulados para probar el flujo. No provienen de ARCA/RNS.
@@ -130,7 +140,7 @@ import {
           }
         </section>
 
-        @if (lookup() && lookup()!.state !== 'REVIEW_REQUIRED') {
+        @if (canContinueWithCompany()) {
           <section class="panel stack">
             <div>
               <p class="step">Paso 2</p>
@@ -281,6 +291,7 @@ import {
     .verification-head { display: flex; justify-content: space-between; gap: 1rem; }
     .badge { font-size: 0.72rem; padding: 0.2rem 0.45rem; border: 1px solid currentColor; border-radius: 999px; }
     .dev-warning { padding: 0.7rem; border-radius: 0.6rem; background: #fff0c7; font-size: 0.85rem; font-weight: 650; }
+    .platform-warning { padding: 0.7rem; border-radius: 0.6rem; background: #fff1f0; color: #8f1e18; font-size: 0.9rem; font-weight: 700; }
     .company-data { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1rem; margin: 1rem 0 0; }
     .company-data div { min-width: 0; }
     dt { font-size: 0.75rem; color: #666; }
@@ -345,6 +356,16 @@ export class OrganizationOnboardingComponent implements OnInit {
     return Boolean(value?.state === 'VERIFIED' && value.company.legalName);
   }
 
+  canContinueWithCompany(): boolean {
+    const value = this.lookup();
+    return Boolean(
+      value &&
+      value.state !== 'REVIEW_REQUIRED' &&
+      !value.platform.alreadyRegistered &&
+      !value.platform.onboardingInProgress
+    );
+  }
+
   resetCompanySearch(): void {
     this.lookup.set(null);
     this.result.set(null);
@@ -389,8 +410,7 @@ export class OrganizationOnboardingComponent implements OnInit {
       return false;
     }
     return Boolean(
-      this.lookup() &&
-      this.lookup()!.state !== 'REVIEW_REQUIRED' &&
+      this.canContinueWithCompany() &&
       this.firstName.trim() &&
       this.lastName.trim() &&
       this.email.trim() &&
