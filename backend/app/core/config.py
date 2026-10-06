@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     mock_ai_enabled: bool = False
     ai_timeout_seconds: float = 60.0
 
+    # P01 B2B: simulación de verificación empresarial. Nunca en production.
+    organization_verification_mock_enabled: bool = True
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",
@@ -57,6 +60,10 @@ class Settings(BaseSettings):
     @property
     def mock_ai_allowed(self) -> bool:
         return self.mock_ai_enabled and not self.is_production
+
+    @property
+    def organization_verification_mock_allowed(self) -> bool:
+        return self.organization_verification_mock_enabled and not self.is_production
 
     @property
     def dev_account_purge_allowed(self) -> bool:
