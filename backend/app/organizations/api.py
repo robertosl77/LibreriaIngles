@@ -97,13 +97,43 @@ def onboarding_config() -> dict:
 
 
 @router.post("/company/lookup")
-def lookup_company(payload: CompanyLookupIn) -> dict:
+def lookup_company(payload: CompanyLookupIn, db: DbSession) -> dict:
     result = verify_organization(
         country=payload.country,
         tax_id_type=payload.taxIdType,
         tax_id=payload.taxId,
     )
-    return _verification_payload(result)
+    response = _verification_payload(result)
+
+    existing_org = db.scalar(
+        select(Organization).where(
+            Organization.country == result.country,
+            Organization.tax_id == result.tax_id,
+        )
+    )
+    active_onboarding = db.scalar(
+        select(OrganizationOnboarding)
+        .where(
+            OrganizationOnboarding.country == result.country,
+            OrganizationOnboarding.tax_id_type == result.tax_id_type,
+            OrganizationOnboarding.tax_id == result.tax_id,
+            OrganizationOnboarding.status.notin_([
+                OrganizationOnboardingStatus.ABANDONED,
+                OrganizationOnboardingStatus.PROVISIONED,
+            ]),
+        )
+        .order_by(OrganizationOnboarding.created_at.desc())
+        .limit(1)
+    )
+
+    response["platform"] = {
+        "alreadyRegistered": existing_org is not None,
+        "onboardingInProgress": active_onboarding is not None,
+        "onboardingPublicId": (
+            active_onboarding.public_id if active_onboarding is not None else None
+        ),
+    }
+    return response
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -135,6 +165,26 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Esa organización ya existe en Librería Inglés.",
+        )
+
+    existing_onboarding = db.scalar(
+        select(OrganizationOnboarding)
+        .where(
+            OrganizationOnboarding.country == result.country,
+            OrganizationOnboarding.tax_id_type == result.tax_id_type,
+            OrganizationOnboarding.tax_id == result.tax_id,
+            OrganizationOnboarding.status.notin_([
+                OrganizationOnboardingStatus.ABANDONED,
+                OrganizationOnboardingStatus.PROVISIONED,
+            ]),
+        )
+        .order_by(OrganizationOnboarding.created_at.desc())
+        .limit(1)
+    )
+    if existing_onboarding is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya existe una solicitud de alta en curso para esta organización.",
         )
 
     display_name = (payload.displayName or "").strip() or result.legal_name
