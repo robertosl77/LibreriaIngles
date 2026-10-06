@@ -6,6 +6,7 @@ from app.organizations.verification import is_valid_argentina_cuit, normalize_ta
 
 API = "/api/v1"
 VALID_CUIT = "30-12345678-1"
+REAL_VALID_CUIT = "30-65511620-2"
 
 
 def _payload(**overrides):
@@ -145,3 +146,19 @@ def test_without_dev_mock_valid_cuit_stays_pending(client, monkeypatch) -> None:
     assert body["state"] == "PENDING"
     assert body["source"] == "AR_OFFICIAL_PENDING"
     assert body["developmentSimulation"] is False
+
+
+def test_lookup_accepts_real_world_valid_cuit_from_manual_test(client) -> None:
+    """Regresión del caso detectado durante la primera prueba manual de P01."""
+    assert is_valid_argentina_cuit(REAL_VALID_CUIT)
+
+    response = client.post(
+        f"{API}/organization-onboarding/company/lookup",
+        json={"country": "AR", "taxIdType": "CUIT", "taxId": REAL_VALID_CUIT},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["state"] == "VERIFIED"
+    assert body["source"] == "DEV_MOCK"
+    assert body["taxId"] == "30655116202"
+    assert body["developmentSimulation"] is True
