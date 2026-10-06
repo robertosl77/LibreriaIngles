@@ -1,0 +1,53 @@
+<mxfile host="app.diagrams.net" modified="2026-10-06T00:00:00.000Z" agent="ChatGPT" version="24.7.17">
+  <diagram id="saas-tenant-model" name="SaaS - Accounts - Tenants">
+    <mxGraphModel dx="1366" dy="768" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="saas" value="LIBRERÍA INGLÉS&#xa;SaaS&#xa;&#xa;Un único producto / plataforma" style="rounded=1;whiteSpace=wrap;html=1;fontStyle=1;fontSize=20;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="560" y="40" width="360" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="personal" value="CONTEXTO PERSONAL&#xa;&#xa;No lo tratamos como tenant por ahora&#xa;La identidad base es Account" style="rounded=1;whiteSpace=wrap;html=1;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="180" y="230" width="390" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="org" value="CONTEXTO ORGANIZATION / TENANT&#xa;&#xa;Contexto aislado dentro del mismo SaaS&#xa;Puede ser empresa, universidad u otro tipo futuro" style="rounded=1;whiteSpace=wrap;html=1;fontStyle=1;fontSize=16;align=center;" vertex="1" parent="1">
+          <mxGeometry x="900" y="230" width="430" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1" value="Account&#xa;Roberto" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;align=center;" vertex="1" parent="1">
+          <mxGeometry x="110" y="440" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2" value="Account&#xa;Juan" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;align=center;" vertex="1" parent="1">
+          <mxGeometry x="315" y="440" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3" value="Account&#xa;María" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;align=center;" vertex="1" parent="1">
+          <mxGeometry x="520" y="440" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="o1" value="Tenant / Organization&#xa;Kakatua&#xa;&#xa;members · branding · campaigns&#xa;AI · billing · reporting" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;align=center;" vertex="1" parent="1">
+          <mxGeometry x="760" y="430" width="240" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="o2" value="Tenant / Organization&#xa;Empresa B&#xa;&#xa;aislado de Kakatua" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="430" width="220" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="o3" value="Tenant / Organization&#xa;Universidad X&#xa;&#xa;mismos motores, otra configuración" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="430" width="240" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="engines" value="MOTORES COMPARTIDOS DEL SaaS&#xa;&#xa;Identidad · Suscripciones/Billing · Invitaciones · Campaigns · IA/Consumo · Componentes/Branding · Reporting · Permisos/Capabilities&#xa;&#xa;Cambian scope, configuración y permisos; no se duplica el motor." style="rounded=1;whiteSpace=wrap;html=1;fontSize=15;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="270" y="650" width="980" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="note" value="Conceptos&#xa;SaaS = el producto completo&#xa;Tenant = un contexto organizacional aislado&#xa;Account = identidad/persona&#xa;OrganizationMembership = vínculo Account ↔ Organization" style="shape=note;whiteSpace=wrap;html=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="610" width="210" height="180" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="saas" target="personal"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="saas" target="org"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="personal" target="p1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="personal" target="p2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="personal" target="p3"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="org" target="o1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="org" target="o2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;" edge="1" parent="1" source="org" target="o3"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;dashed=1;" edge="1" parent="1" source="personal" target="engines"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;dashed=1;" edge="1" parent="1" source="org" target="engines"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
