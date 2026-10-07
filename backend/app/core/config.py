@@ -40,6 +40,24 @@ class Settings(BaseSettings):
     organization_registry_path: str = "data/rns_registry.db"
     organization_verification_mock_enabled: bool = True
 
+    # P02: challenge reutilizable de verificación.
+    verification_code_ttl_minutes: int = 25
+    verification_max_attempts: int = 3
+    verification_resend_cooldown_seconds: int = 60
+    verification_max_sends_per_hour: int = 5
+
+    # Delivery de email. `dev` captura el código únicamente fuera de production.
+    # `smtp` permite un primer provider real sin acoplar el onboarding al proveedor.
+    email_delivery_provider: str = "dev"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+    smtp_timeout_seconds: float = 20.0
+    smtp_from_email: str = ""
+    smtp_from_name: str = "Sr. Marcos"
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",
