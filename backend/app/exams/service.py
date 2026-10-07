@@ -212,8 +212,10 @@ def exam_slots(level: str, rng=None, *, allow_speaking: bool = False) -> list[di
                     s for s in orthography if s.key != chosen_orthography.key
                 ]
         for index in range(count):
+            # El examen mide la conversación como producción: siempre turnos abiertos (T-183).
+            types = {"conversation"} if area == "conversation" else None
             slots.append(
-                slot_for(pool[index % len(pool)], rng, allow_speaking=allow_speaking)
+                slot_for(pool[index % len(pool)], rng, allow_speaking=allow_speaking, types=types)
             )
     ensure_listening(slots, list(curriculum.skills), EXAM_MIN_LISTEN, rng)
     if allow_speaking:

@@ -16,6 +16,7 @@ from app.classes.evaluation import (
     evaluate_without_ai,
 )
 from app.classes.normalize import normalize_answer
+from app.classes.types import NO_APPEAL_TYPES
 from app.core.config import settings
 from app.core.deps import StudyContext
 from app.curriculum.lessons import lesson_payload
@@ -360,6 +361,8 @@ def appeal(db: Session, study: StudyContext, session: ClassSession, exercise_id:
         raise ClassStateError("Ese intento no se puede apelar.")
     if attempt.appealed_at is not None:
         raise ClassStateError("Ese intento ya fue apelado.")
+    if exercise.exercise_type in NO_APPEAL_TYPES:
+        raise ClassStateError("Este tipo de ejercicio se corrige de forma exacta y no se apela.")
     if not attempt.normalized_answer:
         raise ClassStateError("No hay respuesta para revisar.")
 

@@ -7,6 +7,7 @@ dentro de ese marco (documento funcional §2.1) y devuelve JSON validable (§31)
 import json
 from functools import lru_cache
 
+from app.classes.types import ALL_TYPES
 from app.curriculum.service import get_level
 
 GENERATION_SYSTEM = """You generate English-learning exercises for a structured learning app.
@@ -19,7 +20,7 @@ Return ONLY a JSON object with this shape:
   "exercises": [
     {
       "skillKey": "<one of the requested skill keys>",
-      "type": "fill_blank | multiple_choice | reading_multiple_choice | rewrite | short_writing | conversation",
+      "type": "one of the slot allowedTypes",
       "instruction": "short instruction in simple English",
       "question": "the item shown to the student",
       "passage": "only for reading_multiple_choice: 40-80 word text",
@@ -32,7 +33,10 @@ Return ONLY a JSON object with this shape:
          "conceptResults": [{"concept": "<expected concept>", "status": "correct|incorrect"}]}
       ],
       "expectedConcepts": ["snake_case concept names evaluated by this item"],
-      "closing": "only for the final turn of a conversation pair: short partner farewell/closure"
+      "closing": "only for the final turn of a conversation pair: short partner farewell/closure",
+      "pairs": "only for match_pairs: [[\"english\", \"meaning\"], ...]",
+      "fields": "only for listen_form: [{\"label\": \"Name\", \"acceptedAnswers\": [\"Anna Brown\"]}, ...]",
+      "gaps": "only for gap_text: accepted answers per blank, in order: [[\"get\"], [\"have\"]]"
     }
   ]
 }
@@ -166,8 +170,27 @@ def compact_json(value) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
+# T-183: reglas de los tipos nuevos. Viajan SOLO si la clase pide ese tipo (no engordan cada pedido).
+NEW_TYPE_RULES = {
+    'dictation': '- dictation (always LISTEN): "stimulus" is ONE short sentence (5-10 words) at the level; "question" is\n  "Write the sentence you hear."; acceptedAnswers = the sentence (plus contracted/full variants).',
+    'word_order': '- word_order: acceptedAnswers = every valid order of ONE sentence of 4-9 words, all using exactly the same\n  words (e.g. "I drink coffee every day.", "Every day I drink coffee."). "question" is "Put the words in order."\n  Do NOT shuffle the words yourself: the app builds the word tiles.',
+    'dialogue_choice': '- dialogue_choice: "question" is a short dialogue of 1-3 lines ending with the partner\'s line, e.g.\n  "A: Hi! I\'m Tom. Nice to meet you."; options = 3 possible learner replies, exactly ONE appropriate; the\n  others must be clearly wrong for that moment (not just less polite). With LISTEN, "stimulus" is the\n  partner\'s last line and "question" is "Choose the best reply."',
+    'read_aloud': '- read_aloud (always SPEAK, READ): "question" is ONLY the sentence to read aloud (5-12 words, useful everyday\n  English, no names that are hard to pronounce); acceptedAnswers = [that same sentence].',
+    'minimal_pairs': '- minimal_pairs (always LISTEN): "stimulus" is ONE word from a minimal pair hard for Spanish speakers\n  (ship/sheep, live/leave, very/berry, hat/hut, think/sink, beach/peach); options = the 2-3 similar words;\n  acceptedAnswers = [the word in the stimulus]; "question" is "Which word do you hear?".',
+    'match_pairs': '- match_pairs: "pairs" = 4-5 [english, meaning-in-Spanish] pairs from the slot topic, no repeated words;\n  acceptedAnswers []; "question" is "Match each word with its meaning.".',
+    'listen_form': '- listen_form (always LISTEN): "stimulus" = 2-3 sentences where a person gives personal data; "fields" = 3-4\n  labels in English (Name, Age, Phone, City, Job, Day, Time) with acceptedAnswers for what was said (for numbers\n  list digit and word forms); "question" is "Complete the form with what you hear."',
+    'gap_text': '- gap_text (READ): "passage" = a 30-60 word text with 3-4 blanks written as "___"; "gaps" = accepted answers for\n  each blank in order; "options" = a word bank with the correct words plus ONE distractor; acceptedAnswers [].',
+    'error_correction': '- error_correction: "question" is a sentence with exactly ONE typical A1 error (e.g. "She go to school by bus.");\n  acceptedAnswers = every correct version (contracted and full forms). The question itself must be wrong.',
+    'word_stress': '- word_stress (always LISTEN): "stimulus" is ONE common word of 2-3 syllables; options = the word split in\n  syllables with ONE syllable in capitals for each option (e.g. "BA-na-na", "ba-NA-na", "ba-na-NA");\n  acceptedAnswers = [the correctly stressed option].',
+}
+
+
 def generation_user_prompt(level: str, slots: list[dict], purpose: str = "class") -> str:
     header = "Generate a class.\n" if purpose != "exam" else f"Generate a level exam.\n{EXAM_NOTE}\n"
+    requested = dict.fromkeys(t for slot in slots for t in slot.get("allowedTypes") or [])
+    rules = [NEW_TYPE_RULES[t] for t in requested if t in NEW_TYPE_RULES]
+    if rules:
+        header += "Rules for these exercise types:\n" + "\n".join(rules) + "\n"
     return header + compact_json({"level": level, "slots": slots})
 
 
@@ -236,10 +259,7 @@ EXERCISE_SCHEMA = _s(
     "OBJECT",
     properties={
         "skillKey": _STR,
-        "type": _s(
-            "STRING",
-            enum=["fill_blank", "multiple_choice", "reading_multiple_choice", "rewrite", "short_writing", "conversation"],
-        ),
+        "type": _s("STRING", enum=sorted(ALL_TYPES)),
         "instruction": _STR,
         "question": _STR,
         "passage": _s("STRING", nullable=True),
@@ -262,6 +282,13 @@ EXERCISE_SCHEMA = _s(
         ),
         "expectedConcepts": _STR_LIST,
         "closing": _s("STRING", nullable=True),
+        "pairs": _s("ARRAY", items=_s("ARRAY", items=_STR), nullable=True),
+        "fields": _s(
+            "ARRAY",
+            items=_s("OBJECT", properties={"label": _STR, "acceptedAnswers": _STR_LIST}, required=["label", "acceptedAnswers"]),
+            nullable=True,
+        ),
+        "gaps": _s("ARRAY", items=_STR_LIST, nullable=True),
     },
     required=["skillKey", "type", "instruction", "question", "acceptedAnswers", "expectedConcepts"],
 )

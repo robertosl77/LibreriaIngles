@@ -35,6 +35,7 @@ from app.classes.prompts import (
     short_skill_key,
 )
 from app.classes.spelling import SPELLING_SCORE, spelling_slips
+from app.classes.types import CHOICE_TYPES, RULE_ONLY_TYPES, evaluate_rule_type
 from app.classes.spoken import normalize_spoken, pronunciation_slips
 from app.core.config import settings
 from app.curriculum.service import find_skill, get_level
@@ -47,7 +48,7 @@ from app.learning.models import (
     Exercise,
 )
 
-CHOICE_TYPES = {"multiple_choice", "reading_multiple_choice"}
+# T-183: los tipos de elección y los de corrección exacta viven en app.classes.types.
 STATUS_SCORE = {"correct": 100.0, "partially_correct": 50.0, "incorrect": 0.0}
 ERROR_TYPES = {"GRAMMAR_ERROR", "VOCABULARY_ERROR", "SPELLING_ERROR", "WORD_ORDER_ERROR", "PRONUNCIATION_ERROR"}
 SUGGESTION_TYPES = {
@@ -692,15 +693,18 @@ def _closed_rule_incorrect(exercise: Exercise, answer: str) -> Evaluation | None
     """
     if not settings.ai_rule_first_closed:
         return None
+    feedback = CLOSED_RULE_FEEDBACK
     if exercise.exercise_type == "fill_blank":
         pass
-    elif exercise.exercise_type == "rewrite":
+    elif exercise.exercise_type == "error_correction" and normalize_answer(answer) == normalize_answer(exercise.prompt):
+        feedback = "La oración tiene un error: hay que corregirlo, no copiarla igual."
+    elif exercise.exercise_type in ("rewrite", "error_correction"):
         if _word_overlap(_accepted(exercise), answer) >= REWRITE_MIN_OVERLAP:
             return None  # parecida: puede ser una variante válida, decide la IA
     else:
         return None
     result = _rule_incorrect(exercise, answer)
-    result["feedback"] = CLOSED_RULE_FEEDBACK
+    result["feedback"] = feedback
     return Evaluation(EvaluationSource.RULE_MATCH, result, 0.0)
 
 
@@ -721,6 +725,13 @@ def evaluate_without_ai(
     if not normalized:
         result = _rule_incorrect(exercise, "")
         return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, result, 0.0), spoken=spoken)
+
+    # T-183: dictado, ordenar, leer en voz alta y los de varias partes se corrigen siempre por regla.
+    if exercise.exercise_type in RULE_ONLY_TYPES:
+        result = evaluate_rule_type(exercise, answer, spoken=spoken)
+        if result is not None:
+            score = result.pop("_score")
+            return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, result, score), spoken=spoken)
 
     if not spoken:
         orthography = _orthography_primary(exercise, answer)

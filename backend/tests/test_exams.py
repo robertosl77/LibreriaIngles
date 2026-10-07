@@ -3,7 +3,7 @@
 import math
 from datetime import timedelta
 
-from conftest import login
+from conftest import correct_answer, login
 from sqlalchemy import select
 
 from app.curriculum.service import get_level
@@ -61,7 +61,7 @@ def _answers(exam: dict, *, correct: bool) -> dict[str, str]:
             elif exercise.exercise_type == "conversation":
                 answers[str(item["id"])] = "Hi! I'm Ana. I'm from Argentina."
             else:
-                answers[str(item["id"])] = exercise.answer_key["acceptedAnswers"][0]
+                answers[str(item["id"])] = correct_answer(exercise)
     return answers
 
 
