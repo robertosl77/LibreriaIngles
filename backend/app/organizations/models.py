@@ -46,6 +46,8 @@ class JobTitle(Base):
 class OrganizationOnboardingStatus(str, Enum):
     DRAFT = "DRAFT"
     COMPANY_VERIFIED = "COMPANY_VERIFIED"
+    EMAIL_PENDING = "EMAIL_PENDING"
+    EMAIL_VERIFIED = "EMAIL_VERIFIED"
     VERIFICATION_PENDING = "VERIFICATION_PENDING"
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
     ABANDONED = "ABANDONED"
@@ -62,7 +64,8 @@ class OrganizationActingCapacity(str, Enum):
 class OrganizationOnboarding(Base):
     """Solicitud previa al alta definitiva de Organization.
 
-    P01 captura y verifica empresa + referente. No crea todavía Organization ni Membership.
+    P01 captura y verifica empresa + referente. P02 verifica control del email.
+    No crea todavía Organization ni Membership.
     """
 
     __tablename__ = "organization_onboardings"
@@ -75,6 +78,9 @@ class OrganizationOnboarding(Base):
         SqlEnum(OrganizationOnboardingStatus, native_enum=False),
         default=OrganizationOnboardingStatus.DRAFT,
         index=True,
+    )
+    continuation_token_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
     )
 
     country: Mapped[str] = mapped_column(String(2), default="AR", index=True)
@@ -93,6 +99,9 @@ class OrganizationOnboarding(Base):
     contact_first_name: Mapped[str] = mapped_column(String(100))
     contact_last_name: Mapped[str] = mapped_column(String(100))
     contact_email: Mapped[str] = mapped_column(String(320), index=True)
+    contact_email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     contact_job_title_id: Mapped[int | None] = mapped_column(
         ForeignKey("job_titles.id"), nullable=True, index=True
     )
