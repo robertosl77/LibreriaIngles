@@ -9,6 +9,10 @@ import phonenumbers
 from phonenumbers import PhoneNumberFormat, PhoneNumberType
 
 
+class WebsiteUnreachableError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class WebsiteCheckResult:
     state: str
@@ -77,11 +81,11 @@ def _ensure_public_host(url: str) -> None:
     try:
         addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
-        raise ValueError("No pudimos encontrar ese dominio en Internet.") from exc
+        raise WebsiteUnreachableError("No pudimos encontrar ese dominio en Internet en este momento.") from exc
 
     ips = {entry[4][0] for entry in addresses}
     if not ips:
-        raise ValueError("No pudimos encontrar ese dominio en Internet.")
+        raise WebsiteUnreachableError("No pudimos encontrar ese dominio en Internet en este momento.")
 
     for raw_ip in ips:
         ip = ipaddress.ip_address(raw_ip)
@@ -97,7 +101,17 @@ def check_website(value: str) -> WebsiteCheckResult:
     """
     try:
         normalized = normalize_website(value)
+    except ValueError as exc:
+        return WebsiteCheckResult("INVALID", None, str(exc))
+
+    try:
         _ensure_public_host(normalized)
+    except WebsiteUnreachableError:
+        return WebsiteCheckResult(
+            "UNREACHABLE",
+            normalized,
+            "No pudimos confirmar el dominio ahora. Podés continuar y revisarlo más tarde.",
+        )
     except ValueError as exc:
         return WebsiteCheckResult("INVALID", None, str(exc))
 
