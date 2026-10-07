@@ -5,7 +5,7 @@ import { firstValueFrom } from 'rxjs';
 
 import { ApiService, errorMessage } from '../core/api.service';
 import { AuthService } from '../core/auth.service';
-import { AiConnection, ConnectionScope, ModelOption, ProviderInfo } from '../core/models';
+import { AiConnection, ConnectionScope, LearnedLimit, ModelOption, ProviderInfo } from '../core/models';
 import { ToastService } from '../core/toast.service';
 import { ModelPickerComponent } from './model-picker.component';
 
@@ -80,6 +80,19 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
                           <path d="M15 9V6.5A1.5 1.5 0 0 0 13.5 5h-8A1.5 1.5 0 0 0 4 6.5v8A1.5 1.5 0 0 0 5.5 16H9"></path>
                         </svg>
                       </button>
+                    }
+                  </div>
+                }
+                @if (c.learnedLimits?.length) {
+                  <div class="learned-limits small">
+                    <span class="muted">Límites del proveedor (aprendidos):</span>
+                    @for (l of c.learnedLimits; track l.dimension + l.window) {
+                      <span class="learned-limit" [class.near]="isNear(l)" [attr.title]="limitTitle(l)">
+                        {{ dimensionLabel[l.dimension] }}/{{ windowLabel[l.window] }}:
+                        <strong>{{ l.used ?? 0 }} de {{ l.limit }}</strong>
+                        @if (l.tier === 'free') { · gratis }
+                        @if (l.source === 'ESTIMATED') { · estimado }
+                      </span>
                     }
                   </div>
                 }
@@ -194,6 +207,13 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
             </label>
           }
         </div>
+        @if (sameProviderCount() > 0) {
+          <p class="banner small same-provider">
+            Ya tenés {{ sameProviderCount() === 1 ? 'una conexión' : sameProviderCount() + ' conexiones' }} de
+            {{ providerLabel(form.provider) }}. Si esta API key es del mismo proyecto o cuenta, comparte el mismo
+            cupo del proveedor: no suma capacidad y para la app se comporta como una sola.
+          </p>
+        }
         @if (selectedProvider()?.requiresKey !== false) {
           <label class="field">
             API key
@@ -221,6 +241,10 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
     }
   `,
   styles: `
+    .learned-limits { display: flex; flex-wrap: wrap; gap: 0.35rem 0.8rem; align-items: baseline; margin-top: 0.3rem; }
+    .learned-limit { white-space: nowrap; }
+    .learned-limit.near strong { color: var(--warn); }
+    .same-provider { margin: 0; background: #fffaf0; border: 1px solid var(--warn-bg); }
     :host { display: contents; }
     .note { margin: -0.4rem 0 0.8rem; }
     .conn { align-items: flex-start; flex-wrap: wrap; }
@@ -518,7 +542,40 @@ export class ConnectionsManagerComponent implements OnInit {
     this.changed.emit();
   }
 
+  /** T-192: conexiones ya cargadas del proveedor elegido, en este mismo ámbito. */
+  sameProviderCount(): number {
+    return this.connections().filter((c) => c.provider === this.form.provider).length;
+  }
+
+  readonly dimensionLabel: Record<string, string> = {
+    REQUESTS: 'Pedidos',
+    TOKENS: 'Tokens',
+    INPUT_TOKENS: 'Tokens de entrada',
+    OUTPUT_TOKENS: 'Tokens de salida'
+  };
+  readonly windowLabel: Record<string, string> = { MINUTE: 'min', DAY: 'día', MONTH: 'mes' };
+
+  isNear(l: LearnedLimit): boolean {
+    return !!l.limit && (l.used ?? 0) >= l.limit * 0.9;
+  }
+
+  limitTitle(l: LearnedLimit): string {
+    const origin = l.source === 'HEADER' ? 'informado por el proveedor' : l.source === 'ERROR' ? 'aprendido de un rechazo' : 'estimado de otra conexión del mismo modelo';
+    const reset = l.resetAt ? ` · se renueva ${new Date(l.resetAt).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}` : '';
+    return `${origin}${reset}`;
+  }
+
   async create(): Promise<void> {
+    const same = this.sameProviderCount();
+    if (
+      same > 0 &&
+      !confirm(
+        `Ya tenés ${same === 1 ? 'una conexión' : same + ' conexiones'} de ${this.providerLabel(this.form.provider)}. ` +
+          'Si esta key es del mismo proyecto o cuenta, comparte el cupo y no suma capacidad. ¿Agregarla igual?'
+      )
+    ) {
+      return;
+    }
     this.creating.set(true);
     try {
       const created = await firstValueFrom(

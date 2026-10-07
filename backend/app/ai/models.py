@@ -223,3 +223,56 @@ class AIUsageEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True
     )
+
+
+# ---------------------------------------------------------------- T-191 límites de los proveedores
+
+
+class AIProviderLimitMapping(Base):
+    """Capa PROVEEDOR de límites: dónde informa cada compañía sus límites y cómo se clasifican.
+
+    `rules` es JSON configurable (ver app/ai/limits.py). El motor normaliza sin condicionales por
+    proveedor: agregar una IA nueva = cargar su mapping.
+    """
+
+    __tablename__ = "ai_provider_limit_mappings"
+
+    provider: Mapped[str] = mapped_column(String(80), primary_key=True)
+    rules: Mapped[dict] = mapped_column(JSON, default=dict)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AIQuotaLimit(Base):
+    """Capa NORMALIZADA: un límite aprendido de una conexión (igual para cualquier proveedor)."""
+
+    __tablename__ = "ai_quota_limits"
+    __table_args__ = (
+        Index(
+            "ux_ai_quota_limits_key",
+            "connection_id",
+            "model",
+            "dimension",
+            "window",
+            unique=True,
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    connection_id: Mapped[int] = mapped_column(
+        ForeignKey("ai_connections.id", ondelete="CASCADE", name="fk_ai_quota_limits_connection_id")
+    )
+    model: Mapped[str] = mapped_column(String(120))
+    # RENEWABLE (ventana que se renueva sola) | EXHAUSTED (saldo/tope de gasto: vuelve solo con intervención)
+    kind: Mapped[str] = mapped_column(String(20))
+    # REQUESTS | TOKENS | INPUT_TOKENS | OUTPUT_TOKENS
+    dimension: Mapped[str] = mapped_column(String(20))
+    # MINUTE | DAY | MONTH
+    window: Mapped[str] = mapped_column(String(10))
+    limit_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # HEADER | ERROR | ESTIMATED
+    source: Mapped[str] = mapped_column(String(20))
+    tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

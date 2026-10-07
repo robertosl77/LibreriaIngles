@@ -19,8 +19,10 @@ from sqlalchemy.orm import Session
 
 from app.accounts.models import Account
 from app.ai.models import utcnow
+from app.ai.limits import can_run, no_quota_message
 from app.ai.service import AIResult, has_audio_connection
 from app.classes.generation import (
+    generation_chars,
     GenerationFailed,
     ensure_listening,
     ensure_speaking,
@@ -28,6 +30,7 @@ from app.classes.generation import (
     pair_conversation_slots,
     slot_for,
 )
+from app.core.config import settings
 from app.core.deps import StudyContext
 from app.curriculum.service import CEFR_LEVELS, available_levels, get_level
 from app.exams.models import LevelCertificate
@@ -238,6 +241,16 @@ def create_exam(db: Session, study: StudyContext) -> tuple[ClassSession, AIResul
         raise ExamError("Todavía no cumplís los requisitos para rendir el examen.")
 
     level = status["level"]
+    slots = exam_slots(level, allow_speaking=has_audio_connection(db, study.account))
+    # T-191: el examen necesita sus 17 ejercicios. Si el cupo de IA no alcanza, se avisa ANTES de
+    # crearlo (no queda un examen a medias en pantalla).
+    if settings.ai_quota_control:
+        decision = can_run(
+            db, study.account, "generate_class",
+            chars=generation_chars(level, slots, "exam"), items=len(slots),
+        )
+        if not decision.ok:
+            raise ExamError(no_quota_message(decision, "generar el examen"))
     session = ClassSession(
         study_profile_id=study.profile.id,
         account_id=study.account.id,
@@ -250,9 +263,7 @@ def create_exam(db: Session, study: StudyContext) -> tuple[ClassSession, AIResul
         generation_request={
             "level": level,
             "purpose": "exam",
-            "slots": exam_slots(
-                level, allow_speaking=has_audio_connection(db, study.account)
-            ),
+            "slots": slots,
         },
     )
     db.add(session)

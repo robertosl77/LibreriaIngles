@@ -29,7 +29,7 @@ from app.progress.service import skill_name
 
 router = APIRouter(prefix="/classes", tags=["classes"])
 
-SWITCH_NOTICE = "Se cambió automáticamente el proveedor de IA."
+SWITCH_NOTICE = "Tu clase se preparó con una conexión alternativa."
 MAX_AUDIO_BYTES = 6 * 1024 * 1024
 MAX_AUDIO_DURATION_MS = 65_000
 
@@ -205,6 +205,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
         "examResult": session.exam_result,
         # Balanceo por habilidad (T-034): qué refuerza esta clase y por qué.
         "focus": (session.generation_request or {}).get("focus") or [],
+        "reducedFrom": (session.generation_request or {}).get("reducedFrom"),
         "certificateCode": _certificate_code(db, session),
         "notice": notice,
     }

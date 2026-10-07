@@ -490,7 +490,21 @@ export interface AiConnection {
   perAccountDailyLimit: number | null;
   usage24h: number | null;
   supportsAudioInput: boolean;
+  /** T-191: límites del proveedor aprendidos solos (del rechazo o de los headers). */
+  learnedLimits?: LearnedLimit[];
   test?: { ok: boolean; error: string | null };
+}
+
+export interface LearnedLimit {
+  kind: 'RENEWABLE' | 'EXHAUSTED';
+  dimension: 'REQUESTS' | 'TOKENS' | 'INPUT_TOKENS' | 'OUTPUT_TOKENS';
+  window: 'MINUTE' | 'DAY' | 'MONTH';
+  limit: number | null;
+  used: number | null;
+  resetAt: string | null;
+  source: 'HEADER' | 'ERROR' | 'ESTIMATED';
+  tier: string | null;
+  observedAt: string | null;
 }
 
 export type ClassStatus =
@@ -615,6 +629,8 @@ export interface LessonResponse {
 }
 
 export interface ClassDetail {
+  /** T-191: la clase se generó con menos ejercicios por falta de cupo de IA. */
+  reducedFrom?: number | null;
   id: number;
   kind: SessionKind;
   examResult: ExamResult | null;

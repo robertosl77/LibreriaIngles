@@ -682,6 +682,13 @@ def create_class(
         focus=focus,
     )
     focus = focus + weak_topics_in(slots, progress)
+    # T-191: si el cupo aprendido de la IA no alcanza, la clase sale con menos ejercicios,
+    # conservando los que refuerzan lo que más le cuesta al alumno.
+    requested = len(slots)
+    slots = fit_slots_to_quota(db, study.account, curriculum.level, slots, focus)
+    generation_request = {"level": curriculum.level, "slots": slots, "focus": focus}
+    if len(slots) < requested:
+        generation_request["reducedFrom"] = requested
     session = ClassSession(
         study_profile_id=study.profile.id,
         account_id=study.account.id,
@@ -689,12 +696,66 @@ def create_class(
         membership_id=study.membership_id,
         status=ClassSessionStatus.GENERATING,
         target_level=curriculum.level,
-        generation_request={"level": curriculum.level, "slots": slots, "focus": focus},
+        generation_request=generation_request,
     )
     db.add(session)
     db.commit()  # persistir la solicitud antes de llamar a la IA
     result = generate_content(db, study, session)
     return session, result
+
+
+# ---------------------------------------------------------------- T-191 armar según el cupo
+
+
+def generation_chars(level: str, slots: list[dict], purpose: str = "class") -> int:
+    """Tamaño del pedido de generación tal como viajaría a la IA (para estimar tokens)."""
+    public = [_public_slot(s) for s in slots]
+    return len(GENERATION_SYSTEM) + len(generation_user_prompt(level, public, purpose=purpose))
+
+
+def _is_focus(slot: dict, focus: list[dict]) -> bool:
+    keys = {f.get("key") for f in focus or []}
+    area = slot.get("skillKey", "").split(".")[1:2]
+    focus_areas = {ABILITY_AREA[k] for k in keys if k in ABILITY_AREA}
+    if slot.get("skillKey") in keys or (area and area[0] in focus_areas):
+        return True
+    return slot.get("response") == "SPEAK" and bool(keys & SPEECH_ABILITIES)
+
+
+def _drop_one(slots: list[dict], focus: list[dict], minimum: int) -> list[dict] | None:
+    """Saca el último ejercicio que no es foco (una conversación sale con sus dos turnos)."""
+    for index in range(len(slots) - 1, -1, -1):
+        slot = slots[index]
+        if _is_focus(slot, focus):
+            continue
+        group = slot.get("conversationGroup")
+        drop = {i for i, s in enumerate(slots) if group and s.get("conversationGroup") == group} or {index}
+        if len(slots) - len(drop) < minimum:
+            continue
+        return [s for i, s in enumerate(slots) if i not in drop]
+    return None
+
+
+def fit_slots_to_quota(db: Session, account, level: str, slots: list[dict], focus: list[dict]) -> list[dict]:
+    """Reduce la clase hasta que el pedido entre en el cupo de TOKENS aprendido.
+    Si lo que aprieta son los PEDIDOS (por minuto/día), reducir no sirve: se deja igual y el
+    router informa hasta cuándo no hay cupo."""
+    if not settings.ai_quota_control:
+        return slots
+    from app.ai.limits import can_run
+
+    def decide(current):
+        return can_run(db, account, "generate_class", chars=generation_chars(level, current), items=len(current))
+
+    current = list(slots)
+    decision = decide(current)
+    while not decision.ok and "TOKENS" in (decision.blocked_by or ""):
+        smaller = _drop_one(current, focus, settings.ai_class_min_exercises)
+        if smaller is None:
+            break
+        current = smaller
+        decision = decide(current)
+    return current if decision.ok else slots
 
 
 def _generation_diagnostic(slots: list[dict]) -> dict:
@@ -715,6 +776,7 @@ def _generation_diagnostic(slots: list[dict]) -> dict:
             conversation_slots += 1
     return {
         "slotCount": len(slots),
+        "itemCount": len(slots),
         "conversationSlots": conversation_slots,
         "typeCounts": type_counts,
         "presentationCounts": presentation_counts,

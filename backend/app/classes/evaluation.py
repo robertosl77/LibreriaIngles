@@ -878,6 +878,14 @@ def evaluate_batch_with_ai(
     return evaluations
 
 
+def batch_item_chars(db: Session, items: list[tuple[Exercise, str]]) -> int:
+    """Tamaño promedio de un ítem del lote tal como viaja a la IA (para estimar tokens, T-191)."""
+    if not items:
+        return 0
+    sizes = [len(evaluation_user_prompt(_ai_payload(db, exercise, answer))) for exercise, answer in items]
+    return sum(sizes) // len(sizes)
+
+
 def _batch_diagnostic(payloads: list[dict]) -> dict:
     types: dict[str, int] = {}
     for payload in payloads:
