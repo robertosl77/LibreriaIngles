@@ -26,6 +26,18 @@ os.environ["VERIFICATION_MAX_SENDS_PER_DESTINATION_PER_HOUR"] = "5"
 os.environ["EMAIL_DELIVERY_PROVIDER"] = "dev"
 
 
+@pytest.fixture(autouse=True)
+def isolate_organization_registry(monkeypatch, tmp_path):
+    """Evita que la suite use por accidente el padrón RNS local del desarrollador."""
+    from app.organizations import verification
+
+    monkeypatch.setattr(
+        verification.settings,
+        "organization_registry_path",
+        str(tmp_path / "missing-rns.db"),
+    )
+
+
 @pytest.fixture()
 def client():
     from fastapi.testclient import TestClient
