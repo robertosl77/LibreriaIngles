@@ -92,7 +92,7 @@ def _ensure_public_host(url: str) -> None:
 def check_website(value: str) -> WebsiteCheckResult:
     """Valida sintaxis y resolución DNS sin hacer requests al host arbitrario.
 
-    Evitamos convertir este endpoint público en un proxy/SSRf. La disponibilidad HTTP real
+    Evitamos convertir este endpoint público en un proxy/SSRF. La disponibilidad HTTP real
     puede variar aunque el dominio exista.
     """
     try:
@@ -104,7 +104,7 @@ def check_website(value: str) -> WebsiteCheckResult:
     return WebsiteCheckResult(
         "VERIFIED",
         normalized,
-        "✓ Dominio válido y localizado en Internet.",
+        "Dominio válido y localizado en Internet.",
     )
 
 
