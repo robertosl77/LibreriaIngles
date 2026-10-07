@@ -47,18 +47,33 @@ def normalize_tax_id(value: str) -> str:
     return "".join(ch for ch in value if ch.isdigit())
 
 
-def is_valid_argentina_cuit(value: str) -> bool:
-    digits = normalize_tax_id(value)
-    if len(digits) != 11:
-        return False
+def argentina_cuit_error(value: str) -> str | None:
+    raw = value.strip()
+    if not raw:
+        return "Ingresá un CUIT."
+
+    invalid_chars = [ch for ch in raw if not (ch.isdigit() or ch in {"-", " ", "."})]
+    if invalid_chars:
+        return "El CUIT sólo puede contener números, espacios, puntos o guiones."
+
+    digits = normalize_tax_id(raw)
+    if len(digits) < 11:
+        return f"El CUIT está incompleto: tiene {len(digits)} dígitos y debe tener 11."
+    if len(digits) > 11:
+        return f"El CUIT tiene {len(digits)} dígitos y debe tener exactamente 11."
+
     weights = (5, 4, 3, 2, 7, 6, 5, 4, 3, 2)
     total = sum(int(digit) * weight for digit, weight in zip(digits[:10], weights, strict=True))
     check = 11 - (total % 11)
     if check == 11:
         check = 0
-    if check == 10:
-        return False
-    return check == int(digits[-1])
+    if check == 10 or check != int(digits[-1]):
+        return "El dígito verificador del CUIT no es válido. Revisá especialmente el último dígito."
+    return None
+
+
+def is_valid_argentina_cuit(value: str) -> bool:
+    return argentina_cuit_error(value) is None
 
 
 class OfficialRnsVerificationProvider:
@@ -113,9 +128,7 @@ class OfficialRnsVerificationProvider:
             tax_id_type=tax_id_type,
             tax_id=normalized,
             source="RNS_OPEN_DATA",
-            message=(
-                "Empresa encontrada en el padrón oficial del Registro Nacional de Sociedades."
-            ),
+            message="Empresa encontrada en el padrón oficial del Registro Nacional de Sociedades.",
             checked_at=utcnow(),
             legal_name=company.legal_name,
             legal_entity_type=company.legal_entity_type,
@@ -130,10 +143,7 @@ class OfficialRnsVerificationProvider:
 
 
 class DevelopmentArgentinaVerificationProvider:
-    """Simulación explícita para probar P01 sin credenciales de ARCA/RNS.
-
-    Nunca debe habilitarse en production. No afirma que los datos sean reales.
-    """
+    """Simulación explícita para probar P01 sin credenciales de ARCA/RNS."""
 
     def lookup(self, *, country: str, tax_id_type: str, tax_id: str) -> OrganizationVerificationResult:
         normalized = normalize_tax_id(tax_id)
@@ -196,7 +206,7 @@ def provider_for(country: str, tax_id_type: str) -> OrganizationVerificationProv
     country = country.upper().strip()
     tax_id_type = tax_id_type.upper().strip()
     if country != "AR" or tax_id_type != "CUIT":
-        raise ValueError("P01 solo habilita Argentina + CUIT en la interfaz inicial.")
+        raise ValueError("Por ahora el alta admite Argentina con CUIT.")
     if registry_available():
         return OfficialRnsVerificationProvider()
     if settings.organization_verification_mock_allowed:
@@ -209,16 +219,18 @@ def verify_organization(*, country: str, tax_id_type: str, tax_id: str) -> Organ
     tax_id_type = tax_id_type.upper().strip()
     normalized = normalize_tax_id(tax_id)
 
-    if country == "AR" and tax_id_type == "CUIT" and not is_valid_argentina_cuit(normalized):
-        return OrganizationVerificationResult(
-            state=VerificationState.REVIEW_REQUIRED,
-            country=country,
-            tax_id_type=tax_id_type,
-            tax_id=normalized,
-            source="LOCAL_VALIDATION",
-            message="El CUIT no supera la validación de formato y dígito verificador.",
-            checked_at=utcnow(),
-        )
+    if country == "AR" and tax_id_type == "CUIT":
+        error = argentina_cuit_error(tax_id)
+        if error is not None:
+            return OrganizationVerificationResult(
+                state=VerificationState.REVIEW_REQUIRED,
+                country=country,
+                tax_id_type=tax_id_type,
+                tax_id=normalized,
+                source="LOCAL_VALIDATION",
+                message=error,
+                checked_at=utcnow(),
+            )
 
     try:
         provider = provider_for(country, tax_id_type)
