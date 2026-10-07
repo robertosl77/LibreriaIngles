@@ -140,7 +140,7 @@ def test_create_rejects_invalid_cuit(client) -> None:
         json=_payload(taxId="30-12345678-2"),
     )
     assert response.status_code == 422
-    assert "dígito verificador" in response.json()["detail"]
+    assert "CUIT no es válido" in response.json()["detail"]
 
     with SessionLocal() as db:
         assert db.scalar(select(OrganizationOnboarding.id)) is None
