@@ -56,3 +56,22 @@ def login(client, email: str = "roberto@example.com") -> dict:
     response = client.post("/api/v1/auth/dev-login", json={"email": email, "name": "Roberto"})
     assert response.status_code == 200, response.text
     return {"Authorization": f"Bearer {response.json()['accessToken']}"}
+
+
+def correct_answer(exercise) -> str:
+    """Respuesta correcta de cualquier tipo de ejercicio, armada desde su answer key (T-183)."""
+    import json
+
+    key = exercise.answer_key or {}
+    kind = exercise.exercise_type
+    if kind == "match_pairs":
+        return json.dumps(key["pairs"])
+    if kind == "listen_form":
+        return json.dumps({label: answers[0] for label, answers in key["fields"].items()})
+    if kind == "gap_text":
+        return json.dumps([gap[0] for gap in key["gaps"]])
+    if kind == "short_writing":
+        return "My name is Ana. I live in Rosario and I work in an office."
+    if kind == "conversation":
+        return "Hi! I'm Ana. I'm fine, thanks."
+    return key["acceptedAnswers"][0]

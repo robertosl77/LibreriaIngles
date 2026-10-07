@@ -5,17 +5,13 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
+from app.classes.types import ALL_TYPES
+
 CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 DATA_DIR = Path(__file__).parent / "data"
 
-EXERCISE_TYPES = {
-    "fill_blank",
-    "multiple_choice",
-    "reading_multiple_choice",
-    "rewrite",
-    "short_writing",
-    "conversation",
-}
+# T-183: el catálogo de tipos vive en app.classes.types.
+EXERCISE_TYPES = ALL_TYPES
 
 # Modalidades de presentación (T-025): cualquier tipo puede leerse o escucharse.
 PRESENTATIONS = ("READ", "LISTEN")

@@ -75,10 +75,14 @@ class ResponseMode(str, Enum):
     SPEAK = "SPEAK"
 
 
-SELECT_TYPES = {"multiple_choice", "reading_multiple_choice"}
+# T-183: los tipos de elección comparten la respuesta SELECT; read_aloud siempre se habla.
+SELECT_TYPES = {"multiple_choice", "reading_multiple_choice", "dialogue_choice", "minimal_pairs", "word_stress"}
+SPEAK_ONLY_TYPES = {"read_aloud"}
 
 
 def default_response_mode(exercise_type: str) -> "ResponseMode":
+    if exercise_type in SPEAK_ONLY_TYPES:
+        return ResponseMode.SPEAK
     return ResponseMode.SELECT if exercise_type in SELECT_TYPES else ResponseMode.WRITE
 
 

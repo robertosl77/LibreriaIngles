@@ -1369,6 +1369,47 @@
         }
       ],
       "tip": "Si la otra persona está cerrando la charla, acompañá ese cierre."
+    },
+    "a1.listening.sounds.minimal_pairs": {
+      "title": "Palabras que suenan parecido",
+      "explanation": "En inglés hay pares de palabras que se diferencian por un solo sonido. Para un hispanohablante suenan iguales, pero cambian el significado.",
+      "rules": [
+        "ship (i corta) / sheep (i larga, como 'ii')",
+        "live (i corta) / leave (i larga)",
+        "very (v: dientes sobre el labio) / berry (b: labios juntos)",
+        "hat (a abierta) / hut (sonido corto, parecido a una 'a' cerrada)",
+        "think (th: lengua entre los dientes) / sink (s)"
+      ],
+      "examples": [
+        {"en": "I live in Buenos Aires.", "es": "Vivo en Buenos Aires."},
+        {"en": "I leave at eight.", "es": "Salgo a las ocho."},
+        {"en": "The ship is big.", "es": "El barco es grande."},
+        {"en": "The sheep is white.", "es": "La oveja es blanca."}
+      ],
+      "commonMistakes": [
+        {"wrong": "I leave in Buenos Aires.", "right": "I live in Buenos Aires.", "why": "'leave' (salir) tiene la i larga; 'live' (vivir) la tiene corta."},
+        {"wrong": "berry good", "right": "very good", "why": "La v inglesa se hace con los dientes sobre el labio de abajo."}
+      ],
+      "tip": "Exagerá la diferencia al practicar: estirá la 'ii' de sheep y cortá la 'i' de ship."
+    },
+    "a1.listening.sounds.word_stress": {
+      "title": "La sílaba fuerte",
+      "explanation": "En las palabras de más de una sílaba, una se dice más fuerte y más larga. Si se cambia la sílaba fuerte, la palabra cuesta entenderse.",
+      "rules": [
+        "La sílaba fuerte se escribe aquí en MAYÚSCULAS: ba-NA-na.",
+        "Muchos sustantivos de dos sílabas llevan la fuerza en la primera: TEA-cher, MO-ther, WA-ter.",
+        "Algunas palabras que parecen del español cambian: ho-TEL, ba-NA-na, CHO-co-late."
+      ],
+      "examples": [
+        {"en": "ba-NA-na", "es": "banana"},
+        {"en": "ho-TEL", "es": "hotel"},
+        {"en": "TEA-cher", "es": "docente"},
+        {"en": "CHO-co-late", "es": "chocolate"}
+      ],
+      "commonMistakes": [
+        {"wrong": "cho-co-LA-te", "right": "CHO-co-late", "why": "En inglés la fuerza va al principio y la última sílaba casi no se oye."}
+      ],
+      "tip": "Golpeá la mesa en la sílaba fuerte mientras decís la palabra."
     }
   }
 }

@@ -36,7 +36,25 @@ const TYPE_LABELS: Record<Exercise['type'], string> = {
   reading_multiple_choice: 'Lectura',
   rewrite: 'Reescribir',
   short_writing: 'Escritura',
-  conversation: 'Conversación'
+  conversation: 'Conversación',
+  dictation: 'Dictado',
+  word_order: 'Ordenar palabras',
+  dialogue_choice: 'Elegir la respuesta',
+  read_aloud: 'Leer en voz alta',
+  minimal_pairs: 'Sonidos parecidos',
+  match_pairs: 'Emparejar',
+  listen_form: 'Formulario escuchado',
+  gap_text: 'Texto con huecos',
+  error_correction: 'Corregir el error',
+  word_stress: 'Sílaba fuerte'
+};
+
+/** T-183: tipos cuya respuesta tiene varias partes y se guarda como JSON. */
+const STRUCTURED_TYPES = new Set<Exercise['type']>(['match_pairs', 'listen_form', 'gap_text']);
+const INPUT_PLACEHOLDERS: Partial<Record<Exercise['type'], string>> = {
+  rewrite: 'Escribí la oración completa',
+  dictation: 'Escribí la oración que escuchaste',
+  error_correction: 'Escribí la oración corregida'
 };
 
 /** En el examen cada audio se puede escuchar dos veces (en la práctica, sin límite). */
@@ -335,7 +353,7 @@ const RESULT_LABELS: Record<string, string> = {
                   </section>
                 </div>
               } @else {
-                @if (exercise.passage) {
+                @if (exercise.passage && (exercise.type !== 'gap_text' || !editable())) {
                   <blockquote class="passage">{{ exercise.passage }}</blockquote>
                 }
                 @if (exercise.presentation === 'LISTEN' && exercise.stimulus; as stimulus) {
@@ -350,7 +368,7 @@ const RESULT_LABELS: Record<string, string> = {
                     (played)="recordListen(exercise, $event.slow)"
                   />
                 }
-                <p class="question">{{ exercise.question }}</p>
+                <p class="question" [class.read-aloud-text]="exercise.type === 'read_aloud'">{{ exercise.question }}</p>
               }
 
               @if (exercise.type !== 'conversation' && (editable() || c.status === 'COMPLETED') && !busy() && exercise.hasLesson && openPronunciationPractice() !== exercise.id) {
@@ -413,6 +431,107 @@ const RESULT_LABELS: Record<string, string> = {
                       @case ('reading_multiple_choice') {
                         <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
                       }
+                      @case ('dialogue_choice') {
+                        <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
+                      }
+                      @case ('minimal_pairs') {
+                        <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
+                      }
+                      @case ('word_stress') {
+                        <ng-container *ngTemplateOutlet="options; context: { $implicit: exercise }" />
+                      }
+                      @case ('word_order') {
+                        <div class="tiles-answer" aria-label="Tu oración">
+                          @for (index of picked()[exercise.id] ?? []; track $index; let pos = $index) {
+                            <button class="tile picked" type="button" [disabled]="formLocked()" (click)="unpickTile(exercise, pos)">
+                              {{ exercise.tiles?.[index] }}
+                            </button>
+                          } @empty {
+                            <span class="muted small">Tocá las palabras en orden para armar la oración.</span>
+                          }
+                        </div>
+                        <div class="tiles-bank" aria-label="Palabras disponibles">
+                          @for (tile of exercise.tiles ?? []; track $index; let index = $index) {
+                            <button
+                              class="tile"
+                              type="button"
+                              [disabled]="formLocked() || isPicked(exercise.id, index)"
+                              [class.used]="isPicked(exercise.id, index)"
+                              (click)="pickTile(exercise, index)"
+                            >{{ tile }}</button>
+                          }
+                        </div>
+                      }
+                      @case ('match_pairs') {
+                        <div class="pairs-grid">
+                          @for (left of exercise.pairs?.left ?? []; track left) {
+                            <label class="pair-row">
+                              <span class="pair-left" lang="en">{{ left }}</span>
+                              <select
+                                class="input"
+                                [ngModel]="structured(exercise)[left] ?? ''"
+                                (ngModelChange)="setPart(exercise, left, $event)"
+                                [disabled]="formLocked()"
+                              >
+                                <option value="">Elegí…</option>
+                                @for (right of exercise.pairs?.right ?? []; track right) {
+                                  <option [value]="right">{{ right }}</option>
+                                }
+                              </select>
+                            </label>
+                          }
+                        </div>
+                      }
+                      @case ('listen_form') {
+                        <div class="form-fields">
+                          @for (field of exercise.fields ?? []; track field) {
+                            <label class="form-field">
+                              <span>{{ field }}</span>
+                              <input
+                                class="input"
+                                type="text"
+                                autocomplete="off"
+                                spellcheck="false"
+                                [ngModel]="structured(exercise)[field] ?? ''"
+                                (ngModelChange)="setPart(exercise, field, $event, false)"
+                                [disabled]="formLocked()"
+                              />
+                            </label>
+                          }
+                        </div>
+                      }
+                      @case ('gap_text') {
+                        <p class="gap-text" lang="en">
+                          @for (segment of gapSegments(exercise); track $index; let gap = $index) {
+                            <span>{{ segment }}</span>
+                            @if (gap < gapSegments(exercise).length - 1) {
+                              @if (exercise.options?.length) {
+                                <select
+                                  class="input gap-input"
+                                  [attr.aria-label]="'Hueco ' + (gap + 1)"
+                                  [ngModel]="gapValue(exercise, gap)"
+                                  (ngModelChange)="setGap(exercise, gap, $event)"
+                                  [disabled]="formLocked()"
+                                >
+                                  <option value="">({{ gap + 1 }})</option>
+                                  @for (word of exercise.options; track word) {
+                                    <option [value]="word">{{ word }}</option>
+                                  }
+                                </select>
+                              } @else {
+                                <input
+                                  class="input gap-input"
+                                  type="text"
+                                  [attr.aria-label]="'Hueco ' + (gap + 1)"
+                                  [ngModel]="gapValue(exercise, gap)"
+                                  (ngModelChange)="setGap(exercise, gap, $event, false)"
+                                  [disabled]="formLocked()"
+                                />
+                              }
+                            }
+                          }
+                        </p>
+                      }
                       @case ('short_writing') {
                         <textarea
                           class="input"
@@ -433,7 +552,7 @@ const RESULT_LABELS: Record<string, string> = {
                           [ngModel]="answers()[exercise.id]"
                           (ngModelChange)="onAnswer(exercise.id, $event)"
                           [disabled]="formLocked()"
-                          [placeholder]="exercise.type === 'rewrite' ? 'Escribí la oración completa' : 'Palabra(s) que completan el espacio'"
+                          [placeholder]="placeholders[exercise.type] ?? 'Palabra(s) que completan el espacio'"
                         />
                       }
                     }
@@ -441,7 +560,7 @@ const RESULT_LABELS: Record<string, string> = {
                 } @else {
                   <p class="your-answer">
                     <span class="muted small">Tu respuesta:</span>
-                    <strong>{{ exercise.answer || '(sin respuesta)' }}</strong>
+                    <strong>{{ readableAnswer(exercise) || '(sin respuesta)' }}</strong>
                   </p>
                 }
               }
@@ -591,6 +710,22 @@ const RESULT_LABELS: Record<string, string> = {
     .option { display: flex; gap: 0.6rem; align-items: center; padding: 0.6rem 0.8rem; border: 1px solid var(--border); border-radius: 0.6rem; cursor: pointer; }
     .option.checked { border-color: #111; background: var(--bg); }
     .transcript em { font-style: normal; }
+    .read-aloud-text { font-size: 1.3rem; font-weight: 600; padding: 0.6rem 0.8rem; background: var(--bg); border-radius: 0.6rem; }
+    .tiles-answer, .tiles-bank { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; }
+    .tiles-answer { min-height: 2.8rem; padding: 0.5rem; border: 1px dashed var(--border); border-radius: 0.6rem; }
+    .tile {
+      font: inherit; padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: 0.5rem;
+      background: var(--surface); cursor: pointer;
+    }
+    .tile:hover:not(:disabled) { border-color: #111; }
+    .tile.picked { background: #f3f6ff; border-color: #c9d6ff; }
+    .tile.used { opacity: 0.35; }
+    .tile:disabled { cursor: default; }
+    .pairs-grid, .form-fields { display: flex; flex-direction: column; gap: 0.45rem; }
+    .pair-row, .form-field { display: grid; grid-template-columns: minmax(6rem, 12rem) minmax(0, 1fr); gap: 0.6rem; align-items: center; }
+    .pair-left { font-weight: 600; }
+    .gap-text { margin: 0; line-height: 2.4; font-size: 1.05rem; }
+    .gap-input { display: inline-block; width: auto; min-width: 6rem; margin: 0 0.25rem; padding: 0.2rem 0.4rem; }
     .conversation-card {
       border-color: #d9d5cb;
       background: linear-gradient(180deg, #fffefb, var(--surface));
@@ -741,6 +876,9 @@ export class ClassComponent implements OnDestroy {
   readonly typeLabels = TYPE_LABELS;
   readonly examMaxPlays = EXAM_MAX_PLAYS;
   readonly resultLabels = RESULT_LABELS;
+  readonly placeholders = INPUT_PLACEHOLDERS;
+  /** word_order: índices de las fichas elegidas, en orden, por ejercicio. */
+  readonly picked = signal<Record<number, number[]>>({});
   readonly statusChip = statusChip;
   readonly scoreChip = scoreChip;
 
@@ -776,7 +914,7 @@ export class ClassComponent implements OnDestroy {
     return c.exercises.filter((exercise) =>
       exercise.response === 'SPEAK'
         ? confirmed.has(exercise.id)
-        : Boolean((answers[exercise.id] ?? '').trim())
+        : this.isAnswered(exercise, answers[exercise.id] ?? '')
     ).length;
   });
 
@@ -850,6 +988,7 @@ export class ClassComponent implements OnDestroy {
       answers[exercise.id] = exercise.answer ?? '';
     }
     this.answers.set(answers);
+    this.picked.set(this.restorePicked(detail));
     this.confirmedSpeaking.set(new Set());
     this.pendingSpeaking.set(new Set());
     if (detail.status === 'READY' || detail.status === 'IN_PROGRESS') {
@@ -867,6 +1006,118 @@ export class ClassComponent implements OnDestroy {
 
   private markSave(exerciseId: number, state: SaveState): void {
     this.saveState.update((current) => ({ ...current, [exerciseId]: state }));
+  }
+
+  // ---------------------------------------------------------------- T-183: tipos nuevos
+
+  /** Una respuesta de varias partes cuenta como respondida cuando están todas. */
+  isAnswered(exercise: Exercise, answer: string): boolean {
+    if (!STRUCTURED_TYPES.has(exercise.type)) return Boolean(answer.trim());
+    if (exercise.type === 'gap_text') {
+      const gaps = this.gapSegments(exercise).length - 1;
+      const values = this.parseList(answer);
+      return gaps > 0 && values.length >= gaps && values.slice(0, gaps).every((v) => v.trim());
+    }
+    const keys = exercise.type === 'match_pairs' ? (exercise.pairs?.left ?? []) : (exercise.fields ?? []);
+    const values = this.parseObject(answer);
+    return keys.length > 0 && keys.every((k) => (values[k] ?? '').trim());
+  }
+
+  structured(exercise: Exercise): Record<string, string> {
+    return this.parseObject(this.answers()[exercise.id] ?? '');
+  }
+
+  setPart(exercise: Exercise, key: string, value: string, immediate = true): void {
+    const next = { ...this.structured(exercise), [key]: value };
+    this.onAnswer(exercise.id, JSON.stringify(next), immediate);
+  }
+
+  gapSegments(exercise: Exercise): string[] {
+    return (exercise.passage ?? '').split('___');
+  }
+
+  gapValue(exercise: Exercise, index: number): string {
+    return this.parseList(this.answers()[exercise.id] ?? '')[index] ?? '';
+  }
+
+  setGap(exercise: Exercise, index: number, value: string, immediate = true): void {
+    const gaps = this.gapSegments(exercise).length - 1;
+    const values = this.parseList(this.answers()[exercise.id] ?? '');
+    const next = Array.from({ length: gaps }, (_, i) => (i === index ? value : (values[i] ?? '')));
+    this.onAnswer(exercise.id, JSON.stringify(next), immediate);
+  }
+
+  isPicked(exerciseId: number, index: number): boolean {
+    return (this.picked()[exerciseId] ?? []).includes(index);
+  }
+
+  pickTile(exercise: Exercise, index: number): void {
+    if (this.formLocked() || this.isPicked(exercise.id, index)) return;
+    this.updatePicked(exercise, [...(this.picked()[exercise.id] ?? []), index]);
+  }
+
+  unpickTile(exercise: Exercise, position: number): void {
+    if (this.formLocked()) return;
+    const current = [...(this.picked()[exercise.id] ?? [])];
+    current.splice(position, 1);
+    this.updatePicked(exercise, current);
+  }
+
+  private updatePicked(exercise: Exercise, indexes: number[]): void {
+    this.picked.update((all) => ({ ...all, [exercise.id]: indexes }));
+    const tiles = exercise.tiles ?? [];
+    // Respuesta completa recién cuando se usaron todas las fichas (antes no cuenta como respondida).
+    const sentence = indexes.length === tiles.length ? indexes.map((i) => tiles[i]).join(' ') : '';
+    this.onAnswer(exercise.id, sentence, true);
+  }
+
+  /** Reconstruye el orden de fichas desde la respuesta guardada (borrador o intento). */
+  private restorePicked(detail: ClassDetail): Record<number, number[]> {
+    const result: Record<number, number[]> = {};
+    for (const exercise of detail.exercises) {
+      if (exercise.type !== 'word_order' || !exercise.tiles || !exercise.answer) continue;
+      const used = new Set<number>();
+      const indexes: number[] = [];
+      for (const word of exercise.answer.split(/\s+/)) {
+        const index = exercise.tiles.findIndex((tile, i) => !used.has(i) && tile.toLowerCase() === word.toLowerCase());
+        if (index < 0) break;
+        used.add(index);
+        indexes.push(index);
+      }
+      result[exercise.id] = indexes;
+    }
+    return result;
+  }
+
+  /** Respuesta legible (las de varias partes se guardan como JSON). */
+  readableAnswer(exercise: Exercise): string {
+    const answer = exercise.answer ?? '';
+    if (!STRUCTURED_TYPES.has(exercise.type)) return answer;
+    if (exercise.type === 'gap_text') {
+      return this.parseList(answer).map((v, i) => `${i + 1}. ${v || '—'}`).join(' · ');
+    }
+    const joiner = exercise.type === 'match_pairs' ? ' = ' : ': ';
+    return Object.entries(this.parseObject(answer))
+      .map(([k, v]) => `${k}${joiner}${v || '—'}`)
+      .join(' · ');
+  }
+
+  private parseObject(text: string): Record<string, string> {
+    try {
+      const value = JSON.parse(text);
+      return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private parseList(text: string): string[] {
+    try {
+      const value = JSON.parse(text);
+      return Array.isArray(value) ? value.map((v) => String(v ?? '')) : [];
+    } catch {
+      return [];
+    }
   }
 
   resultClass(exercise: Exercise): string {
@@ -1098,7 +1349,7 @@ export class ClassComponent implements OnDestroy {
     const missing = c.exercises.find((exercise) =>
       exercise.response === 'SPEAK'
         ? !confirmed.has(exercise.id)
-        : !(answers[exercise.id] ?? '').trim()
+        : !this.isAnswered(exercise, answers[exercise.id] ?? '')
     );
     if (missing) {
       document.getElementById('ex-' + missing.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });

@@ -11,9 +11,13 @@ from app.classes.evaluation import (
     ai_score,
     apply_evaluation,
     evaluate,
+    evaluate_batch_with_ai,
     evaluate_with_ai,
+    evaluate_without_ai,
 )
 from app.classes.normalize import normalize_answer
+from app.classes.types import NO_APPEAL_TYPES
+from app.core.config import settings
 from app.core.deps import StudyContext
 from app.curriculum.lessons import lesson_payload
 from app.learning.models import (
@@ -244,14 +248,8 @@ def evaluate_pending(db: Session, account: Account, session: ClassSession) -> bo
         if a.attempt_number == session.current_attempt and a.score is None
     ]
     touched_skills: set[str] = set()
-    for attempt in pending:
-        exercise = db.get(Exercise, attempt.exercise_id)
-        # Si hace falta IA y no hay ninguna, evaluate devuelve None y el intento
-        # queda pendiente; los que se resuelven por reglas se evalúan igual.
-        spoken = bool(attempt.response_mode and attempt.response_mode.value == "SPEAK")
-        evaluation = evaluate(db, account, exercise, attempt.raw_answer, spoken=spoken)
-        if evaluation is None:
-            continue
+
+    def _apply(attempt: Attempt, exercise: Exercise, evaluation) -> None:
         apply_evaluation(attempt, evaluation)
         # El examen es independiente: no alimenta el progreso de las clases.
         if session.kind != SessionKind.EXAM:
@@ -259,6 +257,42 @@ def evaluate_pending(db: Session, account: Account, session: ClassSession) -> bo
                 touched_skills.add(exercise.skill_key)
             touched_skills.update(secondary_skill_keys(attempt.evaluation_result))
         db.commit()
+
+    # 1) Reglas, errores comunes, ortografía y caché: sin IA.
+    needs_ai: list[tuple[Attempt, Exercise, bool]] = []
+    for attempt in pending:
+        exercise = db.get(Exercise, attempt.exercise_id)
+        spoken = bool(attempt.response_mode and attempt.response_mode.value == "SPEAK")
+        evaluation = evaluate_without_ai(db, exercise, attempt.raw_answer, spoken=spoken)
+        if evaluation is None:
+            needs_ai.append((attempt, exercise, spoken))
+            continue
+        _apply(attempt, exercise, evaluation)
+
+    # 2) T-171: las que necesitan IA, en UNA llamada si son 2 o más.
+    #    T-181: en tandas de hasta AI_BATCH_MAX_ITEMS (el examen puede traer muchas).
+    batched = {}
+    if settings.ai_batch_evaluation and len(needs_ai) >= 2:
+        size = max(2, settings.ai_batch_max_items)
+        for start in range(0, len(needs_ai), size):
+            chunk = needs_ai[start:start + size]
+            if len(chunk) < 2:
+                break  # una sola: va por la corrección individual
+            batched.update(
+                evaluate_batch_with_ai(
+                    db, account, session, [(exercise, attempt.raw_answer, spoken) for attempt, exercise, spoken in chunk]
+                )
+            )
+
+    # 3) Lo que el lote no resolvió (o sin lote): una por una, como antes. Si no hay IA,
+    #    evaluate devuelve None y el intento queda pendiente.
+    for attempt, exercise, spoken in needs_ai:
+        evaluation = batched.get(exercise.id) or evaluate(
+            db, account, exercise, attempt.raw_answer, spoken=spoken
+        )
+        if evaluation is None:
+            continue
+        _apply(attempt, exercise, evaluation)
 
     for skill_key in touched_skills:
         recompute_skill(db, study_profile_id=session.study_profile_id, skill_key=skill_key)
@@ -327,6 +361,8 @@ def appeal(db: Session, study: StudyContext, session: ClassSession, exercise_id:
         raise ClassStateError("Ese intento no se puede apelar.")
     if attempt.appealed_at is not None:
         raise ClassStateError("Ese intento ya fue apelado.")
+    if exercise.exercise_type in NO_APPEAL_TYPES:
+        raise ClassStateError("Este tipo de ejercicio se corrige de forma exacta y no se apela.")
     if not attempt.normalized_answer:
         raise ClassStateError("No hay respuesta para revisar.")
 

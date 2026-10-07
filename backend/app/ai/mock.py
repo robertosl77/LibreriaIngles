@@ -68,6 +68,14 @@ class MockProvider:
             return self._generate(task)
         if task.get("kind") == "evaluate_answer":
             return self._evaluate(task)
+        if task.get("kind") == "evaluate_batch":
+            # T-171: una respuesta por ítem, con el mismo criterio que la corrección individual.
+            return {
+                "results": [
+                    {"id": item["id"], **self._evaluate({"exercise": item, "answer": item.get("answer")})}
+                    for item in task.get("items") or []
+                ]
+            }
         if task.get("kind") == "campaign_assist":
             return self._campaign_assist(task)
         raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Tarea desconocida para el mock.")

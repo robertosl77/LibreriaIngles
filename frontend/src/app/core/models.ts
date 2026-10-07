@@ -554,7 +554,18 @@ export interface Exercise {
     | 'reading_multiple_choice'
     | 'rewrite'
     | 'short_writing'
-    | 'conversation';
+    | 'conversation'
+    // T-183: tipos nuevos de A1.
+    | 'dictation'
+    | 'word_order'
+    | 'dialogue_choice'
+    | 'read_aloud'
+    | 'minimal_pairs'
+    | 'match_pairs'
+    | 'listen_form'
+    | 'gap_text'
+    | 'error_correction'
+    | 'word_stress';
   area: string | null;
   skillKey: string | null;
   skillName: string | null;
@@ -569,6 +580,10 @@ export interface Exercise {
   options: string[] | null;
   /** T-048: dos ejercicios enlazados forman una microconversación. */
   conversation: { group: string; turn: number; total: number; closing: string | null } | null;
+  /** T-183: fichas mezcladas (word_order), columnas (match_pairs) y campos (listen_form). */
+  tiles?: string[] | null;
+  pairs?: { left: string[]; right: string[] } | null;
+  fields?: string[] | null;
   answer: string;
   audioDurationMs: number | null;
   pronunciationResult: PronunciationResult | null;

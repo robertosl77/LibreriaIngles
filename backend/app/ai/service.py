@@ -30,7 +30,7 @@ from app.ai.models import (
     AIUsageEvent,
     utcnow,
 )
-from app.ai.providers import PROVIDERS, ProviderError, build_provider
+from app.ai.providers import PROVIDERS, ProviderError, build_provider, cached_input_tokens
 from app.ai.usage import AIUsageContext, build_usage_event
 from app.core.security import decrypt_secret
 from app.subscriptions.models import AISource
@@ -426,6 +426,12 @@ def _run_json_task_with_connections(
         success_diagnostic["responseJsonChars"] = len(
             json.dumps(data, ensure_ascii=False, separators=(",", ":"))
         )
+        cached = cached_input_tokens(getattr(provider, "last_usage_payload", None))
+        if cached is not None:
+            success_diagnostic["details"] = {
+                **(success_diagnostic.get("details") or {}),
+                "cachedInputTokens": cached,
+            }
         record_usage(
             db,
             connection,

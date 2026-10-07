@@ -19,8 +19,30 @@ from app.ai.service import (
     run_json_task,
 )
 from app.ai.usage import AIUsageContext
+from app.core.config import settings
 from app.classes.normalize import BLANK, normalize_answer, normalize_blank
-from app.classes.prompts import GENERATION_SYSTEM, generation_user_prompt
+from app.classes.types import (
+    CASE_SENSITIVE_TYPES,
+    CHOICE_TYPES,
+    PAIRS_MAX,
+    PAIRS_MIN,
+    FIELDS_MAX,
+    FIELDS_MIN,
+    GAPS_MAX,
+    GAPS_MIN,
+    READ_ONLY_TYPES,
+    SPEAK_ONLY_TYPES,
+    STIMULUS_MAY_REPEAT,
+    WORD_ORDER_MAX,
+    WORD_ORDER_MIN,
+    fixed_presentation,
+    same_words,
+    sentence_words,
+    shuffled,
+    type_weight,
+    word_tiles,
+)
+from app.classes.prompts import GENERATION_SCHEMA, GENERATION_SYSTEM, generation_user_prompt
 from app.core.deps import StudyContext
 from app.curriculum.service import Skill, get_level
 from app.learning.models import (
@@ -44,6 +66,17 @@ EVALUATION_MODE_BY_TYPE = {
     "rewrite": EvaluationMode.HYBRID,
     "short_writing": EvaluationMode.AI,
     "conversation": EvaluationMode.AI,
+    # T-183: los tipos nuevos se corrigen por regla; error_correction como rewrite.
+    "dictation": EvaluationMode.DETERMINISTIC,
+    "word_order": EvaluationMode.DETERMINISTIC,
+    "dialogue_choice": EvaluationMode.DETERMINISTIC,
+    "read_aloud": EvaluationMode.DETERMINISTIC,
+    "minimal_pairs": EvaluationMode.DETERMINISTIC,
+    "match_pairs": EvaluationMode.DETERMINISTIC,
+    "listen_form": EvaluationMode.DETERMINISTIC,
+    "gap_text": EvaluationMode.DETERMINISTIC,
+    "error_correction": EvaluationMode.HYBRID,
+    "word_stress": EvaluationMode.DETERMINISTIC,
 }
 
 # Velocidad sugerida de la voz por nivel (1.0 = normal del navegador).
@@ -242,6 +275,7 @@ def select_slots(
         )
         for skill in chosen
     ]
+    _resolve_lone_conversation(slots, chosen, rng)
     ensure_listening(slots, skills, 2 if "LISTENING" in focus_keys else 1, rng)
     if allow_speaking:
         speak_min = 2 if focus_keys & SPEECH_ABILITIES else 1
@@ -250,6 +284,24 @@ def select_slots(
         ensure_speaking(slots, speak_min, rng, exclude=keep_written)
     pair_conversation_slots(slots)
     return slots
+
+
+def _resolve_lone_conversation(slots: list[dict], chosen: list[Skill], rng) -> None:
+    """T-183: si una skill de conversación salió con otro tipo (dialogue_choice, read_aloud), puede
+    quedar un turno de conversación abierta sin pareja. Ese turno pasa a dialogue_choice."""
+    lone = [i for i, s in enumerate(slots) if s.get("allowedTypes") == ["conversation"]]
+    if len(lone) % 2 == 0:
+        return
+    # 1) Completar el par: otra skill de conversación que salió con otro tipo pasa a conversación.
+    for i, skill in enumerate(chosen):
+        if i not in lone and skill.area_key == "conversation" and "conversation" in skill.exercise_types:
+            slots[i] = slot_for(skill, rng, types={"conversation"})
+            return
+    # 2) Sin pareja posible: el turno suelto pasa a "elegir la respuesta".
+    index = lone[-1]
+    skill = chosen[index]
+    if "dialogue_choice" in skill.exercise_types:
+        slots[index] = slot_for(skill, rng, types={"dialogue_choice"})
 
 
 def pair_conversation_slots(slots: list[dict]) -> None:
@@ -308,7 +360,9 @@ def ensure_listening(slots: list[dict], skills: list[Skill], minimum: int, rng) 
     missing = minimum - sum(1 for s in slots if s["presentation"] == "LISTEN")
     candidates = [
         s for s in slots
-        if s["presentation"] == "READ" and "LISTEN" in by_key[s["skillKey"]].presentations
+        if s["presentation"] == "READ"
+        and "LISTEN" in by_key[s["skillKey"]].presentations
+        and s["allowedTypes"][0] not in READ_ONLY_TYPES
     ]
     rng.shuffle(candidates)
     for slot in candidates[: max(0, missing)]:
@@ -338,9 +392,15 @@ def slot_for(
     `types` restringe los tipos posibles (ej.: los que admiten respuesta hablada).
     """
     # Preferir tipos con ejemplo semilla: sirve de guía a la IA (y al simulado).
-    allowed = [t for t in skill.exercise_types if types is None or t in types]
+    # read_aloud solo existe hablado: sin conexión con audio no se ofrece (T-183).
+    allowed = [
+        t for t in skill.exercise_types
+        if (types is None or t in types) and (allow_speaking or t not in SPEAK_ONLY_TYPES)
+    ]
     seeded = [t for t in allowed if any(e.get("type") == t for e in skill.examples)]
-    exercise_type = rng.choice(seeded or allowed or list(skill.exercise_types))
+    fallback = [t for t in skill.exercise_types if t not in SPEAK_ONLY_TYPES] or list(skill.exercise_types)
+    pool = seeded or allowed or fallback
+    exercise_type = rng.choices(pool, weights=[type_weight(t) for t in pool], k=1)[0]
     example = next(
         (e for e in skill.examples if e.get("type") == exercise_type),
         skill.examples[0] if skill.examples else None,
@@ -356,7 +416,8 @@ def slot_for(
         "objectives": list(skill.objectives),
         "allowedTypes": [exercise_type],
         # Modalidades (T-025): el tipo no cambia; cambia cómo se presenta y se responde.
-        "presentation": _presentation_for(skill, rng),
+        # Algunos tipos tienen presentación fija (dictado = escucha, ordenar fichas = lectura).
+        "presentation": fixed_presentation(exercise_type) or _presentation_for(skill, rng),
         "response": response,
         "example": example,
         # Solo para el proveedor simulado.
@@ -386,6 +447,10 @@ class ExerciseOut(BaseModel):
     commonErrors: list[CommonErrorOut] = []
     expectedConcepts: list[str] = []
     closing: str | None = None
+    # T-183: datos de los tipos con varias partes.
+    pairs: list[list[str]] | None = None  # match_pairs: [["kitchen", "cocina"], ...]
+    fields: list[dict] | None = None  # listen_form: [{"label": "Name", "acceptedAnswers": ["Anna"]}]
+    gaps: list[list[str]] | None = None  # gap_text: respuestas aceptadas por hueco, en orden
 
     @field_validator("question")
     @classmethod
@@ -409,19 +474,23 @@ def _validate_exercise(raw: dict, slot: dict) -> ExerciseOut | None:
         stimulus = (item.stimulus or item.passage or "").strip()
         if not stimulus or len(stimulus) > STIMULUS_MAX:
             return None
-        if item.type != "fill_blank" and normalize_answer(stimulus) in normalize_answer(
+        if item.type not in STIMULUS_MAY_REPEAT and normalize_answer(stimulus) in normalize_answer(
             f"{item.instruction} {item.question} {' '.join(item.options or [])}"
         ):
             return None
         item.stimulus, item.passage = stimulus, None
     else:
         item.stimulus = None
-    if item.type in ("multiple_choice", "reading_multiple_choice"):
+    if item.type in CHOICE_TYPES:
         options = [o.strip() for o in item.options or [] if o and o.strip()]
         if len(options) < 2:
             return None
-        normalized = {normalize_answer(o): o for o in options}
-        correct = [normalized.get(normalize_answer(a)) for a in item.acceptedAnswers]
+        # word_stress distingue mayúsculas (ba-NA-na): no se normaliza.
+        norm = (lambda v: (v or "").strip()) if item.type in CASE_SENSITIVE_TYPES else normalize_answer
+        normalized = {norm(o): o for o in options}
+        if len(normalized) != len(options):
+            return None  # opciones repetidas
+        correct = [normalized.get(norm(a)) for a in item.acceptedAnswers]
         correct = [c for c in correct if c]
         if len(correct) != 1:
             return None
@@ -445,9 +514,85 @@ def _validate_exercise(raw: dict, slot: dict) -> ExerciseOut | None:
         item.options = None
         if not item.instruction:
             item.instruction = "Reply naturally."
+    elif not _valid_new_type(item, slot):
+        return None
     if not item.expectedConcepts:
         item.expectedConcepts = ["task_completion"]
     return item
+
+
+def _valid_new_type(item: ExerciseOut, slot: dict) -> bool:
+    """Reglas de forma de los tipos de T-183 (lo que no cumple, se descarta)."""
+    kind = item.type
+    if kind == "dictation":
+        if slot.get("presentation") != "LISTEN" or not item.acceptedAnswers:
+            return False
+        item.options = None
+        return True
+    if kind == "word_order":
+        if not item.acceptedAnswers:
+            return False
+        first = item.acceptedAnswers[0]
+        if not WORD_ORDER_MIN <= len(sentence_words(first)) <= WORD_ORDER_MAX:
+            return False
+        # Todas las variantes tienen que usar las mismas fichas.
+        item.acceptedAnswers = [a for a in item.acceptedAnswers if same_words(a, first)]
+        item.options = None
+        return True
+    if kind == "read_aloud":
+        target = (item.acceptedAnswers or [item.question])[0].strip()
+        if not 2 <= len(sentence_words(target)) <= 20:
+            return False
+        item.acceptedAnswers = [target]
+        item.options = None
+        return True
+    if kind == "match_pairs":
+        pairs = [
+            [str(p[0]).strip(), str(p[1]).strip()]
+            for p in item.pairs or []
+            if isinstance(p, list) and len(p) == 2 and str(p[0]).strip() and str(p[1]).strip()
+        ]
+        lefts = {normalize_answer(p[0]) for p in pairs}
+        rights = {normalize_answer(p[1]) for p in pairs}
+        if not PAIRS_MIN <= len(pairs) <= PAIRS_MAX or len(lefts) != len(pairs) or len(rights) != len(pairs):
+            return False
+        item.pairs, item.acceptedAnswers, item.options = pairs, [], None
+        return True
+    if kind == "listen_form":
+        fields = []
+        for field in item.fields or []:
+            if not isinstance(field, dict):
+                continue
+            label = str(field.get("label") or "").strip()
+            answers = [str(a).strip() for a in field.get("acceptedAnswers") or [] if str(a).strip()]
+            if label and answers:
+                fields.append({"label": label, "acceptedAnswers": answers})
+        labels = {f["label"].lower() for f in fields}
+        if slot.get("presentation") != "LISTEN" or not FIELDS_MIN <= len(fields) <= FIELDS_MAX or len(labels) != len(fields):
+            return False
+        item.fields, item.acceptedAnswers, item.options = fields, [], None
+        return True
+    if kind == "gap_text":
+        passage = normalize_blank((item.passage or "").strip())
+        gaps = [[str(a).strip() for a in g if str(a).strip()] for g in item.gaps or [] if isinstance(g, list)]
+        if not passage or passage.count(BLANK) != len(gaps) or not GAPS_MIN <= len(gaps) <= GAPS_MAX:
+            return False
+        if any(not g for g in gaps):
+            return False
+        bank = [o.strip() for o in item.options or [] if o and o.strip()]
+        if bank and not all(normalize_answer(g[0]) in {normalize_answer(b) for b in bank} for g in gaps):
+            return False
+        item.passage, item.gaps, item.options, item.acceptedAnswers = passage, gaps, bank or None, []
+        return True
+    if kind == "error_correction":
+        if not item.acceptedAnswers:
+            return False
+        # La oración dada tiene que estar MAL: si ya es una respuesta aceptada, no hay nada que corregir.
+        if normalize_answer(item.question) in {normalize_answer(a) for a in item.acceptedAnswers}:
+            return False
+        item.options = None
+        return True
+    return False
 
 
 def _match_slots(exercises: list, slots: list[dict]) -> list[tuple[dict, ExerciseOut]]:
@@ -477,6 +622,13 @@ def _content(item: ExerciseOut, level: str | None, slot: dict | None = None) -> 
             "total": slot.get("conversationTotal", 2),
             "closing": item.closing if slot.get("conversationTurn") == slot.get("conversationTotal") else None,
         }
+    if item.type == "word_order" and item.acceptedAnswers:
+        content["tiles"] = word_tiles(item.acceptedAnswers[0])
+    if item.type == "match_pairs" and item.pairs:
+        rights = [p[1] for p in item.pairs]
+        content["pairs"] = {"left": [p[0] for p in item.pairs], "right": shuffled(rights, "".join(rights))}
+    if item.type == "listen_form" and item.fields:
+        content["fields"] = [f["label"] for f in item.fields]
     if item.stimulus:
         # LISTEN: se guarda el texto y la reproducción; el audio se regenera (documento funcional §15).
         content.update(
@@ -485,6 +637,20 @@ def _content(item: ExerciseOut, level: str | None, slot: dict | None = None) -> 
             stimulusRate=AUDIO_RATE_BY_LEVEL.get(level or "", 1.0),
         )
     return {k: v for k, v in content.items() if v}
+
+
+def _answer_key(item: ExerciseOut) -> dict:
+    key = {
+        "acceptedAnswers": item.acceptedAnswers,
+        "commonErrors": [e.model_dump() for e in item.commonErrors],
+    }
+    if item.type == "match_pairs" and item.pairs:
+        key["pairs"] = {left: right for left, right in item.pairs}
+    if item.type == "listen_form" and item.fields:
+        key["fields"] = {f["label"]: f["acceptedAnswers"] for f in item.fields}
+    if item.type == "gap_text" and item.gaps:
+        key["gaps"] = item.gaps
+    return key
 
 
 def _enough(session: ClassSession, slots: list[dict], matched: list) -> bool:
@@ -556,12 +722,45 @@ def _generation_diagnostic(slots: list[dict]) -> dict:
     }
 
 
+PROMPT_EXAMPLE_KEYS = ("type", "instruction", "question", "options", "acceptedAnswers", "expectedConcepts")
+PROMPT_EXAMPLE_MAX_ANSWERS = 3
+
+
+def _prompt_example(example: dict | None) -> dict | None:
+    """T-178: ejemplo semilla compacto para la IA (formato y nivel, sin pasaje ni conceptResults).
+
+    Conserva un error común de muestra (respuesta + feedback) para que la IA siga generándolos:
+    cada error común ahorra después una corrección con IA.
+    """
+    if not example or not settings.ai_compact_examples:
+        return example
+    compact = {k: example[k] for k in PROMPT_EXAMPLE_KEYS if example.get(k) not in (None, [], "")}
+    if compact.get("acceptedAnswers"):
+        compact["acceptedAnswers"] = compact["acceptedAnswers"][:PROMPT_EXAMPLE_MAX_ANSWERS]
+    first_error = next(
+        (e for e in example.get("commonErrors") or [] if isinstance(e, dict) and e.get("answer")), None
+    )
+    if first_error:
+        compact["commonErrors"] = [
+            {"answer": first_error["answer"], "feedback": first_error.get("feedback", "")}
+        ]
+    return compact
+
+
+def _public_slot(slot: dict) -> dict:
+    """Lo que viaja a la IA: sin `examples` (solo para el simulado) y con el ejemplo compacto."""
+    public = {k: v for k, v in slot.items() if k != "examples"}
+    if "example" in public:
+        public["example"] = _prompt_example(public["example"])
+    return public
+
+
 def generate_content(
     db: Session, study: StudyContext, session: ClassSession
 ) -> AIResult | None:
     request = session.generation_request or {}
     slots = request.get("slots") or []
-    public_slots = [{k: v for k, v in s.items() if k != "examples"} for s in slots]
+    public_slots = [_public_slot(s) for s in slots]
     try:
         result = run_json_task(
             db,
@@ -570,7 +769,12 @@ def generate_content(
             user=generation_user_prompt(
                 request.get("level", ""), public_slots, purpose=request.get("purpose", "class")
             ),
-            task={"kind": "generate_class", "level": request.get("level"), "slots": slots},
+            task={
+                "kind": "generate_class",
+                "level": request.get("level"),
+                "slots": slots,
+                "schema": GENERATION_SCHEMA,
+            },
             usage_context=AIUsageContext(
                 organization_id=session.organization_id,
                 membership_id=session.membership_id,
@@ -628,10 +832,7 @@ def generate_content(
                     slot.get("response", default_response_mode(item.type).value)
                 ),
                 expected_concepts=item.expectedConcepts,
-                answer_key={
-                    "acceptedAnswers": item.acceptedAnswers,
-                    "commonErrors": [e.model_dump() for e in item.commonErrors],
-                },
+                answer_key=_answer_key(item),
                 evaluation_mode=EVALUATION_MODE_BY_TYPE[item.type],
             )
         )

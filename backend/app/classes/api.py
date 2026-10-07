@@ -13,6 +13,7 @@ from app.ai.service import (
 from app.ai.usage import AIUsageContext
 from app.classes import generation, service
 from app.classes.reference import exercise_display_number
+from app.classes.types import NO_APPEAL_TYPES
 from app.pronunciation import normalize_ai_pronunciation
 from app.core.deps import CurrentStudy, DbSession
 from app.curriculum.lessons import get_lesson
@@ -77,6 +78,7 @@ def _result_payload(db, attempt: Attempt, exercise: Exercise, viewer) -> dict | 
         "ai": public_trace(db, result.get("ai"), viewer),
         "appeal": result.get("appeal"),
         "canAppeal": attempt.score < 100
+        and exercise.exercise_type not in NO_APPEAL_TYPES
         and attempt.appealed_at is None
         and bool(attempt.normalized_answer),
     }
@@ -134,6 +136,10 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 "stimulus": _stimulus(exercise),
                 "options": (exercise.content or {}).get("options"),
                 "conversation": (exercise.content or {}).get("conversation"),
+                # T-183: fichas (word_order), columnas (match_pairs), campos (listen_form).
+                "tiles": (exercise.content or {}).get("tiles"),
+                "pairs": (exercise.content or {}).get("pairs"),
+                "fields": (exercise.content or {}).get("fields"),
                 "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else ""),
                 "audioDurationMs": (
                     attempt.audio_duration_ms
