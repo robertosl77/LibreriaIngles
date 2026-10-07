@@ -39,6 +39,7 @@ from app.classes.types import (
     same_words,
     sentence_words,
     shuffled,
+    type_weight,
     word_tiles,
 )
 from app.classes.prompts import GENERATION_SCHEMA, GENERATION_SYSTEM, generation_user_prompt
@@ -291,6 +292,12 @@ def _resolve_lone_conversation(slots: list[dict], chosen: list[Skill], rng) -> N
     lone = [i for i, s in enumerate(slots) if s.get("allowedTypes") == ["conversation"]]
     if len(lone) % 2 == 0:
         return
+    # 1) Completar el par: otra skill de conversación que salió con otro tipo pasa a conversación.
+    for i, skill in enumerate(chosen):
+        if i not in lone and skill.area_key == "conversation" and "conversation" in skill.exercise_types:
+            slots[i] = slot_for(skill, rng, types={"conversation"})
+            return
+    # 2) Sin pareja posible: el turno suelto pasa a "elegir la respuesta".
     index = lone[-1]
     skill = chosen[index]
     if "dialogue_choice" in skill.exercise_types:
@@ -392,7 +399,8 @@ def slot_for(
     ]
     seeded = [t for t in allowed if any(e.get("type") == t for e in skill.examples)]
     fallback = [t for t in skill.exercise_types if t not in SPEAK_ONLY_TYPES] or list(skill.exercise_types)
-    exercise_type = rng.choice(seeded or allowed or fallback)
+    pool = seeded or allowed or fallback
+    exercise_type = rng.choices(pool, weights=[type_weight(t) for t in pool], k=1)[0]
     example = next(
         (e for e in skill.examples if e.get("type") == exercise_type),
         skill.examples[0] if skill.examples else None,

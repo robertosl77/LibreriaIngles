@@ -61,6 +61,15 @@ STIMULUS_MAY_REPEAT = {"fill_blank", "minimal_pairs", "word_stress"}
 # La apelación usa IA: no tiene sentido en tipos de corrección exacta por regla.
 NO_APPEAL_TYPES = RULE_ONLY_TYPES | {"dialogue_choice", "minimal_pairs", "word_stress"}
 
+# Peso del tipo al sortear dentro de una skill. La conversación abierta es producción real y no
+# debe perder frecuencia frente a sus andamios (dialogue_choice, read_aloud).
+TYPE_WEIGHTS = {"conversation": 3.0}
+
+
+def type_weight(exercise_type: str) -> float:
+    return TYPE_WEIGHTS.get(exercise_type, 1.0)
+
+
 TYPE_NAMES = {
     "dictation": "Dictado",
     "word_order": "Ordenar palabras",

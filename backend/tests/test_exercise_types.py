@@ -267,3 +267,16 @@ def test_new_rule_types_cannot_be_appealed(client, all_types_class):
         f"/api/v1/classes/{klass['id']}/exercises/{by_type['match_pairs']['id']}/appeal", headers=headers
     )
     assert response.status_code == 409
+
+
+def test_open_conversation_keeps_its_share_in_classes():
+    """Los andamios (dialogue_choice, read_aloud) no deben desplazar la conversación abierta."""
+    from app.classes.generation import select_slots
+
+    total = 0
+    for seed in range(120):
+        slots = select_slots(list(A1.skills), {}, rng=random.Random(seed), allow_speaking=True)
+        conversation = [s for s in slots if s["allowedTypes"] == ["conversation"]]
+        assert len(conversation) % 2 == 0  # siempre en pares
+        total += len(conversation)
+    assert total / 120 >= 0.7
