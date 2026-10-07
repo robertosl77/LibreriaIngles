@@ -154,6 +154,7 @@ def create_challenge(
     destination: str,
 ) -> tuple[VerificationChallenge, str]:
     now = utcnow()
+    destination = destination.strip().lower()
     existing = _active_for_context(db, purpose, context_type, context_id)
     if existing:
         last = existing[0]
@@ -164,7 +165,7 @@ def create_challenge(
                 raise ChallengeCooldown(int((retry_at - now).total_seconds()) + 1)
 
     window_start = now - timedelta(hours=1)
-    recent = db.scalars(
+    recent_context = db.scalars(
         select(VerificationChallenge).where(
             VerificationChallenge.purpose == purpose.value,
             VerificationChallenge.context_type == context_type,
@@ -172,7 +173,24 @@ def create_challenge(
             VerificationChallenge.created_at >= window_start,
         )
     ).all()
-    if len(recent) >= settings.verification_max_sends_per_hour:
+    if len(recent_context) >= settings.verification_max_sends_per_hour:
+        raise ChallengeRateLimited(
+            "Se alcanzó el límite temporal de envíos. Intentá nuevamente más tarde."
+        )
+
+    # Un atacante puede conocer varios CUIT válidos y abrir distintos onboardings apuntando
+    # al mismo buzón. El límite por contexto no alcanza para evitar ese tipo de bombardeo.
+    recent_destination = db.scalars(
+        select(VerificationChallenge).where(
+            VerificationChallenge.purpose == purpose.value,
+            VerificationChallenge.destination == destination,
+            VerificationChallenge.created_at >= window_start,
+        )
+    ).all()
+    if (
+        len(recent_destination)
+        >= settings.verification_max_sends_per_destination_per_hour
+    ):
         raise ChallengeRateLimited(
             "Se alcanzó el límite temporal de envíos. Intentá nuevamente más tarde."
         )
@@ -186,7 +204,6 @@ def create_challenge(
 
     public_id = str(uuid4())
     code = f"{secrets.randbelow(1_000_000):06d}"
-    destination = destination.strip().lower()
     row = VerificationChallenge(
         public_id=public_id,
         purpose=purpose.value,
