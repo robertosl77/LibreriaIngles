@@ -6,6 +6,10 @@ import smtplib
 from app.core.config import settings
 
 
+SRMACROS_VALIDATION_SENDER = "SRMACROS_VALIDATION"
+_SUPPORTED_SENDER_PROFILES = {SRMACROS_VALIDATION_SENDER}
+
+
 @dataclass(frozen=True)
 class EmailDeliveryMessage:
     recipient: str
@@ -19,6 +23,38 @@ class EmailDeliveryResult:
     provider: str
     accepted: bool
     development_capture: str | None = None
+
+
+@dataclass(frozen=True)
+class EmailSenderIdentity:
+    profile: str
+    from_email: str
+    from_name: str
+
+
+def _require_known_sender_profile(profile: str) -> None:
+    if profile not in _SUPPORTED_SENDER_PROFILES:
+        raise RuntimeError(f"Perfil de remitente no soportado: {profile}")
+
+
+def resolve_email_sender_identity(profile: str) -> EmailSenderIdentity:
+    """Resuelve un perfil semántico a la identidad física del remitente actual.
+
+    P02 inaugura un único perfil de plataforma. El caso de notificación sólo conoce
+    el código del perfil; las credenciales y el proveedor permanecen fuera del dominio
+    consumidor. #95 podrá ampliar este registro sin modificar el onboarding.
+    """
+
+    _require_known_sender_profile(profile)
+    if profile == SRMACROS_VALIDATION_SENDER:
+        if not settings.smtp_from_email:
+            raise RuntimeError("El perfil SRMACROS_VALIDATION no tiene remitente SMTP configurado.")
+        return EmailSenderIdentity(
+            profile=profile,
+            from_email=settings.smtp_from_email,
+            from_name=settings.smtp_from_name,
+        )
+    raise RuntimeError(f"Perfil de remitente no soportado: {profile}")
 
 
 class EmailDeliveryProvider:
@@ -40,6 +76,7 @@ class DevelopmentEmailDeliveryProvider(EmailDeliveryProvider):
     ) -> EmailDeliveryResult:
         if settings.is_production:
             raise RuntimeError("El provider DEV de email no está permitido en producción.")
+        _require_known_sender_profile(message.sender_profile)
         return EmailDeliveryResult(
             provider="DEV",
             accepted=True,
@@ -54,14 +91,17 @@ class SmtpEmailDeliveryProvider(EmailDeliveryProvider):
         *,
         development_capture: str | None = None,
     ) -> EmailDeliveryResult:
-        if not settings.smtp_host or not settings.smtp_from_email:
+        if not settings.smtp_host:
             raise RuntimeError("SMTP no está configurado completamente.")
 
+        sender = resolve_email_sender_identity(message.sender_profile)
         email = EmailMessage()
         email["To"] = message.recipient
-        email["From"] = formataddr(
-            (settings.smtp_from_name, settings.smtp_from_email)
-        ) if settings.smtp_from_name else settings.smtp_from_email
+        email["From"] = (
+            formataddr((sender.from_name, sender.from_email))
+            if sender.from_name
+            else sender.from_email
+        )
         email["Subject"] = message.subject
         email.set_content(message.body)
 
