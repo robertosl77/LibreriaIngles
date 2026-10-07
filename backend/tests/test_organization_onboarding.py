@@ -65,7 +65,10 @@ def test_p01_config_is_public_and_does_not_reserve_owner_role(client) -> None:
         "OTHER",
     }
     assert "OWNER" not in {row["code"] for row in body["actingCapacities"]}
-    assert body["emailVerificationImplemented"] is False
+    assert body["emailVerificationImplemented"] is True
+    assert body["emailVerification"]["codeDigits"] == 6
+    assert body["emailVerification"]["ttlMinutes"] == 25
+    assert body["emailVerification"]["maxAttempts"] == 3
 
 
 def test_lookup_rejects_invalid_cuit_without_persisting(client) -> None:
@@ -110,8 +113,9 @@ def test_create_onboarding_does_not_create_organization_yet(client) -> None:
     assert body["referent"]["actingCapacity"] == "AUTHORIZED_EMPLOYEE"
     assert body["referent"]["emailVerified"] is False
     assert body["verification"]["developmentSimulation"] is True
-    assert body["nextStep"] == "EMAIL_VERIFICATION_PENDING_P02"
+    assert body["nextStep"] == "EMAIL_VERIFICATION_REQUIRED"
     assert len(body["publicId"]) == 36
+    assert body["continuationToken"]
 
     with SessionLocal() as db:
         row = db.scalar(
@@ -122,6 +126,8 @@ def test_create_onboarding_does_not_create_organization_yet(client) -> None:
         assert row is not None
         assert row.official_data["developmentSimulation"] is True
         assert row.authority_declared is True
+        assert row.continuation_token_hash
+        assert row.continuation_token_hash != body["continuationToken"]
         assert db.scalar(select(Organization.id)) is None
 
 
