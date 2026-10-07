@@ -80,6 +80,8 @@ import { MyServiceComponent } from '../../shared/my-service.component';
             scope="platform"
             title="Conexiones de la plataforma"
             [focusConnectionId]="focusedConnectionId"
+            [activeId]="active().default?.connectionId ?? null"
+            [audioId]="active().audio?.connectionId ?? null"
             (changed)="refreshActive()"
           />
         } @else {
@@ -87,6 +89,8 @@ import { MyServiceComponent } from '../../shared/my-service.component';
             scope="account"
             title="Tus conexiones"
             [focusConnectionId]="focusedConnectionId"
+            [activeId]="active().default?.connectionId ?? null"
+            [audioId]="active().audio?.connectionId ?? null"
             (changed)="refreshActive()"
           />
         }
