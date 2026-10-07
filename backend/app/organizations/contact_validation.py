@@ -110,7 +110,7 @@ def check_website(value: str) -> WebsiteCheckResult:
         return WebsiteCheckResult(
             "UNREACHABLE",
             normalized,
-            "No pudimos confirmar el dominio ahora. Podés continuar y revisarlo más tarde.",
+            "No pudimos confirmar ese dominio en este momento.",
         )
     except ValueError as exc:
         return WebsiteCheckResult("INVALID", None, str(exc))
@@ -118,7 +118,7 @@ def check_website(value: str) -> WebsiteCheckResult:
     return WebsiteCheckResult(
         "VERIFIED",
         normalized,
-        "Dominio válido y localizado en Internet.",
+        "Dominio encontrado en Internet.",
     )
 
 
