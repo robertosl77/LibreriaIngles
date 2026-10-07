@@ -86,6 +86,51 @@ def _active_for_context(db, purpose: VerificationPurpose, context_type: str, con
     ).all()
 
 
+def latest_challenge_for_context(
+    db,
+    *,
+    purpose: VerificationPurpose,
+    context_type: str,
+    context_id: str,
+) -> VerificationChallenge | None:
+    return db.scalar(
+        select(VerificationChallenge)
+        .where(
+            VerificationChallenge.purpose == purpose.value,
+            VerificationChallenge.context_type == context_type,
+            VerificationChallenge.context_id == context_id,
+        )
+        .order_by(VerificationChallenge.created_at.desc())
+        .limit(1)
+    )
+
+
+def require_resend_cooldown_elapsed(
+    db,
+    *,
+    purpose: VerificationPurpose,
+    context_type: str,
+    context_id: str,
+) -> None:
+    last = latest_challenge_for_context(
+        db,
+        purpose=purpose,
+        context_type=context_type,
+        context_id=context_id,
+    )
+    if last is None:
+        return
+
+    sent_at = _normalized_dt(last.sent_at)
+    if sent_at is None:
+        return
+
+    now = utcnow()
+    retry_at = sent_at + timedelta(seconds=settings.verification_resend_cooldown_seconds)
+    if now < retry_at:
+        raise ChallengeCooldown(int((retry_at - now).total_seconds()) + 1)
+
+
 def invalidate_active_challenges(
     db,
     *,
