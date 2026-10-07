@@ -25,7 +25,12 @@ from app.ai.service import NoAIAvailable, connection_snapshot, run_json_task
 from app.ai.usage import AIUsageContext
 from app.classes.reference import exercise_display_number
 from app.classes.normalize import fill_blank_variants, normalize_answer
-from app.classes.prompts import EVALUATION_SYSTEM, evaluation_user_prompt
+from app.classes.prompts import (
+    EVALUATION_SCHEMA,
+    evaluation_system,
+    evaluation_user_prompt,
+    short_skill_key,
+)
 from app.classes.spelling import SPELLING_SCORE, spelling_slips
 from app.classes.spoken import normalize_spoken, pronunciation_slips
 from app.curriculum.service import find_skill, get_level
@@ -245,18 +250,38 @@ ORTHOGRAPHY_SKILLS = {
 SECONDARY_MAX = 3
 
 
-def _secondary_skill_candidates(exercise: Exercise) -> list[dict]:
-    """Skills que la IA puede observar incidentalmente en una respuesta productiva."""
+def _secondary_areas(exercise: Exercise) -> list[str]:
+    """Áreas del catálogo que pueden recibir evidencia incidental de esta respuesta (T-170)."""
     level = getattr(exercise, "level", None)
     response_mode = getattr(exercise, "response_mode", None)
     if not level or not response_mode or response_mode.value == "SELECT":
         return []
-    curriculum = get_level(level)
-    if curriculum is None:
+    if get_level(level) is None:
         return []
-    areas = {"grammar", "vocabulary"}
-    if exercise.response_mode.value == "WRITE":
-        areas.add("writing")
+    areas = ["grammar", "vocabulary"]
+    if response_mode.value == "WRITE":
+        areas.append("writing")
+    return areas
+
+
+def _full_skill_key(exercise: Exercise, key: str) -> str:
+    """La IA usa claves cortas del catálogo (sin nivel); se completan con el nivel del ejercicio."""
+    prefix = f"{(getattr(exercise, 'level', None) or '').lower()}."
+    if prefix != "." and not key.startswith(prefix):
+        return prefix + key
+    return key
+
+
+def _secondary_skill_candidates(exercise: Exercise) -> list[dict]:
+    """Skills que la IA puede observar incidentalmente en una respuesta productiva.
+
+    Ya no viajan en cada pedido (T-170): el catálogo va en el system prompt del nivel. Se usan
+    para filtrar lo que devuelve la IA y para el proveedor simulado.
+    """
+    areas = set(_secondary_areas(exercise))
+    if not areas:
+        return []
+    curriculum = get_level(exercise.level)
     candidates = []
     for skill in curriculum.skills:
         if skill.key == exercise.skill_key or skill.area_key not in areas:
@@ -278,7 +303,7 @@ def _sanitize_secondary(exercise: Exercise, data: dict) -> list[dict]:
     for item in data.get("secondarySkillResults") or []:
         if not isinstance(item, dict):
             continue
-        key = str(item.get("skillKey") or "")
+        key = _full_skill_key(exercise, str(item.get("skillKey") or ""))
         status = item.get("status")
         if key not in allowed or key in seen or status not in STATUS_SCORE:
             continue
@@ -520,7 +545,8 @@ def _ai_payload(db: Session, exercise: Exercise, answer: str) -> dict:
         "options": (exercise.content or {}).get("options"),
         "referenceAnswers": exercise.answer_key.get("acceptedAnswers") or [],
         "expectedConcepts": exercise.expected_concepts or [],
-        "secondarySkillCandidates": _secondary_skill_candidates(exercise),
+        "skillKey": short_skill_key(exercise.skill_key or ""),
+        "secondaryAreas": _secondary_areas(exercise),
         "conversationContext": _conversation_context(db, exercise),
         "studentAnswer": answer,
     }
@@ -556,7 +582,7 @@ def _evaluation_diagnostic(payload: dict) -> dict:
         "objectiveCount": len(objectives),
         "objectivesChars": _text_list_chars(objectives),
         "expectedConceptCount": len(payload.get("expectedConcepts") or []),
-        "secondarySkillCount": len(payload.get("secondarySkillCandidates") or []),
+        "secondaryAreaCount": len(payload.get("secondaryAreas") or []),
         "conversationTurns": len(conversation),
         "conversationChars": conversation_chars,
     }
@@ -567,15 +593,16 @@ def evaluate_with_ai(db: Session, account: Account, exercise: Exercise, answer: 
     result = run_json_task(
         db,
         account,
-        system=EVALUATION_SYSTEM,
+        system=evaluation_system(exercise.level),
         user=evaluation_user_prompt(payload),
         task={
             "kind": "evaluate_answer",
+            "schema": EVALUATION_SCHEMA,
             "exercise": {
                 "type": exercise.exercise_type,
                 "acceptedAnswers": payload["referenceAnswers"],
                 "expectedConcepts": payload["expectedConcepts"],
-                "secondarySkillCandidates": payload["secondarySkillCandidates"],
+                "secondarySkillCandidates": _secondary_skill_candidates(exercise),
             },
             "answer": answer,
         },

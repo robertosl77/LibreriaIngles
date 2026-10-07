@@ -5,6 +5,9 @@ dentro de ese marco (documento funcional §2.1) y devuelve JSON validable (§31)
 """
 
 import json
+from functools import lru_cache
+
+from app.curriculum.service import get_level
 
 GENERATION_SYSTEM = """You generate English-learning exercises for a structured learning app.
 The app owns the curriculum: you MUST stay within the requested CEFR level, skills,
@@ -99,17 +102,19 @@ Return ONLY a JSON object:
   "feedback": "1-2 frases en español, dirigidas al alumno",
   "suggestions": [{"type": "STYLE_SUGGESTION|NATURALNESS_SUGGESTION|SHORTER_ALTERNATIVE|MECHANICS_NOTE", "text": "en español"}],
   "secondarySkillResults": [
-    {"skillKey": "<only from secondarySkillCandidates>", "status": "correct|partially_correct|incorrect",
+    {"skillKey": "<a key from the skill catalog>", "status": "correct|partially_correct|incorrect",
      "score": 0-100, "reason": "brief evidence in Spanish"}
   ]
 }
 
 Rules:
 - Evaluate the PRIMARY result ONLY on what the objectives and expected concepts target, at the given level.
-- "secondarySkillCandidates" lists other curricular skills that may receive incidental evidence from
-  what the learner actually produced. Return secondarySkillResults ONLY for skills directly evidenced
-  by this answer, normally at most 3. Do not invent evidence. A secondary error must never reduce the
-  primary Conversation/task score unless it also makes the conversational objective fail.
+- The SKILL CATALOG at the end lists the curricular skills of the level. "secondaryAreas" says which
+  catalog areas may receive incidental evidence from what the learner actually produced. Return
+  secondarySkillResults ONLY for catalog skills of those areas (never the primary "skillKey") that are
+  directly evidenced by this answer, at most 3, using the catalog key exactly. If "secondaryAreas" is
+  empty, return []. Do not invent evidence. A secondary error must never reduce the primary
+  Conversation/task score unless it also makes the conversational objective fail.
 - The reference answers are examples, not an exhaustive list: a different answer that is
   grammatically correct and fulfils the task IS correct.
 - Never mark an answer incorrect only because a more natural alternative exists:
@@ -134,14 +139,12 @@ Rules:
   level? There is usually more than one valid reply. Grammar/vocabulary mistakes may be reported and
   may feed secondarySkillResults while the Conversation objective can still be correct or partial.
   Use conversationContext when supplied to check continuity with earlier turns.
-- If "response" is SPEAK, "studentAnswer" is a literal transcript of speech: ignore punctuation
-  and capitalization. If it differs from a correct answer only by a word that SOUNDS almost the
-  same (e.g. "sink" for "think", "berry" for "very", "ship" for "sheep"), treat it as a
-  pronunciation slip, not a grammar/vocabulary error: mark the concepts as correct and add one
-  error of type PRONUNCIATION_ERROR with that word.
-- If exercise.response is SPEAK, the answer is a literal speech-to-text transcript. Do not
-  penalize missing punctuation or capitalization that cannot be heard; evaluate the spoken
-  words, grammar, vocabulary and task completion.
+- If "response" is SPEAK, "studentAnswer" is a literal speech-to-text transcript: never penalize
+  punctuation or capitalization; evaluate the spoken words, grammar, vocabulary and task completion.
+  If it differs from a correct answer only by a word that SOUNDS almost the same (e.g. "sink" for
+  "think", "berry" for "very", "ship" for "sheep"), treat it as a pronunciation slip, not a
+  grammar/vocabulary error: mark the concepts as correct and add one error of type
+  PRONUNCIATION_ERROR with that word.
 - Minor spelling (1-2 letters wrong in a recognizable word, e.g. "taxy" for "taxi", "freind"
   for "friend") is NOT a concept error when the intended word is clear and is the right one:
   keep the concept as correct and add one error of type SPELLING_ERROR with the fix. If the
@@ -170,3 +173,156 @@ def generation_user_prompt(level: str, slots: list[dict], purpose: str = "class"
 
 def evaluation_user_prompt(payload: dict) -> str:
     return "Evaluate this answer.\n" + compact_json(payload)
+
+
+# ---------------------------------------------------------------- T-170 catálogo compacto por nivel
+
+# Áreas que pueden recibir evidencia secundaria (T-048). Writing solo en respuestas escritas.
+SECONDARY_AREAS = ("grammar", "vocabulary", "writing")
+
+
+def short_skill_key(skill_key: str) -> str:
+    """a1.grammar.to_be.negative → grammar.to_be.negative (el nivel ya está en el prompt)."""
+    return skill_key.split(".", 1)[1] if "." in skill_key else skill_key
+
+
+@lru_cache
+def skill_catalog(level: str | None) -> str:
+    """Una línea por skill: clave corta + tema · nombre. Sin objetivos (≈560 tokens en A1 vs ≈2.270)."""
+    curriculum = get_level(level) if level else None
+    if curriculum is None:
+        return ""
+    return "\n".join(
+        f"{short_skill_key(s.key)}: {s.topic_name} · {s.name}"
+        for s in curriculum.skills
+        if s.area_key in SECONDARY_AREAS
+    )
+
+
+@lru_cache
+def evaluation_system(level: str | None) -> str:
+    """System prompt de corrección del nivel: idéntico en cada llamada (prefijo cacheable)."""
+    catalog = skill_catalog(level)
+    if not catalog:
+        return EVALUATION_SYSTEM
+    return f"{EVALUATION_SYSTEM}\nSKILL CATALOG (level {level}; use these keys exactly):\n{catalog}\n"
+
+
+# ---------------------------------------------------------------- T-173 esquemas de respuesta (Gemini)
+# Garantizan la FORMA del JSON (no su contenido: el backend sigue validando todo).
+
+def _s(type_: str, **extra) -> dict:
+    return {"type": type_, **extra}
+
+
+_STR = _s("STRING")
+_STR_LIST = _s("ARRAY", items=_STR)
+_STATUS = _s("STRING", enum=["correct", "partially_correct", "incorrect"])
+
+EXERCISE_SCHEMA = _s(
+    "OBJECT",
+    properties={
+        "skillKey": _STR,
+        "type": _s(
+            "STRING",
+            enum=["fill_blank", "multiple_choice", "reading_multiple_choice", "rewrite", "short_writing", "conversation"],
+        ),
+        "instruction": _STR,
+        "question": _STR,
+        "passage": _s("STRING", nullable=True),
+        "stimulus": _s("STRING", nullable=True),
+        "options": _s("ARRAY", items=_STR, nullable=True),
+        "acceptedAnswers": _STR_LIST,
+        "commonErrors": _s(
+            "ARRAY",
+            items=_s(
+                "OBJECT",
+                properties={
+                    "answer": _STR,
+                    "feedback": _STR,
+                    "conceptResults": _s(
+                        "ARRAY", items=_s("OBJECT", properties={"concept": _STR, "status": _STATUS})
+                    ),
+                },
+                required=["answer", "feedback"],
+            ),
+        ),
+        "expectedConcepts": _STR_LIST,
+        "closing": _s("STRING", nullable=True),
+    },
+    required=["skillKey", "type", "instruction", "question", "acceptedAnswers", "expectedConcepts"],
+)
+
+GENERATION_SCHEMA = _s(
+    "OBJECT",
+    properties={"title": _STR, "exercises": _s("ARRAY", items=EXERCISE_SCHEMA)},
+    required=["title", "exercises"],
+)
+
+_EVALUATION_PROPERTIES = {
+    "result": _STATUS,
+    "scoreSuggested": _s("NUMBER"),
+    "conceptResults": _s(
+        "ARRAY",
+        items=_s("OBJECT", properties={"concept": _STR, "status": _STATUS, "score": _s("NUMBER")},
+                 required=["concept", "status"]),
+    ),
+    "errors": _s(
+        "ARRAY",
+        items=_s(
+            "OBJECT",
+            properties={
+                "type": _s(
+                    "STRING",
+                    enum=["GRAMMAR_ERROR", "VOCABULARY_ERROR", "SPELLING_ERROR", "WORD_ORDER_ERROR", "PRONUNCIATION_ERROR"],
+                ),
+                "fragment": _STR,
+                "correction": _STR,
+                "explanation": _STR,
+            },
+            required=["type", "explanation"],
+        ),
+    ),
+    "correctAnswer": _s("STRING", nullable=True),
+    "feedback": _STR,
+    "suggestions": _s(
+        "ARRAY",
+        items=_s(
+            "OBJECT",
+            properties={
+                "type": _s(
+                    "STRING",
+                    enum=["STYLE_SUGGESTION", "NATURALNESS_SUGGESTION", "SHORTER_ALTERNATIVE", "MECHANICS_NOTE"],
+                ),
+                "text": _STR,
+            },
+            required=["type", "text"],
+        ),
+    ),
+    "secondarySkillResults": _s(
+        "ARRAY",
+        items=_s(
+            "OBJECT",
+            properties={"skillKey": _STR, "status": _STATUS, "score": _s("NUMBER"), "reason": _STR},
+            required=["skillKey", "status"],
+        ),
+    ),
+}
+_EVALUATION_REQUIRED = ["result", "conceptResults", "errors", "feedback"]
+
+EVALUATION_SCHEMA = _s("OBJECT", properties=_EVALUATION_PROPERTIES, required=_EVALUATION_REQUIRED)
+
+EVALUATION_BATCH_SCHEMA = _s(
+    "OBJECT",
+    properties={
+        "results": _s(
+            "ARRAY",
+            items=_s(
+                "OBJECT",
+                properties={"id": _s("INTEGER"), **_EVALUATION_PROPERTIES},
+                required=["id", *_EVALUATION_REQUIRED],
+            ),
+        )
+    },
+    required=["results"],
+)

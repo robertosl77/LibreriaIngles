@@ -20,7 +20,7 @@ from app.ai.service import (
 )
 from app.ai.usage import AIUsageContext
 from app.classes.normalize import BLANK, normalize_answer, normalize_blank
-from app.classes.prompts import GENERATION_SYSTEM, generation_user_prompt
+from app.classes.prompts import GENERATION_SCHEMA, GENERATION_SYSTEM, generation_user_prompt
 from app.core.deps import StudyContext
 from app.curriculum.service import Skill, get_level
 from app.learning.models import (
@@ -570,7 +570,12 @@ def generate_content(
             user=generation_user_prompt(
                 request.get("level", ""), public_slots, purpose=request.get("purpose", "class")
             ),
-            task={"kind": "generate_class", "level": request.get("level"), "slots": slots},
+            task={
+                "kind": "generate_class",
+                "level": request.get("level"),
+                "slots": slots,
+                "schema": GENERATION_SCHEMA,
+            },
             usage_context=AIUsageContext(
                 organization_id=session.organization_id,
                 membership_id=session.membership_id,
