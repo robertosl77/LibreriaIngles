@@ -43,6 +43,17 @@ def test_website_check_only_accepts_public_dns(monkeypatch) -> None:
     assert result.normalized_url == "https://cacatua.com.ar"
 
 
+def test_website_check_does_not_block_on_transient_dns_failure(monkeypatch) -> None:
+    def fail_dns(*args, **kwargs):
+        raise socket.gaierror("temporary failure")
+
+    monkeypatch.setattr(socket, "getaddrinfo", fail_dns)
+    result = check_website("cacatua.com.ar")
+    assert result.state == "UNREACHABLE"
+    assert result.normalized_url == "https://cacatua.com.ar"
+    assert "Podés continuar" in result.message
+
+
 def test_website_check_rejects_private_dns_target(monkeypatch) -> None:
     monkeypatch.setattr(
         socket,
