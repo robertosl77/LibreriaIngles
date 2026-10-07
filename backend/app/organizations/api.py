@@ -87,7 +87,7 @@ def resolve_job_title_endpoint(payload: JobTitleResolveIn, db: DbSession) -> dic
             confirm_similar=payload.confirmSimilar,
         )
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     item = result["item"]
     similar = result["similar"]
@@ -115,7 +115,7 @@ def phone_normalize(payload: PhoneNormalizeIn) -> dict:
     try:
         result = normalize_phone(payload.phone, payload.country)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return {
         "e164": result.e164,
         "display": result.display,
@@ -229,7 +229,7 @@ def lookup_company(payload: CompanyLookupIn, db: DbSession) -> dict:
 def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
     if not payload.referent.authorityDeclared:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Debés declarar que contás con autorización suficiente para iniciar el alta.",
         )
 
@@ -242,7 +242,7 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
         result.state == VerificationState.REVIEW_REQUIRED
         and result.source == "LOCAL_VALIDATION"
     ):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, result.message)
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, result.message)
 
     existing_org = db.scalar(
         select(Organization).where(
@@ -283,7 +283,7 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
     )
     if payload.referent.jobTitleId is not None and job_title is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "El cargo o función seleccionado ya no está disponible.",
         )
 
@@ -308,12 +308,12 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
         try:
             website = normalize_website(payload.website)
         except ValueError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     try:
         phone = normalize_phone(payload.referent.phone, result.country)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     display_name = (payload.displayName or "").strip() or result.legal_name
     onboarding = OrganizationOnboarding(
