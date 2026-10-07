@@ -385,3 +385,37 @@ def test_batch_size_follows_the_tight_limit(client):
         quota.record(db, connection, [quota.LimitInfo(kind=RENEWABLE, dimension="TOKENS", window="MINUTE", limit=5000)])
         size = quota.batch_size(db, account, items=9, chars_per_item=1000)
         assert 1 <= size < 6
+
+
+def test_simulation_script_reduces_class_blocks_exam_and_cleans(client, monkeypatch):
+    """scripts/simular_cupo.py: herramienta de prueba manual de T-191 (solo local/dev)."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    from app.ai.models import AIQuotaLimit
+    from app.db import SessionLocal
+    from test_exams import _make_eligible
+
+    path = Path(__file__).resolve().parent.parent / "scripts" / "simular_cupo.py"
+    spec = importlib.util.spec_from_file_location("simular_cupo", path)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+
+    def run(mode):
+        monkeypatch.setattr(sys, "argv", ["simular_cupo.py", mode, "--email", "roberto@example.com"])
+        assert script.main() == 0
+
+    headers, _ = _student(client)
+    run("clase")
+    klass = client.post("/api/v1/classes", headers=headers).json()
+    assert klass["status"] == "READY" and klass["reducedFrom"] > len(klass["exercises"])
+
+    _make_eligible(client, headers)
+    run("examen")
+    response = client.post("/api/v1/exams", headers=headers)
+    assert "No hay tokens disponibles para generar el examen" in response.text
+
+    run("limpiar")
+    with SessionLocal() as db:
+        assert db.scalar(select(AIQuotaLimit).where(AIQuotaLimit.source == "SIMULATED")) is None
