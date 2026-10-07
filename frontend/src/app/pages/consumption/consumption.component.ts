@@ -919,6 +919,7 @@ export class ConsumptionComponent implements OnInit {
       secondarySkillCount: 'Skills secundarios',
       secondaryAreaCount: 'Áreas para evidencia secundaria',
       itemCount: 'Ejercicios corregidos juntos',
+      cachedInputTokens: 'Tokens de entrada servidos desde caché',
       conversationTurns: 'Turnos de conversación',
       conversationChars: 'Tamaño del historial',
       slotCount: 'Slots solicitados',

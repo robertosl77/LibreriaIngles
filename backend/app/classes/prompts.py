@@ -94,13 +94,12 @@ You receive the level, the exercise, the objectives, the reference answers and t
 Return ONLY a JSON object:
 {
   "result": "correct | partially_correct | incorrect",
-  "scoreSuggested": 0-100,
   "conceptResults": [{"concept": "<expected concept>", "status": "correct|partially_correct|incorrect", "score": 0-100}],
   "errors": [{"type": "GRAMMAR_ERROR|VOCABULARY_ERROR|SPELLING_ERROR|WORD_ORDER_ERROR|PRONUNCIATION_ERROR",
-              "fragment": "wrong part", "correction": "fix", "explanation": "en español"}],
+              "fragment": "wrong part", "correction": "fix", "explanation": "en español, máximo 15 palabras"}],
   "correctAnswer": "a correct version of the answer, or null for open writing",
-  "feedback": "1-2 frases en español, dirigidas al alumno",
-  "suggestions": [{"type": "STYLE_SUGGESTION|NATURALNESS_SUGGESTION|SHORTER_ALTERNATIVE|MECHANICS_NOTE", "text": "en español"}],
+  "feedback": "1-2 frases cortas en español, dirigidas al alumno",
+  "suggestions": [{"type": "STYLE_SUGGESTION|NATURALNESS_SUGGESTION|SHORTER_ALTERNATIVE|MECHANICS_NOTE", "text": "en español, máximo 15 palabras"}],
   "secondarySkillResults": [
     {"skillKey": "<a key from the skill catalog>", "status": "correct|partially_correct|incorrect",
      "score": 0-100, "reason": "brief evidence in Spanish"}
@@ -108,6 +107,7 @@ Return ONLY a JSON object:
 }
 
 Rules:
+- Be brief: at most 2 suggestions; each explanation, suggestion and reason short; do not repeat in "feedback" what "errors" already says.
 - Evaluate the PRIMARY result ONLY on what the objectives and expected concepts target, at the given level.
 - The SKILL CATALOG at the end lists the curricular skills of the level. "secondaryAreas" says which
   catalog areas may receive incidental evidence from what the learner actually produced. Return
@@ -274,7 +274,6 @@ GENERATION_SCHEMA = _s(
 
 _EVALUATION_PROPERTIES = {
     "result": _STATUS,
-    "scoreSuggested": _s("NUMBER"),
     "conceptResults": _s(
         "ARRAY",
         items=_s("OBJECT", properties={"concept": _STR, "status": _STATUS, "score": _s("NUMBER")},

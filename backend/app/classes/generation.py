@@ -19,6 +19,7 @@ from app.ai.service import (
     run_json_task,
 )
 from app.ai.usage import AIUsageContext
+from app.core.config import settings
 from app.classes.normalize import BLANK, normalize_answer, normalize_blank
 from app.classes.prompts import GENERATION_SCHEMA, GENERATION_SYSTEM, generation_user_prompt
 from app.core.deps import StudyContext
@@ -556,12 +557,45 @@ def _generation_diagnostic(slots: list[dict]) -> dict:
     }
 
 
+PROMPT_EXAMPLE_KEYS = ("type", "instruction", "question", "options", "acceptedAnswers", "expectedConcepts")
+PROMPT_EXAMPLE_MAX_ANSWERS = 3
+
+
+def _prompt_example(example: dict | None) -> dict | None:
+    """T-178: ejemplo semilla compacto para la IA (formato y nivel, sin pasaje ni conceptResults).
+
+    Conserva un error común de muestra (respuesta + feedback) para que la IA siga generándolos:
+    cada error común ahorra después una corrección con IA.
+    """
+    if not example or not settings.ai_compact_examples:
+        return example
+    compact = {k: example[k] for k in PROMPT_EXAMPLE_KEYS if example.get(k) not in (None, [], "")}
+    if compact.get("acceptedAnswers"):
+        compact["acceptedAnswers"] = compact["acceptedAnswers"][:PROMPT_EXAMPLE_MAX_ANSWERS]
+    first_error = next(
+        (e for e in example.get("commonErrors") or [] if isinstance(e, dict) and e.get("answer")), None
+    )
+    if first_error:
+        compact["commonErrors"] = [
+            {"answer": first_error["answer"], "feedback": first_error.get("feedback", "")}
+        ]
+    return compact
+
+
+def _public_slot(slot: dict) -> dict:
+    """Lo que viaja a la IA: sin `examples` (solo para el simulado) y con el ejemplo compacto."""
+    public = {k: v for k, v in slot.items() if k != "examples"}
+    if "example" in public:
+        public["example"] = _prompt_example(public["example"])
+    return public
+
+
 def generate_content(
     db: Session, study: StudyContext, session: ClassSession
 ) -> AIResult | None:
     request = session.generation_request or {}
     slots = request.get("slots") or []
-    public_slots = [{k: v for k, v in s.items() if k != "examples"} for s in slots]
+    public_slots = [_public_slot(s) for s in slots]
     try:
         result = run_json_task(
             db,

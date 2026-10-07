@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     ai_batch_evaluation: bool = True
     # T-172: fill_blank y rewrite escritos se resuelven por regla antes de ir a la IA.
     ai_rule_first_closed: bool = True
+    # T-178: el ejemplo semilla viaja a la IA en versión compacta.
+    ai_compact_examples: bool = True
+    # T-181: máximo de respuestas por llamada de corrección en lote (examen).
+    ai_batch_max_items: int = 6
 
     # P01 B2B: padrón oficial RNS sincronizado localmente + fallback DEV.
     organization_registry_path: str = "data/rns_registry.db"

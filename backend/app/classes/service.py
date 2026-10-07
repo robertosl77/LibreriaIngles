@@ -269,11 +269,19 @@ def evaluate_pending(db: Session, account: Account, session: ClassSession) -> bo
         _apply(attempt, exercise, evaluation)
 
     # 2) T-171: las que necesitan IA, en UNA llamada si son 2 o más.
+    #    T-181: en tandas de hasta AI_BATCH_MAX_ITEMS (el examen puede traer muchas).
     batched = {}
     if settings.ai_batch_evaluation and len(needs_ai) >= 2:
-        batched = evaluate_batch_with_ai(
-            db, account, session, [(exercise, attempt.raw_answer, spoken) for attempt, exercise, spoken in needs_ai]
-        )
+        size = max(2, settings.ai_batch_max_items)
+        for start in range(0, len(needs_ai), size):
+            chunk = needs_ai[start:start + size]
+            if len(chunk) < 2:
+                break  # una sola: va por la corrección individual
+            batched.update(
+                evaluate_batch_with_ai(
+                    db, account, session, [(exercise, attempt.raw_answer, spoken) for attempt, exercise, spoken in chunk]
+                )
+            )
 
     # 3) Lo que el lote no resolvió (o sin lote): una por una, como antes. Si no hay IA,
     #    evaluate devuelve None y el intento queda pendiente.

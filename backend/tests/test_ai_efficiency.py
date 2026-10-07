@@ -309,3 +309,59 @@ def test_missing_batch_result_falls_back_to_single_call(client, monkeypatch):
     monkeypatch.setattr(mock.MockProvider, "complete_json", drop_one)
     operations = _run_class(client, monkeypatch, batch=True)
     assert sorted(operations) == ["evaluate_answer", "evaluate_batch"]
+
+
+# ---------------------------------------------------------------- segunda tanda (T-178 a T-181)
+
+
+def test_prompt_example_is_compact(monkeypatch):
+    from app.classes.generation import _prompt_example, _public_slot
+
+    example = {
+        "type": "fill_blank",
+        "instruction": "Complete.",
+        "question": "My sister ___ a nurse.",
+        "passage": "long text " * 20,
+        "acceptedAnswers": ["is", "'s", "is really", "is truly"],
+        "commonErrors": [
+            {"answer": "are", "feedback": "Con she se usa is.", "conceptResults": [{"concept": "x", "status": "incorrect"}]},
+            {"answer": "am", "feedback": "No."},
+        ],
+        "expectedConcepts": ["be_agreement"],
+    }
+    monkeypatch.setattr(settings, "ai_compact_examples", True)
+    compact = _prompt_example(example)
+    assert "passage" not in compact
+    assert compact["acceptedAnswers"] == ["is", "'s", "is really"]
+    assert compact["commonErrors"] == [{"answer": "are", "feedback": "Con she se usa is."}]
+    public = _public_slot({"skillKey": "k", "example": example, "examples": [example]})
+    assert "examples" not in public and public["example"] == compact
+    monkeypatch.setattr(settings, "ai_compact_examples", False)
+    assert _prompt_example(example) is example
+
+
+def test_cached_input_tokens_by_provider():
+    from app.ai.providers import cached_input_tokens
+
+    assert cached_input_tokens({"usageMetadata": {"promptTokenCount": 3000, "cachedContentTokenCount": 2048}}) == 2048
+    assert cached_input_tokens({"usageMetadata": {"promptTokenCount": 3000}}) == 0
+    assert cached_input_tokens({"usage": {"prompt_tokens_details": {"cached_tokens": 1024}}}) == 1024
+    assert cached_input_tokens({"usage": {"cache_read_input_tokens": 512, "input_tokens": 900}}) == 512
+    assert cached_input_tokens({"usage": {"input_tokens": 120}}) is None
+    assert cached_input_tokens(None) is None
+
+
+def test_evaluation_output_is_trimmed():
+    from app.classes.prompts import EVALUATION_BATCH_SCHEMA, EVALUATION_SCHEMA, EVALUATION_SYSTEM
+
+    assert "scoreSuggested" not in EVALUATION_SYSTEM
+    assert "scoreSuggested" not in EVALUATION_SCHEMA["properties"]
+    assert "scoreSuggested" not in EVALUATION_BATCH_SCHEMA["properties"]["results"]["items"]["properties"]
+    assert "at most 2 suggestions" in EVALUATION_SYSTEM
+
+
+def test_batch_is_split_by_max_items(client, monkeypatch):
+    monkeypatch.setattr(settings, "ai_batch_max_items", 2)
+    operations = _run_class(client, monkeypatch, batch=True)
+    # 3 respuestas para IA con máximo 2: un lote de 2 + la restante individual.
+    assert sorted(operations) == ["evaluate_answer", "evaluate_batch"]

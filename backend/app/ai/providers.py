@@ -143,6 +143,30 @@ def gemini_generation_config(model: str | None, task: dict | None, base: dict) -
     return config
 
 
+# T-179: tokens de entrada que el proveedor sirvió desde su caché de prefijo.
+_CACHED_TOKEN_PATHS = (
+    ("usageMetadata", "cachedContentTokenCount"),  # Gemini
+    ("usage", "prompt_tokens_details", "cached_tokens"),  # OpenAI
+    ("usage", "cache_read_input_tokens"),  # Anthropic
+)
+
+
+def cached_input_tokens(payload: dict | None) -> int | None:
+    """Tokens cacheados informados por el proveedor (None si no los informa)."""
+    if not isinstance(payload, dict):
+        return None
+    for path in _CACHED_TOKEN_PATHS:
+        node = payload
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+        if isinstance(node, int) and not isinstance(node, bool) and node >= 0:
+            return node
+    # Gemini omite el campo cuando no hubo caché: si informa usage, es 0.
+    if isinstance(payload.get("usageMetadata"), dict):
+        return 0
+    return None
+
+
 def parse_json_text(text: str) -> dict:
     """Extrae un objeto JSON aunque venga envuelto en ```json ... ```."""
     cleaned = text.strip()
