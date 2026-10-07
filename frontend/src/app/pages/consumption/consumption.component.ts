@@ -917,6 +917,8 @@ export class ConsumptionComponent implements OnInit {
       objectivesChars: 'Tamaño de objetivos',
       expectedConceptCount: 'Conceptos esperados',
       secondarySkillCount: 'Skills secundarios',
+      secondaryAreaCount: 'Áreas para evidencia secundaria',
+      itemCount: 'Ejercicios corregidos juntos',
       conversationTurns: 'Turnos de conversación',
       conversationChars: 'Tamaño del historial',
       slotCount: 'Slots solicitados',
@@ -967,6 +969,7 @@ export class ConsumptionComponent implements OnInit {
     const labels: Record<string, string> = {
       generate_class: 'Generación de clase',
       evaluate_answer: 'Corrección de ejercicio',
+      evaluate_batch: 'Corrección de clase (lote)',
       transcribe_audio: 'Transcripción / análisis de audio',
       campaign_assist: 'Asistente de campaña'
     };
@@ -1036,6 +1039,7 @@ export class ConsumptionComponent implements OnInit {
     const labels: Record<string, string> = {
       generate_class: row.subject?.type === 'EXAM' ? 'Generar examen' : 'Generar clase',
       evaluate_answer: 'Corregir ejercicio',
+      evaluate_batch: 'Corregir clase',
       transcribe_audio: 'Transcribir / analizar audio',
       campaign_assist: 'Asistente de campaña'
     };

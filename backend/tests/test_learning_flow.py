@@ -93,7 +93,11 @@ def test_full_class_flow(client) -> None:
     assert retaken["history"][0]["attempt"] == 1
 
 
-def test_all_providers_down_keeps_answers_and_recovers(client) -> None:
+def test_all_providers_down_keeps_answers_and_recovers(client, monkeypatch) -> None:
+    # T-172 resuelve por regla parte de fill_blank/rewrite: acá se prueba el camino con IA.
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ai_rule_first_closed", False)
     headers = _setup(client)
     klass = client.post(f"{API}/classes", headers=headers).json()
     writing = next((e for e in klass["exercises"] if e["type"] == "short_writing"), None)

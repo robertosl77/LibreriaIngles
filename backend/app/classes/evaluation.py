@@ -26,13 +26,17 @@ from app.ai.usage import AIUsageContext
 from app.classes.reference import exercise_display_number
 from app.classes.normalize import fill_blank_variants, normalize_answer
 from app.classes.prompts import (
+    BATCH_EVALUATION_NOTE,
+    EVALUATION_BATCH_SCHEMA,
     EVALUATION_SCHEMA,
+    evaluation_batch_user_prompt,
     evaluation_system,
     evaluation_user_prompt,
     short_skill_key,
 )
 from app.classes.spelling import SPELLING_SCORE, spelling_slips
 from app.classes.spoken import normalize_spoken, pronunciation_slips
+from app.core.config import settings
 from app.curriculum.service import find_skill, get_level
 from app.learning.models import (
     AIEvaluationCache,
@@ -661,15 +665,57 @@ def _finish(exercise: Exercise, answer: str, evaluation: Evaluation, *, spoken: 
     return evaluation
 
 
-def evaluate(
-    db: Session, account: Account, exercise: Exercise, answer: str, *, spoken: bool = False
-) -> Evaluation | None:
-    """Devuelve la evaluación, o None si hace falta IA y no hay ninguna disponible.
+# ---------------------------------------------------------------- T-172 reglas primero en cerrados
 
-    Con respuesta hablada (`spoken`) se compara la transcripción sin puntuación, y una
-    palabra que suena parecida a la esperada es error de pronunciación, no de contenido.
+REWRITE_MIN_OVERLAP = 0.5  # rewrite que comparte menos de la mitad de las palabras: incorrecto por regla
+CLOSED_RULE_FEEDBACK = (
+    "No es la respuesta esperada. Si creés que tu respuesta es correcta, podés pedir que la revisen."
+)
+
+
+def _word_overlap(accepted: list[str], answer: str) -> float:
+    """Mayor proporción de palabras de una respuesta aceptada que aparecen en la del alumno."""
+    said = set(normalize_answer(answer).split())
+    best = 0.0
+    for item in accepted:
+        words = set(normalize_answer(item).split())
+        if words:
+            best = max(best, len(words & said) / len(words))
+    return best
+
+
+def _closed_rule_incorrect(exercise: Exercise, answer: str) -> Evaluation | None:
+    """fill_blank/rewrite ESCRITOS que no coinciden con nada conocido: incorrecto sin IA.
+
+    `acceptedAnswers` es exhaustiva por regla de generación; si faltaba una variante válida,
+    la apelación (IA) la corrige y la incorpora a la answer key.
     """
-    normalize = normalize_spoken if spoken else normalize_answer
+    if not settings.ai_rule_first_closed:
+        return None
+    if exercise.exercise_type == "fill_blank":
+        pass
+    elif exercise.exercise_type == "rewrite":
+        if _word_overlap(_accepted(exercise), answer) >= REWRITE_MIN_OVERLAP:
+            return None  # parecida: puede ser una variante válida, decide la IA
+    else:
+        return None
+    result = _rule_incorrect(exercise, answer)
+    result["feedback"] = CLOSED_RULE_FEEDBACK
+    return Evaluation(EvaluationSource.RULE_MATCH, result, 0.0)
+
+
+# ---------------------------------------------------------------- cascada
+
+
+def _normalizer(spoken: bool):
+    return normalize_spoken if spoken else normalize_answer
+
+
+def evaluate_without_ai(
+    db: Session, exercise: Exercise, answer: str, *, spoken: bool = False
+) -> Evaluation | None:
+    """Reglas, errores comunes, ortografía y caché. None = hace falta la IA."""
+    normalize = _normalizer(spoken)
     normalized = normalize(answer)
 
     if not normalized:
@@ -710,19 +756,128 @@ def evaluate(
         # Una transcripción puede diferir por cosas del habla: decide la IA si la hay.
         if exercise.evaluation_mode == EvaluationMode.DETERMINISTIC and not spoken:
             return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0), spoken=spoken)
+        if not spoken:
+            closed = _closed_rule_incorrect(exercise, answer)
+            if closed is not None:
+                return _finish(exercise, answer, closed, spoken=False)
 
     cached = _cache_get(db, exercise, normalized)
     if cached is not None:
         return _finish(exercise, answer, Evaluation(EvaluationSource.AI, dict(cached), ai_score(exercise, cached)), spoken=spoken)
+    return None
 
+
+def evaluate(
+    db: Session, account: Account, exercise: Exercise, answer: str, *, spoken: bool = False
+) -> Evaluation | None:
+    """Devuelve la evaluación, o None si hace falta IA y no hay ninguna disponible.
+
+    Con respuesta hablada (`spoken`) se compara la transcripción sin puntuación, y una
+    palabra que suena parecida a la esperada es error de pronunciación, no de contenido.
+    """
+    evaluation = evaluate_without_ai(db, exercise, answer, spoken=spoken)
+    if evaluation is not None:
+        return evaluation
     try:
         result = evaluate_with_ai(db, account, exercise, answer)
     except NoAIAvailable:
         if spoken and exercise.evaluation_mode == EvaluationMode.DETERMINISTIC:
             return _finish(exercise, answer, Evaluation(EvaluationSource.RULE_MATCH, _rule_incorrect(exercise, answer), 0.0), spoken=spoken)
         return None
-    _cache_put(db, exercise, normalized, result)
+    _cache_put(db, exercise, _normalizer(spoken)(answer), result)
     return _finish(exercise, answer, Evaluation(EvaluationSource.AI, result, ai_score(exercise, result)), spoken=spoken)
+
+
+# ---------------------------------------------------------------- T-171 corrección por lote
+
+
+def evaluate_batch_with_ai(
+    db: Session,
+    account: Account,
+    session: ClassSession,
+    items: list[tuple[Exercise, str, bool]],
+) -> dict[int, Evaluation]:
+    """Corrige en UNA llamada varias respuestas que necesitan IA. Devuelve lo que la IA resolvió;
+    lo que falte (o si la llamada falla) lo corrige el llamador uno por uno, como antes."""
+    if not items:
+        return {}
+    level = items[0][0].level
+    payloads = []
+    for exercise, answer, _spoken in items:
+        payload = _ai_payload(db, exercise, answer)
+        payload.pop("level", None)
+        payloads.append({"id": exercise.id, **payload})
+    exam = session.kind.value == "EXAM"
+    try:
+        result = run_json_task(
+            db,
+            account,
+            system=evaluation_system(level) + BATCH_EVALUATION_NOTE,
+            user=evaluation_batch_user_prompt(level, payloads),
+            task={
+                "kind": "evaluate_batch",
+                "schema": EVALUATION_BATCH_SCHEMA,
+                "items": [
+                    {
+                        "id": exercise.id,
+                        "type": exercise.exercise_type,
+                        "acceptedAnswers": exercise.answer_key.get("acceptedAnswers") or [],
+                        "expectedConcepts": exercise.expected_concepts or [],
+                        "secondarySkillCandidates": _secondary_skill_candidates(exercise),
+                        "answer": answer,
+                    }
+                    for exercise, answer, _spoken in items
+                ],
+            },
+            usage_context=AIUsageContext(
+                organization_id=session.organization_id,
+                membership_id=session.membership_id,
+                subject_type=session.kind.value,
+                subject_id=session.id,
+                subject_label=f"{'Examen' if exam else 'Clase'} #{session.id} · corrección de {len(items)} ejercicios",
+                subject_route=f"/app/clase/{session.id}",
+                diagnostic=_batch_diagnostic(payloads),
+            ),
+        )
+    except NoAIAvailable:
+        return {}
+
+    raw: dict[int, dict] = {}
+    for row in result.data.get("results") or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            raw.setdefault(int(row.get("id")), row)
+        except (TypeError, ValueError):
+            continue
+
+    snapshot = connection_snapshot(result.connection)
+    evaluations: dict[int, Evaluation] = {}
+    for exercise, answer, spoken in items:
+        data = raw.get(exercise.id)
+        if data is None:
+            continue
+        sanitized = _sanitize_ai_result(exercise, data)
+        sanitized = _add_mechanics_evidence(exercise, answer, sanitized, spoken=spoken)
+        sanitized = {**sanitized, "ai": snapshot}
+        _cache_put(db, exercise, _normalizer(spoken)(answer), sanitized)
+        evaluations[exercise.id] = _finish(
+            exercise, answer, Evaluation(EvaluationSource.AI, sanitized, ai_score(exercise, sanitized)), spoken=spoken
+        )
+    return evaluations
+
+
+def _batch_diagnostic(payloads: list[dict]) -> dict:
+    types: dict[str, int] = {}
+    for payload in payloads:
+        key = str(payload.get("type"))
+        types[key] = types.get(key, 0) + 1
+    return {
+        "itemCount": len(payloads),
+        "typeCounts": types,
+        "answerChars": sum(len(str(p.get("studentAnswer") or "")) for p in payloads),
+        "conversationTurns": sum(len(p.get("conversationContext") or []) for p in payloads),
+    }
 
 
 def apply_evaluation(attempt: Attempt, evaluation: Evaluation) -> None:

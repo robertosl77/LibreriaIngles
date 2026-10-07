@@ -168,3 +168,144 @@ def test_schemas_use_gemini_types_only():
 
     for schema in (GENERATION_SCHEMA, EVALUATION_BATCH_SCHEMA):
         walk(schema)
+
+
+# ---------------------------------------------------------------- T-172 reglas primero
+
+
+def _closed_exercise(exercise_type: str, accepted: list[str], prompt: str):
+    from app.learning.models import EvaluationMode, Exercise, ResponseMode
+
+    return Exercise(
+        id=1,
+        level="A1",
+        area="grammar",
+        skill_key="a1.grammar.to_be.negative",
+        exercise_type=exercise_type,
+        prompt=prompt,
+        expected_concepts=["be_negative"],
+        answer_key={"acceptedAnswers": accepted, "commonErrors": []},
+        evaluation_mode=EvaluationMode.HYBRID,
+        response_mode=ResponseMode.WRITE,
+    )
+
+
+class _NoCacheDb:
+    def scalar(self, *args, **kwargs):
+        return None
+
+
+def test_fill_blank_mismatch_is_decided_by_rule(monkeypatch):
+    from app.classes.evaluation import CLOSED_RULE_FEEDBACK, evaluate_without_ai
+    from app.learning.models import EvaluationSource
+
+    monkeypatch.setattr(settings, "ai_rule_first_closed", True)
+    ex = _closed_exercise("fill_blank", ["aren't", "are not"], "My parents ___ at work today.")
+    ev = evaluate_without_ai(_NoCacheDb(), ex, "is")
+    assert ev.source == EvaluationSource.RULE_MATCH and ev.score == 0.0
+    assert ev.result["feedback"] == CLOSED_RULE_FEEDBACK
+    # Hablada: la transcripción puede tener ruido, decide la IA.
+    assert evaluate_without_ai(_NoCacheDb(), ex, "is", spoken=True) is None
+    # Apagado: vuelve a la IA como antes.
+    monkeypatch.setattr(settings, "ai_rule_first_closed", False)
+    assert evaluate_without_ai(_NoCacheDb(), ex, "is") is None
+
+
+def test_rewrite_far_is_rule_near_goes_to_ai(monkeypatch):
+    from app.classes.evaluation import evaluate_without_ai
+
+    monkeypatch.setattr(settings, "ai_rule_first_closed", True)
+    ex = _closed_exercise("rewrite", ["They are not at home.", "They aren't at home."], "They are at home.")
+    far = evaluate_without_ai(_NoCacheDb(), ex, "I like pizza very much")
+    assert far is not None and far.score == 0.0
+    # Comparte la mayoría de las palabras: puede ser una variante válida → IA.
+    assert evaluate_without_ai(_NoCacheDb(), ex, "They is not at home.") is None
+    # Lo que ya coincide sigue siendo correcto por regla.
+    assert evaluate_without_ai(_NoCacheDb(), ex, "they aren't at home").score == 100.0
+
+
+# ---------------------------------------------------------------- T-171 lote
+
+
+def _forced_slots():
+    import random
+
+    from app.classes.generation import pair_conversation_slots, slot_for
+    from app.curriculum.service import get_level
+
+    rng = random.Random(7)
+    skills = {s.key: s for s in get_level("A1").skills}
+    chosen = [
+        skills["a1.grammar.to_be.negative"],
+        skills["a1.writing.about_me.simple_sentences"],
+        skills["a1.conversation.social_basics.greetings"],
+        skills["a1.conversation.social_basics.introductions"],
+    ]
+    slots = [slot_for(skill, rng) for skill in chosen]
+    slots[0]["allowedTypes"] = ["fill_blank"]
+    slots[0]["example"] = next(e for e in chosen[0].examples if e["type"] == "fill_blank")
+    slots[0]["examples"] = [slots[0]["example"]]
+    for slot in slots:
+        slot["presentation"], slot["response"] = "READ", "WRITE"
+    pair_conversation_slots(slots)
+    return slots
+
+
+def _run_class(client, monkeypatch, *, batch: bool) -> list[str]:
+    from sqlalchemy import select
+
+    from app.ai.models import AIUsageEvent
+    from app.classes import generation
+    from app.db import SessionLocal
+    from conftest import login
+
+    monkeypatch.setattr(settings, "ai_batch_evaluation", batch)
+    monkeypatch.setattr(generation, "select_slots", lambda *a, **k: _forced_slots())
+    headers = login(client)
+    assert client.put("/api/v1/me/level", json={"level": "A1"}, headers=headers).status_code == 200
+    client.post(
+        "/api/v1/ai/connections",
+        json={"provider": "MOCK", "name": "Simulado", "model": "mock", "priority": 1},
+        headers=headers,
+    )
+    klass = client.post("/api/v1/classes", headers=headers).json()
+    assert klass["status"] == "READY", klass
+    answers = {
+        str(e["id"]): ("zzz-wrong" if e["type"] == "fill_blank" else "Hello! I am fine, thank you. I live in Buenos Aires with my family.")
+        for e in klass["exercises"]
+    }
+    result = client.post(f"/api/v1/classes/{klass['id']}/submit", json={"answers": answers}, headers=headers).json()
+    assert result["status"] == "COMPLETED", result
+    assert all(e["result"] is not None for e in result["exercises"])
+    with SessionLocal() as db:
+        return [
+            e.operation
+            for e in db.scalars(select(AIUsageEvent).where(AIUsageEvent.operation.like("evaluate%"))).all()
+        ]
+
+
+def test_class_with_several_open_answers_is_corrected_in_one_call(client, monkeypatch):
+    operations = _run_class(client, monkeypatch, batch=True)
+    # 1 short_writing + 2 turnos de conversación en una sola llamada; el fill_blank fue por regla.
+    assert operations == ["evaluate_batch"]
+
+
+def test_batch_can_be_turned_off(client, monkeypatch):
+    operations = _run_class(client, monkeypatch, batch=False)
+    assert operations == ["evaluate_answer"] * 3
+
+
+def test_missing_batch_result_falls_back_to_single_call(client, monkeypatch):
+    from app.ai import mock
+
+    original = mock.MockProvider.complete_json
+
+    def drop_one(self, system, user, task):
+        data = original(self, system, user, task)
+        if task.get("kind") == "evaluate_batch":
+            data["results"] = data["results"][1:]
+        return data
+
+    monkeypatch.setattr(mock.MockProvider, "complete_json", drop_one)
+    operations = _run_class(client, monkeypatch, batch=True)
+    assert sorted(operations) == ["evaluate_answer", "evaluate_batch"]

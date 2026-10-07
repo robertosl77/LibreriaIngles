@@ -175,6 +175,19 @@ def evaluation_user_prompt(payload: dict) -> str:
     return "Evaluate this answer.\n" + compact_json(payload)
 
 
+# T-171: varias respuestas de la misma clase en una sola llamada.
+BATCH_EVALUATION_NOTE = """
+BATCH MODE: "items" contains several answers from the same class. Evaluate EACH item independently,
+applying every rule above to that item only (its own type, objectives, references, secondaryAreas and
+conversationContext). Return ONLY {"results": [ {"id": <the item id>, ...the evaluation object...} ]}
+with exactly one result per item and the same ids.
+"""
+
+
+def evaluation_batch_user_prompt(level: str | None, items: list[dict]) -> str:
+    return "Evaluate these answers.\n" + compact_json({"level": level, "items": items})
+
+
 # ---------------------------------------------------------------- T-170 catálogo compacto por nivel
 
 # Áreas que pueden recibir evidencia secundaria (T-048). Writing solo en respuestas escritas.
