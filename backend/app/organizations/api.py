@@ -1,10 +1,14 @@
 from fastapi import APIRouter, HTTPException, status
-from pydantic import AnyHttpUrl, BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 
 from app.core.config import settings
-
 from app.core.deps import DbSession
+from app.organizations.contact_validation import (
+    check_website,
+    normalize_phone,
+    normalize_website,
+)
 from app.organizations.job_titles import (
     get_job_title,
     resolve_job_title,
@@ -50,6 +54,15 @@ class JobTitleResolveIn(BaseModel):
     confirmSimilar: bool = False
 
 
+class WebsiteCheckIn(BaseModel):
+    website: str = Field(min_length=3, max_length=500)
+
+
+class PhoneNormalizeIn(BaseModel):
+    country: str = Field(default="AR", min_length=2, max_length=2)
+    phone: str = Field(min_length=3, max_length=64)
+
+
 def _job_title_payload(row: JobTitle, score: float | None = None) -> dict:
     payload = {"id": row.id, "name": row.name}
     if score is not None:
@@ -86,9 +99,33 @@ def resolve_job_title_endpoint(payload: JobTitleResolveIn, db: DbSession) -> dic
     }
 
 
+@router.post("/website/check")
+def website_check(payload: WebsiteCheckIn) -> dict:
+    result = check_website(payload.website)
+    return {
+        "state": result.state,
+        "normalizedUrl": result.normalized_url,
+        "message": result.message,
+        "statusCode": result.status_code,
+    }
+
+
+@router.post("/phone/normalize")
+def phone_normalize(payload: PhoneNormalizeIn) -> dict:
+    try:
+        result = normalize_phone(payload.phone, payload.country)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    return {
+        "e164": result.e164,
+        "display": result.display,
+        "phoneType": result.phone_type,
+    }
+
+
 class OnboardingCreateIn(CompanyLookupIn):
     displayName: str | None = Field(default=None, max_length=120)
-    website: AnyHttpUrl | None = None
+    website: str | None = Field(default=None, max_length=500)
     referent: ReferentIn
 
 
@@ -130,6 +167,7 @@ def onboarding_config() -> dict:
             {
                 "code": "AR",
                 "name": "Argentina",
+                "dialCode": "+54",
                 "taxIdTypes": [{"code": "CUIT", "name": "CUIT"}],
             }
         ],
@@ -265,6 +303,18 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
             )
         job_title = resolved_title["item"]
 
+    website: str | None = None
+    if payload.website and payload.website.strip():
+        try:
+            website = normalize_website(payload.website)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+    try:
+        phone = normalize_phone(payload.referent.phone, result.country)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
     display_name = (payload.displayName or "").strip() or result.legal_name
     onboarding = OrganizationOnboarding(
         status=_status_for(result),
@@ -279,13 +329,13 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
         fiscal_address=result.fiscal_address,
         legal_address=result.legal_address,
         primary_activity=result.primary_activity,
-        website=str(payload.website) if payload.website else None,
+        website=website,
         contact_first_name=payload.referent.firstName.strip(),
         contact_last_name=payload.referent.lastName.strip(),
         contact_email=str(payload.referent.email).strip().lower(),
         contact_job_title_id=job_title.id,
         contact_job_title=job_title.name,
-        contact_phone=payload.referent.phone.strip(),
+        contact_phone=phone.e164,
         acting_capacity=payload.referent.actingCapacity,
         authority_declared=True,
         verification_source=result.source,
@@ -369,7 +419,7 @@ def dev_purge_onboarding(
     if existing_org is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "El CUIT pertenece a una organización ya provisionada. P01 no elimina organizaciones reales.",
+            "El CUIT pertenece a una organización ya provisionada. Esta herramienta no elimina organizaciones reales.",
         )
 
     rows = db.scalars(
