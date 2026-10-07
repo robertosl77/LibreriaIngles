@@ -78,7 +78,7 @@ def test_owner_can_copy_own_key_and_action_is_audited(client) -> None:
         assert [row.action for row in rows] == ["COPY"]
         assert all(row.account_id is not None for row in rows)
         assert all(row.connection_name == "Owner personal" for row in rows)
-        assert all(row.owner_type == "ACCOUNT" for row in rows)
+        assert all(row.owner_type == "PLATFORM" for row in rows)  # T-200: la lista del dueño es la de plataforma
 
 
 def test_owner_can_copy_platform_key(client) -> None:
@@ -128,3 +128,13 @@ def test_connection_without_key_cannot_be_copied(client) -> None:
         headers=owner,
     )
     assert copied.status_code == 409
+
+
+def test_owner_connections_live_in_platform_list(client) -> None:
+    """T-200: sr.macros tiene una sola lista (la de plataforma); 'account' y 'platform' son la misma."""
+    owner = login(client, "owner@example.com")
+    created = _create_keyed_connection(client, owner, name="Única", key="k-1234")
+    assert created
+    account_list = client.get(f"{API}/ai/connections", headers=owner).json()
+    platform_list = client.get(f"{API}/ai/connections", headers=owner, params={"scope": "platform"}).json()
+    assert [c["id"] for c in account_list] == [c["id"] for c in platform_list] == [created]

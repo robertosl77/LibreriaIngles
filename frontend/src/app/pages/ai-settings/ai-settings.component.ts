@@ -1,5 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { ApiService } from '../../core/api.service';
@@ -10,26 +10,35 @@ import { MyServiceComponent } from '../../shared/my-service.component';
 
 @Component({
   selector: 'app-ai-settings',
-  imports: [ConnectionsManagerComponent, MyServiceComponent, RouterLink],
+  imports: [ConnectionsManagerComponent, MyServiceComponent],
   template: `
     <main class="page stack">
       <div class="page-header">
         <div>
-          <h1>{{ keysUnused() ? 'IA' : 'Conexiones de IA' }}</h1>
-          @if (keysUnused()) {
+          @if (isOwner()) {
+            <h1>IA de la plataforma</h1>
             <p class="muted">
-              Tus clases se generan y corrigen con la IA incluida en tu servicio. No tenés que
-              configurar nada.
+              Estas conexiones las usás vos (clases, asistente de campañas) y las heredan todos los que
+              tienen un servicio con la IA de la plataforma. Se usan en orden de prioridad (1 = primero):
+              si una falla o se queda sin cuota, la app pasa sola a la siguiente. Las API keys se guardan
+              cifradas; podés copiarlas explícitamente desde el icono junto a cada credencial.
+            </p>
+          } @else if (keysUnused()) {
+            <h1>IA</h1>
+            <p class="muted">
+              @if (corporate()) {
+                Tu organización administra la IA de tus clases. No tenés que configurar nada.
+              } @else {
+                Tus clases se generan y corrigen con la IA de la plataforma incluida en tu servicio.
+                No tenés que configurar nada.
+              }
             </p>
           } @else {
+            <h1>Conexiones de IA</h1>
             <p class="muted">
               Se usan en orden de prioridad (1 = primero). Si una falla o se queda sin cuota, la app
-              pasa sola a la siguiente. Las API keys se guardan cifradas.
-              @if (isOwner()) {
-                Como dueño de la plataforma, podés copiarlas explícitamente desde el icono junto a cada credencial.
-              } @else {
-                Una vez guardadas, no vuelven al navegador.
-              }
+              pasa sola a la siguiente. Las API keys se guardan cifradas. Una vez guardadas, no vuelven
+              al navegador.
             </p>
           }
         </div>
@@ -37,7 +46,7 @@ import { MyServiceComponent } from '../../shared/my-service.component';
 
       <app-my-service />
 
-      @if (!keysUnused()) {
+      @if (isOwner() || !keysUnused()) {
         @if (active().default; as current) {
           <p class="banner banner-info small">
             En uso ahora: <strong>{{ current.connection }}</strong>
@@ -58,19 +67,29 @@ import { MyServiceComponent } from '../../shared/my-service.component';
           </p>
         }
 
-        @if (isOwner()) {
+        @if (hybrid()) {
           <p class="banner banner-info small">
-            Las conexiones de la plataforma, sus límites y el consumo se administran en el
-            <a routerLink="/app/plataforma">portal de plataforma</a>.
+            Si tus conexiones no están disponibles, tus clases usan la IA
+            {{ corporate() ? 'que administra tu organización' : 'de la plataforma incluida en tu servicio' }}.
           </p>
         }
 
-        <app-connections-manager
-          scope="account"
-          title="Tus conexiones"
-          [focusConnectionId]="focusedConnectionId"
-          (changed)="refreshActive()"
-        />
+        @if (isOwner()) {
+          <!-- T-200: una sola lista para sr.macros, la de la plataforma (la usa él y la heredan todos). -->
+          <app-connections-manager
+            scope="platform"
+            title="Conexiones de la plataforma"
+            [focusConnectionId]="focusedConnectionId"
+            (changed)="refreshActive()"
+          />
+        } @else {
+          <app-connections-manager
+            scope="account"
+            title="Tus conexiones"
+            [focusConnectionId]="focusedConnectionId"
+            (changed)="refreshActive()"
+          />
+        }
       } @else if (ownKeys() > 0) {
         <!-- Plataforma con keys propias ya cargadas: puede verlas, editarlas o borrarlas. -->
         <app-connections-manager
@@ -95,6 +114,12 @@ export class AiSettingsComponent implements OnInit {
   /** T-055: con un servicio que no usa keys propias (Plataforma) no se ofrece cargarlas. */
   readonly keysUnused = computed(() => this.auth.me()?.service.ownKeys === 'unused');
   readonly ownKeys = computed(() => this.auth.me()?.ai.own ?? 0);
+  /** T-200: el empleado no ve de dónde viene la IA en detalle: la administra su organización. */
+  readonly corporate = computed(() => this.auth.me()?.service.linkType === 'CORPORATE');
+  readonly hybrid = computed(() => {
+    const service = this.auth.me()?.service;
+    return !this.isOwner() && !!service?.usesOwnKeys && !!service?.usesPlatform;
+  });
   readonly active = signal<ActiveAiConnections>({ default: null, audio: null });
 
   private connectionIdFromQuery(): number | null {

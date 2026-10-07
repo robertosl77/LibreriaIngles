@@ -604,7 +604,8 @@ def test_campaign_assist_uses_platform_ai_only_and_does_not_create_campaign(clie
         )
         assert len(events) == 1
         assert events[0].owner_type == AIConnectionOwnerType.PLATFORM
-        assert events[0].connection_id == platform.json()["id"]
+        # T-200: lo que sr.macros carga en el menú IA ES la plataforma; usa la de mayor prioridad.
+        assert events[0].connection_id == own.json()["id"]
         assert events[0].execution_id
         assert events[0].attempt_index == 1
 

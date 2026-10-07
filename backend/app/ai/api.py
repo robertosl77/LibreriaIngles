@@ -77,6 +77,9 @@ def _owner_filter(account: Account, scope: Scope):
         if not _is_platform_owner(account):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo PLATFORM_OWNER.")
         return AIConnectionOwnerType.PLATFORM, None
+    if _is_platform_owner(account):
+        # T-200: sr.macros tiene una sola lista, la de la plataforma (menú IA).
+        return AIConnectionOwnerType.PLATFORM, None
     return AIConnectionOwnerType.ACCOUNT, account.id
 
 

@@ -119,9 +119,9 @@ def _me_payload(study, db) -> dict:
     service_payload["usesOwnKeys"] = uses_own
     service_payload["usesPlatform"] = uses_platform
     if account.platform_role == PlatformRole.PLATFORM_OWNER:
-        # El dueño no tiene servicio: usa sus keys y las de la plataforma (T-004: "empresa dueña").
+        # El dueño no tiene servicio: configura y usa las conexiones de la plataforma (T-200).
         service_payload.update(
-            name="Dueño de la plataforma", source="HYBRID", ownKeys="optional", granted=False
+            name="Dueño de la plataforma", source="PLATFORM", ownKeys="unused", granted=False
         )
     return {
         "account": {

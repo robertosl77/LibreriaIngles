@@ -81,7 +81,7 @@ const SOURCE_SHORT: Record<AiSource, string> = {
                 </div>
 
                 <div class="cell" role="cell" data-label="IA que usa">
-                  <span>{{ a.isPlatformOwner ? 'Propias + plataforma' : sourceShort[a.service.source] }}</span>
+                  <span>{{ a.isPlatformOwner ? 'Plataforma (la configura)' : sourceShort[a.service.source] }}</span>
                   @if (a.service.linkType === 'CORPORATE') { <span class="sub">Corporativa</span> }
                 </div>
 
