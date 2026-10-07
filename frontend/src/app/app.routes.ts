@@ -13,6 +13,7 @@ import { HomeComponent } from './pages/home/home.component';
 import { LandingComponent } from './pages/landing/landing.component';
 import { LevelComponent } from './pages/level/level.component';
 import { LoginComponent } from './pages/login/login.component';
+import { OrganizationOnboardingComponent } from './pages/organization-onboarding/organization-onboarding.component';
 import { CampaignsAdminComponent } from './pages/platform/campaigns-admin.component';
 import { PlatformConfigComponent } from './pages/platform/platform-config.component';
 import { PlatformOverviewComponent } from './pages/platform/platform-overview.component';
@@ -24,6 +25,7 @@ export const routes: Routes = [
   { path: 'certificado/:code', component: CertificateComponent, title: 'Certificado · Librería Inglés' },
   { path: 'invitacion/:token', component: InvitationComponent, title: 'Invitación · Librería Inglés' },
   { path: 'login', component: LoginComponent, canActivate: [guestGuard], title: 'Ingresar · Librería Inglés' },
+  { path: 'empresa/alta', component: OrganizationOnboardingComponent, title: 'Registrar organización · Librería Inglés' },
   {
     path: 'app',
     component: ShellComponent,

@@ -985,3 +985,133 @@ export interface Certificate {
   issuer: string;
   notice: string;
 }
+
+
+export type OrganizationActingCapacity =
+  | 'LEGAL_REPRESENTATIVE'
+  | 'PROXY'
+  | 'AUTHORIZED_EMPLOYEE'
+  | 'OTHER';
+
+export interface OrganizationOnboardingConfig {
+  countries: Array<{
+    code: string;
+    name: string;
+    taxIdTypes: Array<{ code: string; name: string }>;
+  }>;
+  actingCapacities: Array<{ code: OrganizationActingCapacity; name: string }>;
+  emailVerificationImplemented: boolean;
+  devPurgeAllowed: boolean;
+}
+
+export interface OrganizationCompanyLookupRequest {
+  country: string;
+  taxIdType: string;
+  taxId: string;
+}
+
+export interface OrganizationCompanyLookupResult {
+  state: 'VERIFIED' | 'PENDING' | 'REVIEW_REQUIRED';
+  country: string;
+  taxIdType: string;
+  taxId: string;
+  source: string;
+  message: string;
+  checkedAt: string;
+  developmentSimulation: boolean;
+  company: {
+    legalName: string | null;
+    legalEntityType: string | null;
+    registryJurisdiction: string | null;
+    registryNumber: string | null;
+    fiscalAddress: string | null;
+    legalAddress: string | null;
+    primaryActivity: string | null;
+  };
+  platform: {
+    alreadyRegistered: boolean;
+    onboardingInProgress: boolean;
+    onboardingPublicId: string | null;
+  };
+}
+
+export interface OrganizationOnboardingDraft extends OrganizationCompanyLookupRequest {
+  displayName: string | null;
+  website: string | null;
+  referent: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    jobTitleId: number | null;
+    jobTitle: string;
+    phone: string;
+    actingCapacity: OrganizationActingCapacity;
+    authorityDeclared: boolean;
+  };
+}
+
+export interface OrganizationOnboardingResult {
+  publicId: string;
+  status:
+    | 'DRAFT'
+    | 'COMPANY_VERIFIED'
+    | 'VERIFICATION_PENDING'
+    | 'REVIEW_REQUIRED'
+    | 'ABANDONED'
+    | 'PROVISIONED';
+  company: {
+    country: string;
+    taxIdType: string;
+    taxId: string;
+    legalName: string | null;
+    displayName: string | null;
+    legalEntityType: string | null;
+    registryJurisdiction: string | null;
+    registryNumber: string | null;
+    fiscalAddress: string | null;
+    legalAddress: string | null;
+    primaryActivity: string | null;
+    website: string | null;
+  };
+  referent: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    jobTitleId: number | null;
+    jobTitle: string;
+    phone: string;
+    actingCapacity: OrganizationActingCapacity;
+    emailVerified: boolean;
+  };
+  verification: {
+    source: string | null;
+    message: string | null;
+    checkedAt: string | null;
+    developmentSimulation: boolean;
+  };
+  nextStep:
+    | 'EMAIL_VERIFICATION_PENDING_P02'
+    | 'COMPANY_VERIFICATION_PENDING'
+    | 'MANUAL_REVIEW_REQUIRED';
+}
+
+
+export interface OrganizationOnboardingDevPurgeResult {
+  country: string;
+  taxIdType: string;
+  taxId: string;
+  deletedOnboardings: number;
+}
+
+
+export interface JobTitleOption {
+  id: number;
+  name: string;
+  score?: number;
+}
+
+export interface JobTitleResolveResult {
+  status: 'EXISTING' | 'CREATED' | 'SIMILAR';
+  item: JobTitleOption | null;
+  similar: JobTitleOption[];
+}
