@@ -158,10 +158,15 @@ EXAM_NOTE = (
 )
 
 
+def compact_json(value) -> str:
+    """T-174: el modelo lee igual el JSON sin sangrías; se ahorra ≈35 % de caracteres."""
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
 def generation_user_prompt(level: str, slots: list[dict], purpose: str = "class") -> str:
     header = "Generate a class.\n" if purpose != "exam" else f"Generate a level exam.\n{EXAM_NOTE}\n"
-    return header + json.dumps({"level": level, "slots": slots}, ensure_ascii=False, indent=2)
+    return header + compact_json({"level": level, "slots": slots})
 
 
 def evaluation_user_prompt(payload: dict) -> str:
-    return "Evaluate this answer.\n" + json.dumps(payload, ensure_ascii=False, indent=2)
+    return "Evaluate this answer.\n" + compact_json(payload)

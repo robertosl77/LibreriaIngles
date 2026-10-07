@@ -98,6 +98,51 @@ def _classify_http_error(response: httpx.Response) -> ProviderError:
     return ProviderError(AIConnectionStatus.UNKNOWN_ERROR, f"Error {status}: {body[:200]}")
 
 
+# ---------------------------------------------------------------- T-169 / T-173
+
+# Corrección abierta: hay que juzgar sentido y tarea, se deja un margen de razonamiento.
+OPEN_EXERCISE_TYPES = {"short_writing", "conversation"}
+NO_REASONING_KINDS = {"generate_class", "transcribe_audio"}
+
+
+def reasoning_budget(task: dict | None) -> int | None:
+    """Tokens de razonamiento permitidos para la tarea (None = no se fija, decide el modelo).
+
+    T-169: Gemini 2.5 Flash razona por defecto (≈3.000 tokens por corrección medidos) y se
+    cobra como salida. Transcribir, generar y corregir ítems cerrados no lo necesitan.
+    """
+    if not settings.ai_reasoning_control or not task:
+        return None
+    kind = task.get("kind")
+    if kind in NO_REASONING_KINDS:
+        return 0
+    if kind == "evaluate_answer":
+        types = [(task.get("exercise") or {}).get("type")]
+    elif kind == "evaluate_batch":
+        types = [item.get("type") for item in task.get("items") or [] if isinstance(item, dict)]
+    else:
+        return None
+    if any(t in OPEN_EXERCISE_TYPES for t in types):
+        return max(0, settings.ai_reasoning_budget_open)
+    return 0
+
+
+def gemini_budget_supported(model: str | None) -> bool:
+    """Solo Gemini 2.5 Flash / Flash-Lite aceptan presupuesto 0; otras familias no se tocan."""
+    return (model or "").lower().startswith("gemini-2.5-flash")
+
+
+def gemini_generation_config(model: str | None, task: dict | None, base: dict) -> dict:
+    config = dict(base)
+    budget = reasoning_budget(task)
+    if budget is not None and gemini_budget_supported(model):
+        config["thinkingConfig"] = {"thinkingBudget": budget}
+    schema = (task or {}).get("schema")
+    if schema and settings.ai_response_schema and config.get("responseMimeType") == "application/json":
+        config["responseSchema"] = schema
+    return config
+
+
 def parse_json_text(text: str) -> dict:
     """Extrae un objeto JSON aunque venga envuelto en ```json ... ```."""
     cleaned = text.strip()
@@ -231,14 +276,17 @@ class GeminiProvider(_HttpProvider):
             json={
                 "systemInstruction": {"parts": [{"text": system}]},
                 "contents": [{"role": "user", "parts": [{"text": user}]}],
-                "generationConfig": {"responseMimeType": "application/json"},
+                "generationConfig": gemini_generation_config(
+                    self.model, task, {"responseMimeType": "application/json"}
+                ),
             },
         )
         try:
             payload = response.json()
             self.last_usage_payload = payload
             parts = payload["candidates"][0]["content"]["parts"]
-            text = "".join(part.get("text", "") for part in parts)
+            # Con razonamiento, Gemini puede devolver partes "thought": no son la respuesta.
+            text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
         except (KeyError, IndexError, ValueError) as exc:
             raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "Respuesta inesperada de Gemini.") from exc
         return parse_json_text(text)
@@ -297,7 +345,9 @@ class GeminiProvider(_HttpProvider):
                         {"inlineData": {"mimeType": mime, "data": encoded}},
                     ],
                 }],
-                "generationConfig": {"temperature": 0},
+                "generationConfig": gemini_generation_config(
+                    self.model, {"kind": "transcribe_audio"}, {"temperature": 0}
+                ),
             },
         )
         try:
@@ -334,7 +384,11 @@ class GeminiProvider(_HttpProvider):
                         {"inlineData": {"mimeType": mime, "data": encoded}},
                     ],
                 }],
-                "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+                "generationConfig": gemini_generation_config(
+                    self.model,
+                    {"kind": "transcribe_audio"},
+                    {"temperature": 0, "responseMimeType": "application/json"},
+                ),
             },
         )
         try:

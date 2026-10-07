@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     mock_ai_enabled: bool = False
     ai_timeout_seconds: float = 60.0
 
+    # T-168 · Eficiencia de IA en clases. Cada mejora se puede apagar para comparar antes/después.
+    # T-169: presupuesto de razonamiento por tarea (Gemini 2.5 Flash/Flash-Lite).
+    ai_reasoning_control: bool = True
+    ai_reasoning_budget_open: int = 512  # corrección de escritura libre y conversación
+    # T-173: esquema JSON obligatorio en la respuesta (Gemini).
+    ai_response_schema: bool = True
+    # T-171: corregir en una sola llamada las respuestas de una clase que necesitan IA.
+    ai_batch_evaluation: bool = True
+    # T-172: fill_blank y rewrite escritos se resuelven por regla antes de ir a la IA.
+    ai_rule_first_closed: bool = True
+
     # P01 B2B: padrón oficial RNS sincronizado localmente + fallback DEV.
     organization_registry_path: str = "data/rns_registry.db"
     organization_verification_mock_enabled: bool = True
