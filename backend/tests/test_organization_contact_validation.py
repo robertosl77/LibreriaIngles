@@ -10,11 +10,17 @@ from app.organizations.contact_validation import (
 from app.organizations.verification import argentina_cuit_error
 
 
-def test_cuit_reports_length_and_check_digit_separately() -> None:
+def test_cuit_reports_length_and_invalid_value_separately() -> None:
     assert "11" in argentina_cuit_error("30-1234")
     assert "12 dígitos" in argentina_cuit_error("30-123456789-1")
-    assert "dígito verificador" in argentina_cuit_error("30-12345678-2")
+    assert "no es válido" in argentina_cuit_error("30-12345678-2")
+    assert "no es válido" in argentina_cuit_error("31-12345678-1")
     assert argentina_cuit_error("30-12345678-1") is None
+
+
+def test_cuit_tolerates_spaces_and_hyphens_but_not_dots() -> None:
+    assert argentina_cuit_error("30 - 12345678 - 1") is None
+    assert "números, espacios o guiones" in argentina_cuit_error("30.12345678.1")
 
 
 def test_website_adds_https_when_user_enters_only_domain() -> None:
@@ -41,6 +47,7 @@ def test_website_check_only_accepts_public_dns(monkeypatch) -> None:
     result = check_website("cacatua.com.ar")
     assert result.state == "VERIFIED"
     assert result.normalized_url == "https://cacatua.com.ar"
+    assert result.message == "Dominio encontrado en Internet."
 
 
 def test_website_check_does_not_block_on_transient_dns_failure(monkeypatch) -> None:
@@ -51,7 +58,8 @@ def test_website_check_does_not_block_on_transient_dns_failure(monkeypatch) -> N
     result = check_website("cacatua.com.ar")
     assert result.state == "UNREACHABLE"
     assert result.normalized_url == "https://cacatua.com.ar"
-    assert "Podés continuar" in result.message
+    assert result.message == "No pudimos confirmar ese dominio en este momento."
+    assert "continuar" not in result.message.lower()
 
 
 def test_website_check_rejects_private_dns_target(monkeypatch) -> None:
