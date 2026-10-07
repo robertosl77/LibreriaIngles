@@ -1,6 +1,10 @@
 from sqlalchemy import select
 
-from app.notifications.delivery import EmailDeliveryMessage, get_email_delivery_provider
+from app.notifications.delivery import (
+    EmailDeliveryMessage,
+    SRMACROS_VALIDATION_SENDER,
+    get_email_delivery_provider,
+)
 from app.notifications.models import NotificationCase
 
 
@@ -16,7 +20,7 @@ _BUILTIN_CASES: dict[str, dict[str, object]] = {
             "El código vence en {expiration_minutes} minutos.\n"
             "Si no iniciaste este trámite, podés ignorar este mensaje.\n"
         ),
-        "sender_profile": "SRMACROS_VALIDATION",
+        "sender_profile": SRMACROS_VALIDATION_SENDER,
         "platform_only": True,
         "organization_override_allowed": False,
         "active": True,
