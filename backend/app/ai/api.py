@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.accounts.models import Account, PlatformRole
+from app.ai import limits as quota
 from app.ai.models import (
     AICredentialAuditEvent,
     AIConnection,
@@ -154,6 +155,8 @@ def _serialize(connection: AIConnection, db=None) -> dict:
         "perAccountDailyLimit": connection.per_account_daily_limit,
         "usage24h": usage,
         "supportsAudioInput": PROVIDERS[connection.provider].supports_audio_input,
+        # T-191: límites del proveedor aprendidos solos (sin carga manual).
+        "learnedLimits": quota.describe(db, connection) if db is not None else [],
     }
 
 

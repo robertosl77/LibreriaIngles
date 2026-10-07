@@ -609,3 +609,28 @@ def no_quota_message(decision: QuotaDecision, action: str) -> str:
         when = f"{local:%H:%M}" if local.date() == today else f"{local:%d/%m %H:%M}"
         text += f" Probá de nuevo después de las {when}."
     return text
+
+
+def describe(db: Session, connection: AIConnection) -> list[dict]:
+    """Límites aprendidos de la conexión con su uso en la ventana actual (para la pantalla IA)."""
+    now = utcnow()
+    rules = provider_rules(db, connection.provider)
+    model = connection_model(connection)
+    rows = []
+    for row in learned_limits(db, connection):
+        used = None
+        if row.window in WINDOW_SECONDS:
+            used = _used(db, connection, model, row.dimension, _window_start(rules, row, now))
+        rows.append({
+            "kind": row.kind,
+            "dimension": row.dimension,
+            "window": row.window,
+            "limit": row.limit_value,
+            "used": used,
+            "resetAt": as_utc(row.reset_at),
+            "source": row.source,
+            "tier": row.tier,
+            "observedAt": as_utc(row.observed_at),
+        })
+    order = {"MINUTE": 0, "DAY": 1, "MONTH": 2}
+    return sorted(rows, key=lambda r: (order.get(r["window"], 9), r["dimension"]))

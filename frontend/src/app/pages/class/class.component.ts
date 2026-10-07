@@ -135,6 +135,13 @@ const RESULT_LABELS: Record<string, string> = {
             </section>
           }
 
+          @if (c.reducedFrom && c.reducedFrom > c.exercises.length && editable()) {
+            <p class="banner banner-info small">
+              Esta clase tiene {{ c.exercises.length }} ejercicios en lugar de {{ c.reducedFrom }}: el cupo de la IA
+              estaba casi completo. Se mantuvieron los que refuerzan lo que más te cuesta.
+            </p>
+          }
+
           @if (c.kind === 'EXAM' && editable()) {
             <p class="banner banner-info small">
               <strong>Examen de nivel {{ c.targetLevel }}.</strong> {{ c.exercises.length }} ejercicios de todas las

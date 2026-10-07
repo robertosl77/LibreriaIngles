@@ -205,6 +205,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
         "examResult": session.exam_result,
         # Balanceo por habilidad (T-034): qué refuerza esta clase y por qué.
         "focus": (session.generation_request or {}).get("focus") or [],
+        "reducedFrom": (session.generation_request or {}).get("reducedFrom"),
         "certificateCode": _certificate_code(db, session),
         "notice": notice,
     }
