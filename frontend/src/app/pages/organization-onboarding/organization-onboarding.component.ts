@@ -40,6 +40,7 @@ import {
       @if (loading()) {
         <section class="panel"><p>Cargando configuración…</p></section>
       } @else {
+        <fieldset class="onboarding-fields" [disabled]="emailVerified()">
         <section class="panel stack">
           <div>
             <p class="step">Paso 1</p>
@@ -328,6 +329,8 @@ import {
           </section>
         }
 
+        </fieldset>
+
         @if (result(); as saved) {
           <section class="panel result">
             <h2>{{ emailVerified() ? 'Email verificado' : 'Solicitud registrada' }}</h2>
@@ -380,8 +383,10 @@ import {
               <input
                 class="input verification-code"
                 name="verificationCode"
-                [(ngModel)]="verificationCode"
+                [ngModel]="verificationCode"
+                (ngModelChange)="setVerificationCode($event)"
                 inputmode="numeric"
+                pattern="[0-9]*"
                 autocomplete="one-time-code"
                 maxlength="6"
                 placeholder="000000"
@@ -441,6 +446,9 @@ import {
     .heading p { line-height: 1.6; }
     .eyebrow, .step { margin: 0; text-transform: uppercase; letter-spacing: 0.11em; font-size: 0.76rem; font-weight: 750; }
     .panel { margin-top: 1rem; padding: 1.4rem; border: 1px solid #ddd; border-radius: 1rem; background: #fff; }
+    .onboarding-fields { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+    .onboarding-fields:disabled .input { background: #f3f3f3; color: #666; border-color: #d3d3d3; }
+    .onboarding-fields:disabled .field-help, .onboarding-fields:disabled .muted { color: #888; }
     .stack { display: grid; gap: 1rem; }
     .grid { display: grid; gap: 1rem; }
     .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -924,8 +932,12 @@ export class OrganizationOnboardingComponent implements OnInit, OnDestroy {
     }
   }
 
+  setVerificationCode(value: string): void {
+    this.verificationCode = (value ?? '').replace(/\D/g, '').slice(0, 6);
+  }
+
   sixDigitCode(): boolean {
-    return /^\d{6}$/.test(this.verificationCode.trim());
+    return /^\d{6}$/.test(this.verificationCode);
   }
 
   async verifyEmailCode(): Promise<void> {
