@@ -23,7 +23,8 @@ class VerificationChallenge(Base):
     public_id: Mapped[str] = mapped_column(
         String(36), unique=True, index=True, default=lambda: str(uuid4())
     )
-    purpose: Mapped[VerificationPurpose] = mapped_column(String(80), index=True)
+    # Se persiste como código estable para poder ampliar purposes sin migrar un enum DB.
+    purpose: Mapped[str] = mapped_column(String(80), index=True)
     context_type: Mapped[str] = mapped_column(String(80), index=True)
     context_id: Mapped[str] = mapped_column(String(120), index=True)
     destination: Mapped[str] = mapped_column(String(320), index=True)
