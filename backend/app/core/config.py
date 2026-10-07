@@ -44,7 +44,9 @@ class Settings(BaseSettings):
     verification_code_ttl_minutes: int = 25
     verification_max_attempts: int = 3
     verification_resend_cooldown_seconds: int = 60
+    # Límite por onboarding/contexto y, por separado, por buzón destinatario.
     verification_max_sends_per_hour: int = 5
+    verification_max_sends_per_destination_per_hour: int = 5
 
     # Delivery de email. `dev` captura el código únicamente fuera de production.
     # `smtp` permite un primer provider real sin acoplar el onboarding al proveedor.
