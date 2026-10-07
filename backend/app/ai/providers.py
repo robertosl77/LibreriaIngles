@@ -22,6 +22,9 @@ class ProviderError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+        # T-191: respuesta HTTP cruda del error (status, headers, cuerpo) para que la capa de
+        # límites la normalice. Nunca se persiste completa.
+        self.http: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +80,15 @@ _OPENAI_EXCLUDE = (
     "dall-e", "search", "moderation", "instruct", "codex", "computer-use",
 )
 _GEMINI_EXCLUDE = ("embedding", "aqa", "imagen", "tts", "image", "veo", "live")
+
+
+def _http_snapshot(response: httpx.Response) -> dict:
+    text = response.text[:20_000]
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    return {"status": response.status_code, "headers": dict(response.headers), "text": text, "json": body}
 
 
 def _classify_http_error(response: httpx.Response) -> ProviderError:
@@ -194,6 +206,8 @@ class _HttpProvider:
         # Payload efímero de la última operación que puede contener usage.
         # Nunca se persiste completo: T-049 solo extrae los contadores configurados en BD.
         self.last_usage_payload: dict | None = None
+        # T-191: headers de la última respuesta exitosa (límites informados por el proveedor).
+        self.last_response_headers: dict | None = None
 
     def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
         try:
@@ -203,7 +217,10 @@ class _HttpProvider:
         except httpx.HTTPError as exc:
             raise ProviderError(AIConnectionStatus.NETWORK_ERROR, "Error de red con el proveedor.") from exc
         if response.status_code >= 400:
-            raise _classify_http_error(response)
+            error = _classify_http_error(response)
+            error.http = _http_snapshot(response)
+            raise error
+        self.last_response_headers = dict(getattr(response, "headers", None) or {})
         return response
 
     def analyze_speech(self, audio: bytes, mime_type: str) -> SpeechAnalysis:

@@ -13,11 +13,13 @@ Reglas (documento funcional §24–§29):
   Sin servicio otorgado, la cuenta es "Individual · propias keys" (BYOK).
 """
 
+import time
 from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 from datetime import timedelta
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -30,8 +32,10 @@ from app.ai.models import (
     AIUsageEvent,
     utcnow,
 )
+from app.ai import limits as quota
 from app.ai.providers import PROVIDERS, ProviderError, build_provider, cached_input_tokens
 from app.ai.usage import AIUsageContext, build_usage_event
+from app.core.config import settings
 from app.core.security import decrypt_secret
 from app.subscriptions.models import AISource
 from app.subscriptions.service import effective_service
@@ -49,9 +53,11 @@ BACKOFF = {
 
 
 class NoAIAvailable(Exception):
-    def __init__(self, errors: list[str]):
+    def __init__(self, errors: list[str], retry_at=None):
         super().__init__("No hay conexiones de IA disponibles.")
         self.errors = errors
+        # T-191: si todas estaban sin cupo, cuándo vuelve a haber (la más próxima).
+        self.retry_at = retry_at
 
 
 @dataclass
@@ -224,14 +230,45 @@ def provider_for(connection: AIConnection):
     return build_provider(connection.provider, api_key, connection.model)
 
 
-def _mark_failure(connection: AIConnection, error: ProviderError) -> None:
+def _mark_failure(connection: AIConnection, error: ProviderError, signal=None) -> None:
     now = utcnow()
-    connection.status = error.code
-    connection.last_error_code = error.code.value
+    code = error.code
+    backoff_until = None
+    # T-191: el límite normalizado decide. Renovable → se espera hasta que vuelva (sea un minuto o
+    # la medianoche del Pacífico), nunca "cuota agotada"; agotado (saldo/tope) → QUOTA_EXCEEDED.
+    if signal is not None and signal.kind == quota.RENEWABLE:
+        code = AIConnectionStatus.RATE_LIMITED
+        backoff_until = signal.retry_at
+    elif signal is not None and signal.kind == quota.EXHAUSTED:
+        code = AIConnectionStatus.QUOTA_EXCEEDED
+    error.code = code
+    connection.status = code
+    connection.last_error_code = code.value
     connection.last_error_at = now
     connection.last_check_at = now
-    delay = BACKOFF.get(error.code)
-    connection.backoff_until = now + delay if delay else None
+    if backoff_until is None:
+        delay = BACKOFF.get(code)
+        backoff_until = now + delay if delay else None
+    connection.backoff_until = backoff_until
+
+
+def _quota_gate(db: Session, connection: AIConnection, operation: str, *, chars: int, items: int):
+    """T-191: ¿entra la llamada en el cupo aprendido? Devuelve (motivo para saltearla, cuándo vuelve).
+    Si el cupo vuelve en pocos segundos (AI_QUOTA_MAX_WAIT_SECONDS), espera en vez de saltearla."""
+    if not settings.ai_quota_control:
+        return None, None
+    est = quota.estimate(
+        db, connection.provider, quota.connection_model(connection), operation, chars=chars, items=items
+    )
+    decision = quota.check(db, connection, est)
+    wait = quota.wait_seconds(decision)
+    if wait is None:
+        return None, None
+    if wait <= settings.ai_quota_max_wait_seconds:
+        time.sleep(wait)
+        return None, None
+    local = decision.retry_at.astimezone(ZoneInfo(settings.display_timezone))
+    return f"sin cupo de IA ({decision.blocked_by}) hasta las {local:%H:%M}", decision.retry_at
 
 
 def _mark_success(connection: AIConnection, *, used: bool = True) -> None:
@@ -388,15 +425,23 @@ def _run_json_task_with_connections(
 ) -> AIResult:
     errors: list[str] = []
     failed: list[str] = []
+    retry_ats = []
     operation = str(task.get("kind") or "unknown")[:80]
     execution_id = uuid4().hex
     attempt_index = 0
     diagnostic_snapshot = _text_diagnostic_snapshot(system, user, usage_context)
+    items = len(task.get("items") or task.get("slots") or []) or 1
     for connection in connections:
         reason = limit_reason(db, connection, account)
         if reason:
             # Límite de consumo: se saltea sin marcarla como caída.
             errors.append(f"{connection_label(connection, account)}: {reason}")
+            continue
+        reason, retry_at = _quota_gate(db, connection, operation, chars=len(system) + len(user), items=items)
+        if reason:
+            # T-191: no entra en el cupo aprendido → no se llama (no se paga ni se gasta el pedido).
+            errors.append(f"{connection_label(connection, account)}: {reason}")
+            retry_ats.append(retry_at)
             continue
         attempt_index += 1
         provider = None
@@ -404,7 +449,10 @@ def _run_json_task_with_connections(
             provider = provider_for(connection)
             data = provider.complete_json(system, user, task)
         except ProviderError as exc:
-            _mark_failure(connection, exc)
+            signal = quota.learn_from_error(db, connection, exc.http)
+            _mark_failure(connection, exc, signal)
+            if signal.kind == quota.RENEWABLE and signal.retry_at:
+                retry_ats.append(signal.retry_at)
             record_usage(
                 db,
                 connection,
@@ -422,6 +470,7 @@ def _run_json_task_with_connections(
             db.commit()
             continue
         _mark_success(connection)
+        quota.learn_from_success(db, connection, getattr(provider, "last_response_headers", None))
         success_diagnostic = dict(diagnostic_snapshot)
         success_diagnostic["responseJsonChars"] = len(
             json.dumps(data, ensure_ascii=False, separators=(",", ":"))
@@ -445,7 +494,8 @@ def _run_json_task_with_connections(
         )
         db.commit()
         return AIResult(data=data, connection=connection, failed_connections=failed)
-    raise NoAIAvailable(errors)
+    db.commit()
+    raise NoAIAvailable(errors, retry_at=min(retry_ats) if retry_ats else None)
 
 
 def run_json_task(
@@ -515,10 +565,16 @@ def transcribe_audio(
     execution_id = uuid4().hex
     attempt_index = 0
     diagnostic_snapshot = _audio_diagnostic_snapshot(audio, mime_type, usage_context)
+    retry_ats = []
     for connection in audio_connections(db, account):
         reason = limit_reason(db, connection, account)
         if reason:
             errors.append(f"{connection_label(connection, account)}: {reason}")
+            continue
+        reason, retry_at = _quota_gate(db, connection, "transcribe_audio", chars=0, items=1)
+        if reason:
+            errors.append(f"{connection_label(connection, account)}: {reason}")
+            retry_ats.append(retry_at)
             continue
         attempt_index += 1
         provider = None
@@ -529,7 +585,10 @@ def transcribe_audio(
             if not text:
                 raise ProviderError(AIConnectionStatus.UNKNOWN_ERROR, "No se detectó voz.")
         except ProviderError as exc:
-            _mark_failure(connection, exc)
+            signal = quota.learn_from_error(db, connection, exc.http)
+            _mark_failure(connection, exc, signal)
+            if signal.kind == quota.RENEWABLE and signal.retry_at:
+                retry_ats.append(signal.retry_at)
             record_usage(
                 db,
                 connection,
@@ -547,6 +606,7 @@ def transcribe_audio(
             db.commit()
             continue
         _mark_success(connection)
+        quota.learn_from_success(db, connection, getattr(provider, "last_response_headers", None))
         success_diagnostic = dict(diagnostic_snapshot)
         success_diagnostic["transcriptChars"] = len(text)
         record_usage(
@@ -569,7 +629,8 @@ def transcribe_audio(
         )
     if not errors:
         errors.append("No hay conexiones activas compatibles con audio.")
-    raise NoAIAvailable(errors)
+    db.commit()
+    raise NoAIAvailable(errors, retry_at=min(retry_ats) if retry_ats else None)
 
 
 def check_connection(

@@ -11,11 +11,13 @@ from app.classes.evaluation import (
     ai_score,
     apply_evaluation,
     evaluate,
+    batch_item_chars,
     evaluate_batch_with_ai,
     evaluate_with_ai,
     evaluate_without_ai,
 )
 from app.classes.normalize import normalize_answer
+from app.ai.limits import batch_size
 from app.classes.types import NO_APPEAL_TYPES
 from app.core.config import settings
 from app.core.deps import StudyContext
@@ -273,7 +275,12 @@ def evaluate_pending(db: Session, account: Account, session: ClassSession) -> bo
     #    T-181: en tandas de hasta AI_BATCH_MAX_ITEMS (el examen puede traer muchas).
     batched = {}
     if settings.ai_batch_evaluation and len(needs_ai) >= 2:
-        size = max(2, settings.ai_batch_max_items)
+        # T-191: el tamaño de tanda sigue al límite que aprieta (pedidos → más por llamada;
+        # tokens → menos). Sin límites aprendidos, AI_BATCH_MAX_ITEMS como antes.
+        size = batch_size(
+            db, account, items=len(needs_ai),
+            chars_per_item=batch_item_chars(db, [(exercise, attempt.raw_answer) for attempt, exercise, _ in needs_ai]),
+        )
         for start in range(0, len(needs_ai), size):
             chunk = needs_ai[start:start + size]
             if len(chunk) < 2:

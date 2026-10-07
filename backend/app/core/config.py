@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     ai_compact_examples: bool = True
     # T-181: máximo de respuestas por llamada de corrección en lote (examen).
     ai_batch_max_items: int = 6
+    # T-191: límites de los proveedores aprendidos solos; control previo a cada llamada.
+    ai_quota_control: bool = True
+    ai_quota_margin: float = 0.9  # se usa hasta el 90 % del límite aprendido
+    ai_quota_max_wait_seconds: float = 10.0  # si el cupo vuelve en menos, se espera en vez de fallar
+    ai_class_min_exercises: int = 3  # con poco cupo, la clase se reduce hasta este mínimo
+    display_timezone: str = "America/Argentina/Buenos_Aires"  # horas mostradas en avisos de cupo
 
     # P01 B2B: padrón oficial RNS sincronizado localmente + fallback DEV.
     organization_registry_path: str = "data/rns_registry.db"
