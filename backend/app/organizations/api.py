@@ -45,6 +45,7 @@ from app.verifications.service import (
     create_challenge,
     invalidate_active_challenges,
     new_continuation_token,
+    require_resend_cooldown_elapsed,
     verify_latest_challenge,
 )
 
@@ -202,10 +203,16 @@ def _require_onboarding_token(
     raw_token: str | None,
 ) -> None:
     if not raw_token or not row.continuation_token_hash:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "No autorizado para continuar esta solicitud.")
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "No autorizado para continuar esta solicitud.",
+        )
     supplied = continuation_token_digest(raw_token)
     if not hmac.compare_digest(row.continuation_token_hash, supplied):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "No autorizado para continuar esta solicitud.")
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "No autorizado para continuar esta solicitud.",
+        )
 
 
 def _challenge_context(row: OrganizationOnboarding) -> tuple[str, str]:
@@ -250,7 +257,7 @@ def _start_email_challenge(row: OrganizationOnboarding, db: DbSession) -> dict:
                 "code": code,
                 "expiration_minutes": settings.verification_code_ttl_minutes,
             },
-            development_capture=code,
+            development_capture=code if not settings.is_production else None,
         )
     except Exception as exc:
         challenge.invalidated_at = utcnow()
@@ -270,7 +277,9 @@ def _start_email_challenge(row: OrganizationOnboarding, db: DbSession) -> dict:
         "expiresAt": challenge.expires_at,
         "resendAvailableInSeconds": settings.verification_resend_cooldown_seconds,
         "deliveryProvider": delivery.provider,
-        "developmentCode": delivery.development_capture if not settings.is_production else None,
+        "developmentCode": (
+            delivery.development_capture if not settings.is_production else None
+        ),
     }
 
 
@@ -286,12 +295,15 @@ def onboarding_config() -> dict:
             }
         ],
         "actingCapacities": [
-            {"code": item.value, "name": {
-                OrganizationActingCapacity.LEGAL_REPRESENTATIVE: "Representante legal",
-                OrganizationActingCapacity.PROXY: "Apoderado/a",
-                OrganizationActingCapacity.AUTHORIZED_EMPLOYEE: "Empleado/a autorizado/a",
-                OrganizationActingCapacity.OTHER: "Otro",
-            }[item]}
+            {
+                "code": item.value,
+                "name": {
+                    OrganizationActingCapacity.LEGAL_REPRESENTATIVE: "Representante legal",
+                    OrganizationActingCapacity.PROXY: "Apoderado/a",
+                    OrganizationActingCapacity.AUTHORIZED_EMPLOYEE: "Empleado/a autorizado/a",
+                    OrganizationActingCapacity.OTHER: "Otro",
+                }[item],
+            }
             for item in OrganizationActingCapacity
         ],
         "emailVerificationImplemented": True,
@@ -327,10 +339,12 @@ def lookup_company(payload: CompanyLookupIn, db: DbSession) -> dict:
             OrganizationOnboarding.country == result.country,
             OrganizationOnboarding.tax_id_type == result.tax_id_type,
             OrganizationOnboarding.tax_id == result.tax_id,
-            OrganizationOnboarding.status.notin_([
-                OrganizationOnboardingStatus.ABANDONED,
-                OrganizationOnboardingStatus.PROVISIONED,
-            ]),
+            OrganizationOnboarding.status.notin_(
+                [
+                    OrganizationOnboardingStatus.ABANDONED,
+                    OrganizationOnboardingStatus.PROVISIONED,
+                ]
+            ),
         )
         .order_by(OrganizationOnboarding.created_at.desc())
         .limit(1)
@@ -383,10 +397,12 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
             OrganizationOnboarding.country == result.country,
             OrganizationOnboarding.tax_id_type == result.tax_id_type,
             OrganizationOnboarding.tax_id == result.tax_id,
-            OrganizationOnboarding.status.notin_([
-                OrganizationOnboardingStatus.ABANDONED,
-                OrganizationOnboardingStatus.PROVISIONED,
-            ]),
+            OrganizationOnboarding.status.notin_(
+                [
+                    OrganizationOnboardingStatus.ABANDONED,
+                    OrganizationOnboardingStatus.PROVISIONED,
+                ]
+            ),
         )
         .order_by(OrganizationOnboarding.created_at.desc())
         .limit(1)
@@ -525,6 +541,11 @@ def start_email_verification(
 ) -> dict:
     row = _get_onboarding(db, public_id)
     _require_onboarding_token(row, x_onboarding_token)
+    if row.status != OrganizationOnboardingStatus.COMPANY_VERIFIED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "La verificación de email ya fue iniciada o la solicitud todavía no está habilitada.",
+        )
     return _start_email_challenge(row, db)
 
 
@@ -536,6 +557,23 @@ def resend_email_verification(
 ) -> dict:
     row = _get_onboarding(db, public_id)
     _require_onboarding_token(row, x_onboarding_token)
+    if row.status != OrganizationOnboardingStatus.EMAIL_PENDING:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No hay una verificación de email pendiente para reenviar.",
+        )
+
+    context_type, context_id = _challenge_context(row)
+    try:
+        require_resend_cooldown_elapsed(
+            db,
+            purpose=VerificationPurpose.ORGANIZATION_ONBOARDING_EMAIL,
+            context_type=context_type,
+            context_id=context_id,
+        )
+    except ChallengeCooldown as exc:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, str(exc)) from exc
+
     return _start_email_challenge(row, db)
 
 
@@ -555,6 +593,11 @@ def verify_email(
             "status": row.status.value,
             "verifiedAt": row.contact_email_verified_at,
         }
+    if row.status != OrganizationOnboardingStatus.EMAIL_PENDING:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No hay una verificación de email pendiente para esta solicitud.",
+        )
 
     context_type, context_id = _challenge_context(row)
     try:
@@ -590,11 +633,15 @@ def change_referent_email(
 ) -> dict:
     row = _get_onboarding(db, public_id)
     _require_onboarding_token(row, x_onboarding_token)
-    if row.status in {
-        OrganizationOnboardingStatus.ABANDONED,
-        OrganizationOnboardingStatus.PROVISIONED,
+    if row.status not in {
+        OrganizationOnboardingStatus.COMPANY_VERIFIED,
+        OrganizationOnboardingStatus.EMAIL_PENDING,
+        OrganizationOnboardingStatus.EMAIL_VERIFIED,
     }:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Esta solicitud ya no admite cambios.")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "La solicitud todavía no admite cambios sobre el email del referente.",
+        )
 
     new_email = str(payload.email).strip().lower()
     if new_email != row.contact_email:
