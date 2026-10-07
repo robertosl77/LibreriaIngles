@@ -551,6 +551,17 @@ def check(db: Session, connection: AIConnection, est: Estimate, *, now: datetime
     return decision
 
 
+_BLOCKED_DIMENSION = {"REQUESTS": "pedidos", "TOKENS": "tokens", "INPUT_TOKENS": "tokens", "OUTPUT_TOKENS": "tokens"}
+_BLOCKED_WINDOW = {"MINUTE": "del minuto", "DAY": "del día", "MONTH": "del mes"}
+
+
+def blocked_text(blocked_by: str | None, *, technical: bool = False) -> str:
+    """"sin cupo de tokens del día"; quien administra la conexión ve además el código (OUTPUT_TOKENS/DAY)."""
+    dimension, _, window = (blocked_by or "").partition("/")
+    text = f"sin cupo de {_BLOCKED_DIMENSION.get(dimension, 'IA')} {_BLOCKED_WINDOW.get(window, '')}".strip()
+    return f"{text} ({blocked_by})" if technical and blocked_by else text
+
+
 def wait_seconds(decision: QuotaDecision, now: datetime | None = None) -> float | None:
     if decision.ok or decision.retry_at is None:
         return None

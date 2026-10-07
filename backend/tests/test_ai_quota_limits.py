@@ -279,7 +279,8 @@ def test_no_quota_skips_the_call_and_says_until_when(client, monkeypatch):
     klass = client.post("/api/v1/classes", headers=headers).json()
     assert called == []  # no se llamó: no se pagó ni se gastó un pedido
     assert klass["status"] == "GENERATION_FAILED"
-    assert "sin cupo de IA (REQUESTS/DAY) hasta las" in klass["generationError"]
+    assert "sin cupo de pedidos del día hasta las" in klass["generationError"]
+    assert "REQUESTS/DAY" not in klass["generationError"]  # el alumno no ve el código
 
 
 def test_short_wait_is_waited_instead_of_failing(client, monkeypatch):
@@ -419,3 +420,8 @@ def test_simulation_script_reduces_class_blocks_exam_and_cleans(client, monkeypa
     run("limpiar")
     with SessionLocal() as db:
         assert db.scalar(select(AIQuotaLimit).where(AIQuotaLimit.source == "SIMULATED")) is None
+
+
+def test_blocked_text_is_simple_and_technical_only_for_owner():
+    assert quota.blocked_text("OUTPUT_TOKENS/DAY") == "sin cupo de tokens del día"
+    assert quota.blocked_text("REQUESTS/MINUTE", technical=True) == "sin cupo de pedidos del minuto (REQUESTS/MINUTE)"

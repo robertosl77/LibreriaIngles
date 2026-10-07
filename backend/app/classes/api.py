@@ -29,7 +29,7 @@ from app.progress.service import skill_name
 
 router = APIRouter(prefix="/classes", tags=["classes"])
 
-SWITCH_NOTICE = "Se cambió automáticamente el proveedor de IA."
+SWITCH_NOTICE = "Tu clase se preparó con una conexión alternativa."
 MAX_AUDIO_BYTES = 6 * 1024 * 1024
 MAX_AUDIO_DURATION_MS = 65_000
 

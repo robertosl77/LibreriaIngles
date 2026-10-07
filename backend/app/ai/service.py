@@ -252,7 +252,13 @@ def _mark_failure(connection: AIConnection, error: ProviderError, signal=None) -
     connection.backoff_until = backoff_until
 
 
-def _quota_gate(db: Session, connection: AIConnection, operation: str, *, chars: int, items: int):
+def _is_owner(account: Account | None) -> bool:
+    return account is not None and account.platform_role == PlatformRole.PLATFORM_OWNER
+
+
+def _quota_gate(
+    db: Session, connection: AIConnection, operation: str, *, chars: int, items: int, account: Account | None = None
+):
     """T-191: ¿entra la llamada en el cupo aprendido? Devuelve (motivo para saltearla, cuándo vuelve).
     Si el cupo vuelve en pocos segundos (AI_QUOTA_MAX_WAIT_SECONDS), espera en vez de saltearla."""
     if not settings.ai_quota_control:
@@ -268,7 +274,7 @@ def _quota_gate(db: Session, connection: AIConnection, operation: str, *, chars:
         time.sleep(wait)
         return None, None
     local = decision.retry_at.astimezone(ZoneInfo(settings.display_timezone))
-    return f"sin cupo de IA ({decision.blocked_by}) hasta las {local:%H:%M}", decision.retry_at
+    return f"{quota.blocked_text(decision.blocked_by, technical=_is_owner(account))} hasta las {local:%H:%M}", decision.retry_at
 
 
 def _mark_success(connection: AIConnection, *, used: bool = True) -> None:
@@ -437,7 +443,9 @@ def _run_json_task_with_connections(
             # Límite de consumo: se saltea sin marcarla como caída.
             errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
-        reason, retry_at = _quota_gate(db, connection, operation, chars=len(system) + len(user), items=items)
+        reason, retry_at = _quota_gate(
+            db, connection, operation, chars=len(system) + len(user), items=items, account=account
+        )
         if reason:
             # T-191: no entra en el cupo aprendido → no se llama (no se paga ni se gasta el pedido).
             errors.append(f"{connection_label(connection, account)}: {reason}")
@@ -571,7 +579,7 @@ def transcribe_audio(
         if reason:
             errors.append(f"{connection_label(connection, account)}: {reason}")
             continue
-        reason, retry_at = _quota_gate(db, connection, "transcribe_audio", chars=0, items=1)
+        reason, retry_at = _quota_gate(db, connection, "transcribe_audio", chars=0, items=1, account=account)
         if reason:
             errors.append(f"{connection_label(connection, account)}: {reason}")
             retry_ats.append(retry_at)

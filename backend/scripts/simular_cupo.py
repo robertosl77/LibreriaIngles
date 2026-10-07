@@ -97,6 +97,10 @@ def main() -> int:
                 print(f"{label}: tope de tokens de salida del día = {limit_value} "
                       f"(usados {used}, quedan ~{room} ≈ {settings.ai_class_min_exercises + 1} ejercicios).")
         db.commit()
+    if args.modo != "limpiar":
+        print("\nATENCIÓN: la simulación queda activa hasta las 04:00 o hasta correr "
+              f"'python scripts/simular_cupo.py limpiar --email {args.email}'. "
+              "Si son conexiones de plataforma, afecta a todos los alumnos que las usan.")
     return 0
 
 
