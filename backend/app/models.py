@@ -9,8 +9,10 @@ from app.benefits.models import *  # noqa: F401,F403
 from app.invitations.models import *  # noqa: F401,F403
 from app.learning.models import *  # noqa: F401,F403
 from app.memberships.models import *  # noqa: F401,F403
+from app.notifications.models import *  # noqa: F401,F403
 from app.organizations.models import *  # noqa: F401,F403
 from app.study_profiles.models import *  # noqa: F401,F403
 from app.subscriptions.models import *  # noqa: F401,F403
 from app.campaigns.models import *  # noqa: F401,F403
 from app.exams.models import *  # noqa: F401,F403
+from app.verifications.models import *  # noqa: F401,F403
