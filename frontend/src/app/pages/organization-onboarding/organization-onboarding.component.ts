@@ -75,6 +75,7 @@ import {
               (ngModelChange)="resetLookup()"
               placeholder="30-12345678-1"
               autocomplete="off"
+              maxlength="20"
               [disabled]="companyLocked()"
             />
           </label>
@@ -182,6 +183,7 @@ import {
                   (blur)="checkWebsite()"
                   placeholder="empresa.com.ar"
                   autocomplete="url"
+                  maxlength="500"
                 />
                 <span class="field-help">
                   Escribí sólo el dominio si querés. Agregamos el protocolo automáticamente.
@@ -215,18 +217,37 @@ import {
             <div class="grid two">
               <label class="field">
                 Nombre
-                <input class="input" name="firstName" [(ngModel)]="firstName" autocomplete="given-name" />
+                <input
+                  class="input"
+                  name="firstName"
+                  [(ngModel)]="firstName"
+                  autocomplete="given-name"
+                  maxlength="100"
+                />
               </label>
               <label class="field">
                 Apellido
-                <input class="input" name="lastName" [(ngModel)]="lastName" autocomplete="family-name" />
+                <input
+                  class="input"
+                  name="lastName"
+                  [(ngModel)]="lastName"
+                  autocomplete="family-name"
+                  maxlength="100"
+                />
               </label>
             </div>
 
             <div class="grid two">
               <label class="field">
                 Email
-                <input class="input" type="email" name="email" [(ngModel)]="email" autocomplete="email" />
+                <input
+                  class="input"
+                  type="email"
+                  name="email"
+                  [(ngModel)]="email"
+                  autocomplete="email"
+                  maxlength="320"
+                />
                 @if (email.trim() && !emailLooksValid()) {
                   <span class="field-status failure">Ingresá un email válido, por ejemplo nombre@empresa.com.ar.</span>
                 }
@@ -242,6 +263,7 @@ import {
                   (blur)="normalizePhoneInput()"
                   autocomplete="tel"
                   placeholder="11 5555 6666"
+                  maxlength="64"
                 />
                 <span class="field-help">
                   Podés escribirlo con formato local o internacional. Lo guardamos normalizado con código de país.
@@ -268,6 +290,7 @@ import {
                   (focus)="loadJobTitleSuggestions()"
                   placeholder="Ej. Responsable de Capacitación"
                   autocomplete="off"
+                  maxlength="160"
                 />
 
                 @if (jobTitleId !== null) {
@@ -623,7 +646,7 @@ export class OrganizationOnboardingComponent implements OnInit {
       this.websiteValidation.set({
         state: 'UNREACHABLE',
         normalizedUrl: null,
-        message: errorMessage(err, 'No pudimos confirmar el sitio ahora. Podés continuar y revisarlo más tarde.'),
+        message: errorMessage(err, 'No pudimos confirmar ese dominio en este momento.'),
         statusCode: null
       });
       return true;
