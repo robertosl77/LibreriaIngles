@@ -4,18 +4,23 @@ from sqlalchemy import select
 
 from app.accounts.models import Account, AccountStatus, AccountType, AuthMethod
 from app.db import SessionLocal
+from app.notifications.delivery import EmailDeliveryResult
 from app.organizations.models import Organization, OrganizationOnboarding, OrganizationOnboardingStatus, utcnow
 from app.verifications.models import VerificationChallenge
 
 API = "/api/v1"
 VALID_CUIT = "30-12345678-1"
+REAL_VALID_CUIT = "30-65511620-2"
 
 
-def _payload(email: str = "maria@kakatua.example") -> dict:
+def _payload(
+    email: str = "maria@kakatua.example",
+    tax_id: str = VALID_CUIT,
+) -> dict:
     return {
         "country": "AR",
         "taxIdType": "CUIT",
-        "taxId": VALID_CUIT,
+        "taxId": tax_id,
         "displayName": "Kakatua",
         "website": "https://kakatua.example",
         "referent": {
@@ -30,8 +35,15 @@ def _payload(email: str = "maria@kakatua.example") -> dict:
     }
 
 
-def _create(client, email: str = "maria@kakatua.example") -> dict:
-    response = client.post(f"{API}/organization-onboarding", json=_payload(email))
+def _create(
+    client,
+    email: str = "maria@kakatua.example",
+    tax_id: str = VALID_CUIT,
+) -> dict:
+    response = client.post(
+        f"{API}/organization-onboarding",
+        json=_payload(email, tax_id),
+    )
     assert response.status_code == 201, response.text
     body = response.json()
     assert body["continuationToken"]
@@ -88,6 +100,32 @@ def test_p02_requires_continuation_token(client) -> None:
     assert response.status_code == 401
 
 
+def test_p02_continuation_token_is_bound_to_one_onboarding(client) -> None:
+    first = _create(client)
+    second = _create(
+        client,
+        email="otra@kakatua.example",
+        tax_id=REAL_VALID_CUIT,
+    )
+
+    response = client.post(
+        f"{API}/organization-onboarding/{second['publicId']}/email-verification/start",
+        headers=_headers(first),
+    )
+    assert response.status_code == 401
+
+
+def test_p02_start_cannot_be_used_as_resend(client) -> None:
+    created = _create(client)
+    _start(client, created)
+
+    second_start = client.post(
+        f"{API}/organization-onboarding/{created['publicId']}/email-verification/start",
+        headers=_headers(created),
+    )
+    assert second_start.status_code == 409
+
+
 def test_p02_correct_code_verifies_email_without_provisioning(client) -> None:
     created = _create(client)
     started = _start(client, created)
@@ -139,6 +177,26 @@ def test_p02_three_wrong_attempts_exhaust_challenge(client) -> None:
         json={"code": started["developmentCode"]},
     )
     assert correct_after_exhaustion.status_code == 422
+
+
+def test_p02_exhausted_challenge_still_respects_resend_cooldown(client) -> None:
+    created = _create(client)
+    started = _start(client, created)
+    wrong = "000000" if started["developmentCode"] != "000000" else "000001"
+
+    for _ in range(3):
+        client.post(
+            f"{API}/organization-onboarding/{created['publicId']}/email-verification/verify",
+            headers=_headers(created),
+            json={"code": wrong},
+        )
+
+    resend = client.post(
+        f"{API}/organization-onboarding/{created['publicId']}/email-verification/resend",
+        headers=_headers(created),
+    )
+    assert resend.status_code == 429
+    assert "Esperá" in resend.json()["detail"]
 
 
 def test_p02_resend_invalidates_previous_code(client, monkeypatch) -> None:
@@ -241,6 +299,58 @@ def test_p02_email_correction_invalidates_old_challenge(client, monkeypatch) -> 
         json={"code": first["developmentCode"]},
     )
     assert old.status_code == 422
+
+
+def test_p02_cannot_turn_pending_company_into_verified_company_by_changing_email(
+    client,
+    monkeypatch,
+) -> None:
+    from app.organizations import verification
+
+    monkeypatch.setattr(
+        verification.settings,
+        "organization_verification_mock_enabled",
+        False,
+    )
+    created = _create(client)
+    assert created["status"] == "VERIFICATION_PENDING"
+
+    changed = client.patch(
+        f"{API}/organization-onboarding/{created['publicId']}/referent-email",
+        headers=_headers(created),
+        json={"email": "maria2@kakatua.example"},
+    )
+    assert changed.status_code == 409
+
+    with SessionLocal() as db:
+        row = db.scalar(
+            select(OrganizationOnboarding).where(
+                OrganizationOnboarding.public_id == created["publicId"]
+            )
+        )
+        assert row.status == OrganizationOnboardingStatus.VERIFICATION_PENDING
+
+
+def test_p02_production_response_never_exposes_development_code(client, monkeypatch) -> None:
+    from app.organizations import api
+
+    created = _create(client)
+    monkeypatch.setattr(api.settings, "app_env", "production")
+
+    def fake_send_notification(*args, **kwargs):
+        return EmailDeliveryResult(
+            provider="SMTP",
+            accepted=True,
+            development_capture="123456",
+        )
+
+    monkeypatch.setattr(api, "send_notification", fake_send_notification)
+    response = client.post(
+        f"{API}/organization-onboarding/{created['publicId']}/email-verification/start",
+        headers=_headers(created),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["developmentCode"] is None
 
 
 def test_p02_does_not_modify_preexisting_account(client) -> None:
