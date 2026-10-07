@@ -52,9 +52,11 @@ def argentina_cuit_error(value: str) -> str | None:
     if not raw:
         return "Ingresá un CUIT."
 
-    invalid_chars = [ch for ch in raw if not (ch.isdigit() or ch in {"-", " ", "."})]
+    # El formato canónico es de 11 dígitos y suele escribirse XX-XXXXXXXX-X.
+    # Toleramos espacios y guiones al copiar/escribir, pero no puntuación arbitraria.
+    invalid_chars = [ch for ch in raw if not (ch.isdigit() or ch in {"-", " "})]
     if invalid_chars:
-        return "El CUIT sólo puede contener números, espacios, puntos o guiones."
+        return "El CUIT sólo puede contener números, espacios o guiones."
 
     digits = normalize_tax_id(raw)
     if len(digits) < 11:
@@ -68,7 +70,9 @@ def argentina_cuit_error(value: str) -> str | None:
     if check == 11:
         check = 0
     if check == 10 or check != int(digits[-1]):
-        return "El dígito verificador del CUIT no es válido. Revisá especialmente el último dígito."
+        # El checksum sólo permite afirmar que el conjunto de 11 dígitos es inconsistente.
+        # No podemos saber cuál de los dígitos fue tipeado incorrectamente.
+        return "El CUIT no es válido. Revisá los 11 dígitos ingresados."
     return None
 
 
