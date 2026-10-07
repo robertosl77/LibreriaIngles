@@ -11,6 +11,11 @@ import {
   OrganizationOnboardingConfig,
   OrganizationOnboardingResult
 } from '../../core/models';
+import {
+  OrganizationOnboardingValidationService,
+  PhoneNormalizeResult,
+  WebsiteCheckResult
+} from './organization-onboarding-validation.service';
 
 @Component({
   selector: 'app-organization-onboarding',
@@ -23,11 +28,10 @@ import {
       </header>
 
       <section class="heading">
-        <p class="eyebrow">Empresas · P01</p>
+        <p class="eyebrow">Empresas</p>
         <h1>Registrar una organización</h1>
         <p>
-          En este primer paso identificamos la empresa y a la persona que inicia el trámite.
-          La organización todavía no se crea dentro de la plataforma.
+          Identificamos la organización y a la persona que inicia el trámite.
         </p>
       </section>
 
@@ -107,7 +111,7 @@ import {
             >
               <div class="verification-head">
                 <strong>{{ verificationTitle(companyLookup) }}</strong>
-                <span class="badge">{{ companyLookup.state }}</span>
+                <span class="badge">{{ verificationBadge(companyLookup) }}</span>
               </div>
               <p>{{ companyLookup.message }}</p>
 
@@ -160,19 +164,42 @@ import {
 
             <div class="grid two">
               <label class="field">
-                Nombre visible / de fantasía (editable)
+                Nombre visible / de fantasía
                 <input class="input" name="displayName" [(ngModel)]="displayName" maxlength="120" />
                 <span class="field-help">
-                  Se precarga con la razón social cuando está disponible. Cambialo si la empresa usa otra marca.
+                  Se precarga con la razón social. Cambialo si la organización usa otro nombre comercial.
                 </span>
               </label>
-              <label class="field">
-                Sitio web (opcional)
-                <input class="input" name="website" [(ngModel)]="website" placeholder="https://empresa.com" />
+
+              <div class="field">
+                <label for="website">Sitio web</label>
+                <input
+                  id="website"
+                  class="input"
+                  name="website"
+                  [(ngModel)]="website"
+                  (ngModelChange)="resetWebsiteValidation()"
+                  (blur)="checkWebsite()"
+                  placeholder="empresa.com.ar"
+                  autocomplete="url"
+                />
                 <span class="field-help">
-                  El RNS no informa el sitio web. Completalo si lo conocés; más adelante servirá para branding.
+                  Escribí sólo el dominio si querés. Agregamos el protocolo automáticamente.
                 </span>
-              </label>
+
+                @if (websiteBusy()) {
+                  <span class="field-status neutral">Verificando sitio…</span>
+                } @else if (websiteValidation(); as websiteState) {
+                  <span
+                    class="field-status"
+                    [class.success]="websiteState.state === 'VERIFIED'"
+                    [class.warning]="websiteState.state === 'UNREACHABLE'"
+                    [class.failure]="websiteState.state === 'INVALID'"
+                  >
+                    {{ websiteState.state === 'VERIFIED' ? '✓ ' : '' }}{{ websiteState.message }}
+                  </span>
+                }
+              </div>
             </div>
           </section>
 
@@ -181,8 +208,7 @@ import {
               <p class="step">Paso 3</p>
               <h2>Persona referente</h2>
               <p class="muted">
-                Esta persona inicia el alta. Su email se verificará en P02; todavía no se crea una cuenta
-                corporativa ni un ADMIN.
+                Esta persona inicia el alta. En el siguiente paso verificaremos que tenga acceso al email indicado.
               </p>
             </div>
 
@@ -201,10 +227,32 @@ import {
               <label class="field">
                 Email
                 <input class="input" type="email" name="email" [(ngModel)]="email" autocomplete="email" />
+                @if (email.trim() && !emailLooksValid()) {
+                  <span class="field-status failure">Ingresá un email válido, por ejemplo nombre@empresa.com.ar.</span>
+                }
               </label>
+
               <label class="field">
                 Celular / teléfono
-                <input class="input" name="phone" [(ngModel)]="phone" autocomplete="tel" />
+                <input
+                  class="input"
+                  name="phone"
+                  [(ngModel)]="phone"
+                  (ngModelChange)="resetPhoneValidation()"
+                  (blur)="normalizePhoneInput()"
+                  autocomplete="tel"
+                  placeholder="11 5555 6666"
+                />
+                <span class="field-help">
+                  Podés escribirlo con formato local o internacional. Lo guardamos normalizado con código de país.
+                </span>
+                @if (phoneBusy()) {
+                  <span class="field-status neutral">Validando teléfono…</span>
+                } @else if (phoneValidation(); as phoneState) {
+                  <span class="field-status success">✓ {{ phoneState.display }}</span>
+                } @else if (phoneError()) {
+                  <span class="field-status failure">{{ phoneError() }}</span>
+                }
               </label>
             </div>
 
@@ -277,6 +325,7 @@ import {
                   </div>
                 }
               </div>
+
               <label class="field">
                 Carácter en que actúa
                 <select class="input" name="actingCapacity" [(ngModel)]="actingCapacity">
@@ -314,18 +363,13 @@ import {
 
         @if (result(); as saved) {
           <section class="panel result">
-            <p class="step">P01 guardado</p>
             <h2>Solicitud registrada</h2>
-            <p>
-              Estado: <strong>{{ saved.status }}</strong>. Identificador:
-              <code>{{ saved.publicId }}</code>.
-            </p>
             @if (saved.nextStep === 'EMAIL_VERIFICATION_PENDING_P02') {
-              <p>La empresa quedó validada para este entorno. El próximo corte será verificar el email del referente (P02).</p>
+              <p>La organización fue identificada correctamente. El siguiente paso será verificar el email del referente.</p>
             } @else if (saved.nextStep === 'COMPANY_VERIFICATION_PENDING') {
-              <p>La solicitud quedó guardada y espera verificación empresarial oficial.</p>
+              <p>Guardamos la solicitud. Antes de continuar necesitamos completar la verificación de la organización.</p>
             } @else {
-              <p>La solicitud requiere revisión antes de continuar.</p>
+              <p>Guardamos la solicitud y necesitamos revisarla antes de continuar.</p>
             }
 
             @if (config()?.devPurgeAllowed) {
@@ -370,6 +414,11 @@ import {
     .muted { color: #666; line-height: 1.5; }
     .field { display: grid; gap: 0.4rem; font-size: 0.9rem; font-weight: 650; }
     .field-help { color: #666; font-size: 0.76rem; font-weight: 400; line-height: 1.35; }
+    .field-status { font-size: 0.78rem; font-weight: 650; line-height: 1.35; }
+    .field-status.success { color: #285f3c; }
+    .field-status.warning { color: #735200; }
+    .field-status.failure { color: #8f1e18; }
+    .field-status.neutral { color: #666; }
     .input { width: 100%; box-sizing: border-box; padding: 0.78rem 0.85rem; border: 1px solid #bbb; border-radius: 0.65rem; font: inherit; background: #fff; }
     .btn { width: fit-content; border-radius: 0.7rem; padding: 0.8rem 1.1rem; font: inherit; font-weight: 700; cursor: pointer; }
     .btn.primary { border: 1px solid #111; background: #111; color: #fff; }
@@ -410,6 +459,7 @@ import {
 })
 export class OrganizationOnboardingComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly validation = inject(OrganizationOnboardingValidationService);
 
   readonly config = signal<OrganizationOnboardingConfig | null>(null);
   readonly lookup = signal<OrganizationCompanyLookupResult | null>(null);
@@ -418,6 +468,11 @@ export class OrganizationOnboardingComponent implements OnInit {
   readonly lookupBusy = signal(false);
   readonly saveBusy = signal(false);
   readonly purgeBusy = signal(false);
+  readonly websiteBusy = signal(false);
+  readonly websiteValidation = signal<WebsiteCheckResult | null>(null);
+  readonly phoneBusy = signal(false);
+  readonly phoneValidation = signal<PhoneNormalizeResult | null>(null);
+  readonly phoneError = signal<string | null>(null);
   readonly jobTitleBusy = signal(false);
   readonly jobTitleResolveBusy = signal(false);
   readonly jobTitleSuggestions = signal<JobTitleOption[]>([]);
@@ -481,6 +536,7 @@ export class OrganizationOnboardingComponent implements OnInit {
     this.taxId = '';
     this.displayName = '';
     this.website = '';
+    this.resetWebsiteValidation();
     this.notice.set(null);
     this.error.set(null);
   }
@@ -508,9 +564,7 @@ export class OrganizationOnboardingComponent implements OnInit {
           : `DEV · No había altas incompletas para el CUIT ${taxId}.`
       );
     } catch (err) {
-      this.error.set(
-        errorMessage(err, 'No se pudo eliminar el alta incompleta.')
-      );
+      this.error.set(errorMessage(err, 'No se pudo eliminar el alta incompleta.'));
     } finally {
       this.purgeBusy.set(false);
     }
@@ -541,6 +595,96 @@ export class OrganizationOnboardingComponent implements OnInit {
     } finally {
       this.lookupBusy.set(false);
     }
+  }
+
+  resetWebsiteValidation(): void {
+    this.websiteValidation.set(null);
+  }
+
+  async checkWebsite(): Promise<boolean> {
+    const value = this.website.trim();
+    if (!value) {
+      this.websiteValidation.set(null);
+      return true;
+    }
+    if (this.websiteBusy()) {
+      return false;
+    }
+
+    this.websiteBusy.set(true);
+    try {
+      const result = await firstValueFrom(this.validation.checkWebsite(value));
+      this.websiteValidation.set(result);
+      if (result.normalizedUrl) {
+        this.website = result.normalizedUrl;
+      }
+      return result.state !== 'INVALID';
+    } catch (err) {
+      this.websiteValidation.set({
+        state: 'UNREACHABLE',
+        normalizedUrl: null,
+        message: errorMessage(err, 'No pudimos confirmar el sitio ahora. Podés continuar y revisarlo más tarde.'),
+        statusCode: null
+      });
+      return true;
+    } finally {
+      this.websiteBusy.set(false);
+    }
+  }
+
+  async ensureWebsite(): Promise<boolean> {
+    if (!this.website.trim()) {
+      return true;
+    }
+    if (this.websiteValidation()?.state === 'VERIFIED' || this.websiteValidation()?.state === 'UNREACHABLE') {
+      return true;
+    }
+    return this.checkWebsite();
+  }
+
+  resetPhoneValidation(): void {
+    this.phoneValidation.set(null);
+    this.phoneError.set(null);
+  }
+
+  async normalizePhoneInput(): Promise<boolean> {
+    const value = this.phone.trim();
+    if (!value) {
+      this.phoneValidation.set(null);
+      this.phoneError.set(null);
+      return false;
+    }
+    if (this.phoneBusy()) {
+      return false;
+    }
+
+    this.phoneBusy.set(true);
+    this.phoneError.set(null);
+    try {
+      const result = await firstValueFrom(
+        this.validation.normalizePhone(this.country, value)
+      );
+      this.phoneValidation.set(result);
+      this.phone = result.display;
+      return true;
+    } catch (err) {
+      this.phoneValidation.set(null);
+      this.phoneError.set(errorMessage(err, 'Revisá el teléfono ingresado.'));
+      return false;
+    } finally {
+      this.phoneBusy.set(false);
+    }
+  }
+
+  async ensurePhone(): Promise<boolean> {
+    if (this.phoneValidation() !== null) {
+      return true;
+    }
+    return this.normalizePhoneInput();
+  }
+
+  emailLooksValid(): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email.trim());
   }
 
   onJobTitleInput(value: string): void {
@@ -624,6 +768,12 @@ export class OrganizationOnboardingComponent implements OnInit {
     return 'Revisá el CUIT';
   }
 
+  verificationBadge(value: OrganizationCompanyLookupResult): string {
+    if (value.state === 'VERIFIED') return 'Verificada';
+    if (value.state === 'PENDING') return 'Pendiente';
+    return 'Revisar';
+  }
+
   canSave(): boolean {
     if (this.result() !== null) {
       return false;
@@ -632,7 +782,7 @@ export class OrganizationOnboardingComponent implements OnInit {
       this.canContinueWithCompany() &&
       this.firstName.trim() &&
       this.lastName.trim() &&
-      this.email.trim() &&
+      this.emailLooksValid() &&
       this.phone.trim() &&
       this.jobTitle.trim() &&
       this.actingCapacity &&
@@ -642,9 +792,16 @@ export class OrganizationOnboardingComponent implements OnInit {
 
   async save(): Promise<void> {
     if (this.result() !== null || !this.canSave()) return;
+    if (!(await this.ensureWebsite())) {
+      return;
+    }
+    if (!(await this.ensurePhone())) {
+      return;
+    }
     if (!(await this.ensureJobTitle())) {
       return;
     }
+
     this.saveBusy.set(true);
     this.error.set(null);
     try {
