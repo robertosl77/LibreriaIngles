@@ -25,6 +25,7 @@ import { ToastService } from '../../core/toast.service';
 import { AudioPlayerComponent } from '../../shared/audio-player.component';
 import { AudioRecorderComponent, RecordedAudio } from '../../shared/audio-recorder.component';
 import { LessonPanelComponent } from '../../shared/lesson-panel.component';
+import { LoadingDotsComponent } from '../../shared/ui/loading-dots.component';
 import { PronunciationPracticeComponent } from '../../shared/pronunciation-practice.component';
 import { STATUS_LABELS, scoreChip, statusChip } from '../../shared/status';
 
@@ -69,6 +70,7 @@ const RESULT_LABELS: Record<string, string> = {
 @Component({
   selector: 'app-class',
   imports: [
+    LoadingDotsComponent,
     FormsModule,
     RouterLink,
     DatePipe,
@@ -634,9 +636,14 @@ const RESULT_LABELS: Record<string, string> = {
                     </p>
                   }
                   @if (r.canAppeal && c.status === 'COMPLETED') {
-                    <button class="btn-link small" type="button" (click)="appeal(exercise.id)" [disabled]="busy()">
-                      Creo que mi respuesta es correcta
-                    </button>
+                    <span class="appeal-row">
+                      <button class="btn-link small" type="button" (click)="appeal(exercise.id)" [disabled]="busy()">
+                        Creo que mi respuesta es correcta
+                      </button>
+                      @if (appealingId() === exercise.id) {
+                        <app-loading-dots class="small" text="Revisando…" label="Revisando tu respuesta" />
+                      }
+                    </span>
                   }
                 </div>
                 @if (exercise.type === 'conversation' && exercise.conversation?.closing; as closing) {
@@ -836,6 +843,7 @@ const RESULT_LABELS: Record<string, string> = {
     .pronunciation-unavailable { background: var(--bg); border-color: var(--border); }
     .suggestion { color: #5a3d00; }
     .feedback .btn-link { align-self: flex-start; }
+    .feedback .appeal-row { align-self: flex-start; display: inline-flex; align-items: center; gap: 0.5rem; }
     .error-text { color: var(--bad); }
     .exam-result { display: flex; flex-direction: column; gap: 0.9rem; }
     .exam-result.ok { border-color: #d8c48a; background: linear-gradient(180deg, #fffdf6, var(--surface)); }
@@ -892,6 +900,8 @@ export class ClassComponent implements OnDestroy {
   readonly klass = signal<ClassDetail | null>(null);
   readonly loading = signal(true);
   readonly busy = signal(false);
+  /** T-204: ejercicio cuya corrección se está revisando (muestra los puntos de espera). */
+  readonly appealingId = signal<number | null>(null);
   readonly answers = signal<Record<number, string>>({});
   readonly saveState = signal<Record<number, SaveState>>({});
   /** Lecciones ya cargadas, por skill: una sola llamada por tema. */
@@ -1438,7 +1448,12 @@ export class ClassComponent implements OnDestroy {
   }
 
   async appeal(exerciseId: number): Promise<void> {
-    await this.run(() => this.api.appeal(this.klass()!.id, exerciseId));
+    this.appealingId.set(exerciseId);
+    try {
+      await this.run(() => this.api.appeal(this.klass()!.id, exerciseId));
+    } finally {
+      this.appealingId.set(null);
+    }
   }
 
   private async run(request: () => Observable<ClassDetail>): Promise<void> {
