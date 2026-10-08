@@ -21,6 +21,7 @@ from app.ai.service import (
 )
 from app.ai.usage import AIUsageContext
 from app.core.config import settings
+from app.classes import bank
 from app.classes.normalize import BLANK, normalize_answer, normalize_blank
 from app.classes.types import (
     CASE_SENSITIVE_TYPES,
@@ -937,31 +938,37 @@ def generate_content(
             message += " El examen necesita ejercicios de todas las áreas."
         discard_failed_session(db, session, message)
 
+    banked: list[Exercise] = []
     for position, (slot, item) in enumerate(matched):
         skill_key = slot["skillKey"]
-        db.add(
-            Exercise(
-                class_session_id=session.id,
-                study_profile_id=session.study_profile_id,
-                organization_id=session.organization_id,
-                membership_id=session.membership_id,
-                position=position,
-                level=request.get("level"),
-                area=skill_key.split(".")[1],
-                skill_key=skill_key,
-                exercise_type=item.type,
-                instruction=item.instruction,
-                prompt=item.question,
-                content=_content(item, request.get("level"), slot),
-                presentation_mode=PresentationMode(slot.get("presentation", "READ")),
-                response_mode=ResponseMode(
-                    slot.get("response", default_response_mode(item.type).value)
-                ),
-                expected_concepts=item.expectedConcepts,
-                answer_key=_answer_key(item),
-                evaluation_mode=EVALUATION_MODE_BY_TYPE[item.type],
-            )
+        exercise = Exercise(
+            class_session_id=session.id,
+            study_profile_id=session.study_profile_id,
+            organization_id=session.organization_id,
+            membership_id=session.membership_id,
+            position=position,
+            level=request.get("level"),
+            area=skill_key.split(".")[1],
+            skill_key=skill_key,
+            exercise_type=item.type,
+            instruction=item.instruction,
+            prompt=item.question,
+            content=_content(item, request.get("level"), slot),
+            presentation_mode=PresentationMode(slot.get("presentation", "READ")),
+            response_mode=ResponseMode(
+                slot.get("response", default_response_mode(item.type).value)
+            ),
+            expected_concepts=item.expectedConcepts,
+            answer_key=_answer_key(item),
+            evaluation_mode=EVALUATION_MODE_BY_TYPE[item.type],
         )
+        db.add(exercise)
+        banked.append(exercise)
+    # T-212: los ejercicios de práctica validados quedan en el banco compartido (se llena con el uso).
+    if session.kind != SessionKind.EXAM:
+        for exercise in banked:
+            bank.store(db, exercise, provider=result.connection.provider,
+                       model=result.connection.model, session_id=session.id)
     title = str(result.data.get("title") or "").strip()[:200]
     if session.kind == SessionKind.EXAM:
         session.title = f"Examen de nivel {request.get('level')}"

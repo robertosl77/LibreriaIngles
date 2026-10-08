@@ -200,9 +200,69 @@ class Exercise(Base):
     evaluation_mode: Mapped[EvaluationMode] = mapped_column(
         SqlEnum(EvaluationMode, native_enum=False)
     )
+    # T-212: ítem del banco del que sale (o al que se guardó) este ejercicio. Sirve para no repetir.
+    bank_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("exercise_bank_items.id", ondelete="SET NULL", name="fk_exercises_bank_item_id"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )
+
+
+class BankItemStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    RETIRED = "RETIRED"
+
+
+class ExerciseBankItem(Base):
+    """T-212: banco de ejercicios compartido por nivel · tema · tipo.
+
+    Se llena con el uso: cada ejercicio que la IA genera y pasa la validación queda acá para que lo
+    reusen otros alumnos (sin volver a gastar tokens). Las clases y exámenes actuales no cambian.
+    """
+
+    __tablename__ = "exercise_bank_items"
+    __table_args__ = (
+        Index("ix_exercise_bank_items_pick", "level", "skill_key", "exercise_type", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Huella del contenido (nivel + tema + tipo + consigna + contenido): evita duplicados.
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True)
+    level: Mapped[str] = mapped_column(String(2))
+    area: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    skill_key: Mapped[str] = mapped_column(String(160))
+    exercise_type: Mapped[str] = mapped_column(String(80))
+    presentation_mode: Mapped[PresentationMode] = mapped_column(
+        SqlEnum(PresentationMode, native_enum=False, length=10)
+    )
+    response_mode: Mapped[ResponseMode] = mapped_column(
+        SqlEnum(ResponseMode, native_enum=False, length=10)
+    )
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt: Mapped[str] = mapped_column(Text)
+    content: Mapped[dict] = mapped_column(JSON, default=dict)
+    expected_concepts: Mapped[list] = mapped_column(JSON, default=list)
+    answer_key: Mapped[dict] = mapped_column(JSON, default=dict)
+    evaluation_mode: Mapped[EvaluationMode] = mapped_column(
+        SqlEnum(EvaluationMode, native_enum=False)
+    )
+    status: Mapped[BankItemStatus] = mapped_column(
+        SqlEnum(BankItemStatus, native_enum=False, length=10), default=BankItemStatus.ACTIVE
+    )
+    retired_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # Origen (auditoría): qué motor lo generó y en qué clase apareció primero.
+    source_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_session_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Calidad (T-216): se actualizan con el uso.
+    times_served: Mapped[int] = mapped_column(Integer, default=1)
+    appeals: Mapped[int] = mapped_column(Integer, default=0)
+    appeals_accepted: Mapped[int] = mapped_column(Integer, default=0)
+    repeat_reports: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class DraftAnswer(Base):
