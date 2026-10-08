@@ -61,9 +61,9 @@ class Settings(BaseSettings):
     exercise_bank_repeat_days: int = 30  # el alumno no vuelve a ver un ítem del banco dentro de esta ventana
     # T-214: práctica continua por tandas ("Nueva clase"). La clase clásica queda para el examen.
     practice_batch_size: int = 5
-    # T-216: un reporte pone el ítem en revisión (no se sirve) hasta que SrMacros decida.
-    # Tope por alumno y día de reportes que suspenden (protege de quien reporta todo).
-    bank_reports_per_day: int = 5
+    # T-216: con este número de alumnos DISTINTOS reportando un ítem, pasa a revisión (deja de
+    # servirse) hasta que SrMacros decida. Antes de eso sigue normal: un alumno solo no lo frena.
+    bank_review_after_reports: int = 3
 
     # P01 B2B: padrón oficial RNS sincronizado localmente + fallback DEV.
     organization_registry_path: str = "data/rns_registry.db"

@@ -16,8 +16,8 @@ import { ToastService } from '../../core/toast.service';
       <div>
         <h2>Ejercicios en revisión</h2>
         <p class="muted small">
-          Un reporte de un alumno («se repite» o «está mal») saca el ejercicio del banco hasta que decidas.
-          Los más reportados aparecen primero. Ojo con quien reporta mucho: se ve al lado de cada reporte.
+          Cuando 3 alumnos distintos reportan un ejercicio («se repite» o «está mal»), deja de mostrarse y
+          espera tu decisión acá. Los más reportados aparecen primero.
         </p>
       </div>
       @if (loading()) {

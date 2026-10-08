@@ -179,17 +179,13 @@ def recent_prompts(db: Session, study_profile_id: int, skill_key: str, *, days: 
 # ---------------------------------------------------------------- T-216: calidad del banco
 
 
-def _reports_today(db: Session, study_profile_id: int) -> int:
-    from datetime import timedelta
-
+def _distinct_reporters(db: Session, item_id: int) -> int:
     from sqlalchemy import func
 
-    from app.ai.models import utcnow
     from app.learning.models import ExerciseReport
 
-    return db.scalar(select(func.count(ExerciseReport.id)).where(
-        ExerciseReport.study_profile_id == study_profile_id,
-        ExerciseReport.created_at >= utcnow() - timedelta(days=1),
+    return db.scalar(select(func.count(func.distinct(ExerciseReport.study_profile_id))).where(
+        ExerciseReport.bank_item_id == item_id
     )) or 0
 
 
@@ -207,17 +203,17 @@ def report(db: Session, exercise: Exercise, study_profile_id: int, reason: str) 
         return False
     from app.core.config import settings
 
-    suspends = _reports_today(db, study_profile_id) < settings.bank_reports_per_day
     db.add(ExerciseReport(exercise_id=exercise.id, study_profile_id=study_profile_id,
                           bank_item_id=exercise.bank_item_id, reason=kind))
+    db.flush()
     item = db.get(ExerciseBankItem, exercise.bank_item_id) if exercise.bank_item_id else None
     if item is not None:
         if kind == ExerciseReportReason.WRONG:
             item.wrong_reports = (item.wrong_reports or 0) + 1
         else:
             item.repeat_reports = (item.repeat_reports or 0) + 1
-        # Un reporte alcanza para dejar de servirlo; decide SrMacros (dentro del tope diario).
-        if suspends and item.status == BankItemStatus.ACTIVE:
+        # Recién con N alumnos distintos deja de servirse y pasa a la revisión de SrMacros.
+        if item.status == BankItemStatus.ACTIVE and _distinct_reporters(db, item.id) >= settings.bank_review_after_reports:
             item.status = BankItemStatus.REVIEW
     return True
 
@@ -305,6 +301,12 @@ def decide(db: Session, item_id: int, action: str, accepted_answers: list[str] |
         item.retired_reason = None
         item.wrong_reports = 0
         item.repeat_reports = 0
+        # Revisado: los reportes previos ya no cuentan para volver a suspenderlo.
+        from sqlalchemy import update
+
+        from app.learning.models import ExerciseReport
+
+        db.execute(update(ExerciseReport).where(ExerciseReport.bank_item_id == item.id).values(bank_item_id=None))
     else:
         raise ValueError("Acción inválida.")
     return item

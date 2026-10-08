@@ -158,8 +158,36 @@ def _bank_exercise(klass_id: int) -> Exercise:
             Exercise.class_session_id == klass_id, Exercise.bank_item_id.is_not(None))).first()
 
 
-def test_one_report_puts_item_in_review_and_owner_decides(client) -> None:
-    """T-216: un reporte suspende el ítem (no se sirve); SrMacros lo ve en la cola y decide."""
+def _report_as(client, email: str, klass_id: int, exercise_id: int, reason: str = "WRONG") -> None:
+    """Otro alumno reporta el mismo ítem del banco (en su propia clase)."""
+    from app.learning.models import ClassSession
+
+    headers = login(client, email)
+    client.put(f"{API}/me/level", json={"level": "A1"}, headers=headers)
+    with SessionLocal() as db:
+        original = db.get(Exercise, exercise_id)
+        profile_id = db.scalar(select(ClassSession.study_profile_id).join(Exercise, Exercise.class_session_id == ClassSession.id)
+                               .where(Exercise.id == exercise_id))
+        from app.accounts.models import Account
+
+        account = db.scalar(select(Account).where(Account.email == email))
+        mine = db.scalar(select(ClassSession).where(ClassSession.account_id == account.id))
+        if mine is None:
+            mine = ClassSession(study_profile_id=profile_id + 1000 + account.id, account_id=account.id,
+                                status="READY", target_level="A1")
+            db.add(mine)
+            db.flush()
+        twin = Exercise(class_session_id=mine.id, study_profile_id=mine.study_profile_id, level="A1",
+                        skill_key=original.skill_key, exercise_type=original.exercise_type, prompt=original.prompt,
+                        evaluation_mode=original.evaluation_mode, bank_item_id=original.bank_item_id)
+        db.add(twin)
+        db.flush()
+        bank.report(db, twin, mine.study_profile_id, reason)
+        db.commit()
+
+
+def test_item_goes_to_review_after_three_students_and_owner_decides(client) -> None:
+    """T-216: 1 o 2 alumnos no lo frenan; al 3.º pasa a revisión y SrMacros decide."""
     headers = _setup(client)
     klass = client.post(f"{API}/classes", headers=headers).json()
     exercise = _bank_exercise(klass["id"])
@@ -167,16 +195,23 @@ def test_one_report_puts_item_in_review_and_owner_decides(client) -> None:
     body = client.post(url, json={"reason": "WRONG"}, headers=headers).json()
     assert next(e for e in body["exercises"] if e["id"] == exercise.id)["reported"] == ["WRONG"]
     client.post(url, json={"reason": "WRONG"}, headers=headers)  # mismo alumno: no suma
+    client.post(url, json={"reason": "REPEATED"}, headers=headers)  # mismo alumno, otro motivo: sigue siendo 1 alumno
     assert client.post(url, json={"reason": "OTRO"}, headers=headers).status_code == 422
     with SessionLocal() as db:
-        item = db.get(ExerciseBankItem, exercise.bank_item_id)
-        assert item.wrong_reports == 1 and item.status == BankItemStatus.REVIEW
+        assert db.get(ExerciseBankItem, exercise.bank_item_id).status == BankItemStatus.ACTIVE
+
+    _report_as(client, "b@example.com", klass["id"], exercise.id)
+    with SessionLocal() as db:
+        assert db.get(ExerciseBankItem, exercise.bank_item_id).status == BankItemStatus.ACTIVE  # 2 alumnos
+    _report_as(client, "c@example.com", klass["id"], exercise.id, "REPEATED")
+    with SessionLocal() as db:
+        assert db.get(ExerciseBankItem, exercise.bank_item_id).status == BankItemStatus.REVIEW  # 3.º alumno
 
     owner = login(client, "owner@example.com")
     assert client.get(f"{API}/platform/bank/review", headers=headers).status_code == 403
     queue = client.get(f"{API}/platform/bank/review", headers=owner).json()
     assert [q["id"] for q in queue] == [exercise.bank_item_id]
-    assert queue[0]["reports"][0]["email"] == "roberto@example.com" and queue[0]["wrongReports"] == 1
+    assert {r["email"] for r in queue[0]["reports"]} >= {"roberto@example.com", "b@example.com", "c@example.com"}
 
     fixed = client.post(f"{API}/platform/bank/{exercise.bank_item_id}/decision",
                         json={"action": "FIX", "acceptedAnswers": ["respuesta corregida"]}, headers=owner)
@@ -189,23 +224,6 @@ def test_one_report_puts_item_in_review_and_owner_decides(client) -> None:
                        json={"action": "RETIRE"}, headers=owner).status_code == 200
     with SessionLocal() as db:
         assert db.get(ExerciseBankItem, exercise.bank_item_id).status == BankItemStatus.RETIRED
-
-
-def test_daily_report_cap_protects_from_reporting_everything(client, monkeypatch) -> None:
-    """T-216: pasado el tope diario, el reporte se guarda pero ya no suspende."""
-    from app.core.config import settings
-
-    monkeypatch.setattr(settings, "bank_reports_per_day", 1)
-    headers = _setup(client)
-    klass = client.post(f"{API}/classes", headers=headers).json()
-    with SessionLocal() as db:
-        banked = db.scalars(select(Exercise).where(
-            Exercise.class_session_id == klass["id"], Exercise.bank_item_id.is_not(None))).all()[:2]
-    for exercise in banked:
-        client.post(f"{API}/classes/{klass['id']}/exercises/{exercise.id}/report", json={"reason": "WRONG"}, headers=headers)
-    with SessionLocal() as db:
-        states = [db.get(ExerciseBankItem, e.bank_item_id).status for e in banked]
-    assert states == [BankItemStatus.REVIEW, BankItemStatus.ACTIVE]
 
 
 def test_retired_items_are_not_served(client, monkeypatch) -> None:
@@ -240,3 +258,17 @@ def test_accepted_appeal_teaches_the_bank_the_variant(client) -> None:
         item = db.get(ExerciseBankItem, ex.bank_item_id)
         assert item.appeals == 1 and item.appeals_accepted == 1
         assert "otra forma válida" in item.answer_key["acceptedAnswers"]
+
+
+def test_reactivated_item_needs_three_new_reports_to_return_to_review(client) -> None:
+    headers = _setup(client)
+    klass = client.post(f"{API}/classes", headers=headers).json()
+    exercise = _bank_exercise(klass["id"])
+    for email in ("a1@example.com", "a2@example.com", "a3@example.com"):
+        _report_as(client, email, klass["id"], exercise.id)
+    with SessionLocal() as db:
+        bank.decide(db, exercise.bank_item_id, "ACTIVATE")
+        db.commit()
+    _report_as(client, "a4@example.com", klass["id"], exercise.id)
+    with SessionLocal() as db:
+        assert db.get(ExerciseBankItem, exercise.bank_item_id).status == BankItemStatus.ACTIVE
