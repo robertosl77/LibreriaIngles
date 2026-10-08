@@ -78,3 +78,80 @@ def store(db: Session, exercise: Exercise, *, provider: str | None, model: str |
         item.times_served = (item.times_served or 0) + 1
     exercise.bank_item_id = item.id
     return item
+
+
+# ---------------------------------------------------------------- T-213: elegir del banco
+
+
+def seen_item_ids(db: Session, study_profile_id: int, *, days: int) -> set[int]:
+    """Ítems del banco que el alumno ya vio dentro de la ventana de no-repetición (#282)."""
+    from datetime import timedelta
+
+    from app.ai.models import utcnow
+
+    since = utcnow() - timedelta(days=days)
+    rows = db.scalars(
+        select(Exercise.bank_item_id).where(
+            Exercise.study_profile_id == study_profile_id,
+            Exercise.bank_item_id.is_not(None),
+            Exercise.created_at >= since,
+        )
+    ).all()
+    return set(rows)
+
+
+def pick(db: Session, slot: dict, level: str, *, exclude: set[int]) -> ExerciseBankItem | None:
+    """Un ítem ACTIVO del banco para el pedido: mismo nivel, tema, tipo y modalidades; no visto.
+    Prefiere los menos servidos (reparte el uso y da datos de calidad de todos)."""
+    types = [t for t in slot.get("allowedTypes") or [] if t not in NOT_BANKED_TYPES]
+    if not types or slot.get("conversationGroup"):
+        return None
+    query = (
+        select(ExerciseBankItem)
+        .where(
+            ExerciseBankItem.level == level,
+            ExerciseBankItem.skill_key == slot.get("skillKey"),
+            ExerciseBankItem.exercise_type.in_(types),
+            ExerciseBankItem.status == BankItemStatus.ACTIVE,
+            ExerciseBankItem.presentation_mode == slot.get("presentation", "READ"),
+            ExerciseBankItem.response_mode == slot.get("response", "WRITE"),
+        )
+        .order_by(ExerciseBankItem.times_served, ExerciseBankItem.id)
+    )
+    if exclude:
+        query = query.where(ExerciseBankItem.id.not_in(exclude))
+    return db.scalars(query.limit(1)).first()
+
+
+def assign(db: Session, slots: list[dict], level: str, study_profile_id: int, *, days: int) -> int:
+    """Marca en cada slot el ítem del banco que lo cubre (`bankItemId`). Devuelve cuántos cubrió."""
+    exclude = seen_item_ids(db, study_profile_id, days=days)
+    covered = 0
+    for slot in slots:
+        item = pick(db, slot, level, exclude=exclude)
+        if item is not None:
+            slot["bankItemId"] = item.id
+            exclude.add(item.id)
+            covered += 1
+    return covered
+
+
+def exercise_from_item(item: ExerciseBankItem, **fields) -> Exercise:
+    """Ejercicio de la clase armado desde el banco (sin IA)."""
+    item.times_served = (item.times_served or 0) + 1
+    return Exercise(
+        level=item.level,
+        area=item.area,
+        skill_key=item.skill_key,
+        exercise_type=item.exercise_type,
+        instruction=item.instruction,
+        prompt=item.prompt,
+        content=dict(item.content or {}),
+        expected_concepts=list(item.expected_concepts or []),
+        answer_key=dict(item.answer_key or {}),
+        presentation_mode=item.presentation_mode,
+        response_mode=item.response_mode,
+        evaluation_mode=item.evaluation_mode,
+        bank_item_id=item.id,
+        **fields,
+    )

@@ -72,3 +72,81 @@ def test_exam_exercises_do_not_enter_the_bank(client) -> None:
         exam_exercises = db.scalars(select(Exercise).where(Exercise.class_session_id == exam["id"])).all()
         assert exam_exercises and all(e.bank_item_id is None for e in exam_exercises)
         assert len(db.scalars(select(ExerciseBankItem)).all()) == before
+
+
+def _class_slots(klass_id: int) -> list[dict]:
+    from app.learning.models import ClassSession
+
+    with SessionLocal() as db:
+        slots = db.get(ClassSession, klass_id).generation_request["slots"]
+    return [{k: v for k, v in s.items() if k != "bankItemId"} for s in slots if s["allowedTypes"] != ["conversation"]]
+
+
+def _generation_calls(account_email: str) -> int:
+    from app.accounts.models import Account
+    from app.ai.models import AIUsageEvent
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == account_email))
+        return len(db.scalars(select(AIUsageEvent).where(
+            AIUsageEvent.account_id == account.id, AIUsageEvent.operation == "generate_class")).all())
+
+
+def test_other_student_gets_the_class_from_the_bank_without_ai(client, monkeypatch) -> None:
+    import copy
+
+    from app.classes import generation
+
+    first = client.post(f"{API}/classes", headers=_setup(client)).json()
+    slots = _class_slots(first["id"])
+    monkeypatch.setattr(generation, "select_slots", lambda *a, **k: copy.deepcopy(slots))
+
+    other = login(client, "otra@example.com")
+    client.put(f"{API}/me/level", json={"level": "A1"}, headers=other)
+    client.post(f"{API}/ai/connections",
+                json={"provider": "MOCK", "name": "Simulado", "model": "mock", "priority": 1}, headers=other)
+    klass = client.post(f"{API}/classes", headers=other).json()
+    assert klass["status"] == "READY" and len(klass["exercises"]) == len(slots)
+    assert _generation_calls("otra@example.com") == 0  # 0 tokens de generación
+    assert klass["title"]
+    with SessionLocal() as db:
+        from app.learning.models import ClassSession
+
+        assert db.get(ClassSession, klass["id"]).generation_request["fromBank"] == len(slots)
+
+
+def test_same_student_does_not_repeat_bank_items(client, monkeypatch) -> None:
+    import copy
+
+    from app.classes import generation
+
+    headers = _setup(client)
+    first = client.post(f"{API}/classes", headers=headers).json()
+    slots = _class_slots(first["id"])
+    monkeypatch.setattr(generation, "select_slots", lambda *a, **k: copy.deepcopy(slots))
+    calls = _generation_calls("roberto@example.com")
+    second = client.post(f"{API}/classes", headers=headers).json()
+    assert second["status"] == "READY"
+    assert _generation_calls("roberto@example.com") == calls + 1  # lo ya visto no sale del banco
+    with SessionLocal() as db:
+        from app.learning.models import ClassSession
+
+        assert db.get(ClassSession, second["id"]).generation_request["fromBank"] == 0
+
+
+def test_bank_can_be_turned_off(client, monkeypatch) -> None:
+    import copy
+
+    from app.classes import generation
+    from app.core.config import settings
+
+    first = client.post(f"{API}/classes", headers=_setup(client)).json()
+    slots = _class_slots(first["id"])
+    monkeypatch.setattr(generation, "select_slots", lambda *a, **k: copy.deepcopy(slots))
+    monkeypatch.setattr(settings, "exercise_bank_enabled", False)
+    other = login(client, "otra@example.com")
+    client.put(f"{API}/me/level", json={"level": "A1"}, headers=other)
+    client.post(f"{API}/ai/connections",
+                json={"provider": "MOCK", "name": "Simulado", "model": "mock", "priority": 1}, headers=other)
+    client.post(f"{API}/classes", headers=other)
+    assert _generation_calls("otra@example.com") == 1
