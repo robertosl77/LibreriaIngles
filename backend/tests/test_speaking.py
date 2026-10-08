@@ -55,11 +55,8 @@ def test_audio_is_transcribed_to_draft_and_never_persisted(client, monkeypatch) 
         exercises = db.scalars(
             select(Exercise).where(Exercise.class_session_id == klass["id"])
         ).all()
-        exercise = next(
-            item
-            for item in exercises
-            if item.exercise_type in {"fill_blank", "rewrite", "short_writing", "conversation"}
-        )
+        exercise = exercises[0]  # tipo fijo: la clase del simulado es al azar
+        exercise.exercise_type = "rewrite"
         exercise.response_mode = ResponseMode.SPEAK
         expected = (
             exercise.answer_key["acceptedAnswers"][0]
@@ -137,11 +134,8 @@ def test_pronunciation_result_is_null_when_service_is_unavailable(client, monkey
         exercises = db.scalars(
             select(Exercise).where(Exercise.class_session_id == klass["id"])
         ).all()
-        exercise = next(
-            item
-            for item in exercises
-            if item.exercise_type in {"fill_blank", "rewrite", "short_writing"}
-        )
+        exercise = exercises[0]  # tipo fijo: la clase del simulado es al azar
+        exercise.exercise_type = "rewrite"
         exercise.response_mode = ResponseMode.SPEAK
         exercise_id = exercise.id
         db.commit()
@@ -204,10 +198,8 @@ def test_slow_transcription_does_not_freeze_other_requests(client, monkeypatch) 
     headers = _setup(client)
     klass = client.post(f"{API}/classes", headers=headers).json()
     with SessionLocal() as db:
-        exercise = next(
-            e for e in db.scalars(select(Exercise).where(Exercise.class_session_id == klass["id"])).all()
-            if e.exercise_type in {"rewrite", "short_writing", "conversation", "fill_blank"}
-        )
+        exercise = db.scalars(select(Exercise).where(Exercise.class_session_id == klass["id"])).first()
+        exercise.exercise_type = "rewrite"
         exercise.response_mode = ResponseMode.SPEAK
         exercise_id = exercise.id
         db.commit()

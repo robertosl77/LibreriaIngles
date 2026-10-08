@@ -8,7 +8,7 @@
 import random
 
 from pydantic import BaseModel, ValidationError, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.models import utcnow
@@ -735,14 +735,8 @@ def _enough(session: ClassSession, slots: list[dict], matched: list) -> bool:
     return len(matched) * 4 >= len(slots) * 3 and areas_requested <= areas_matched
 
 
-def create_class(
-    db: Session, study: StudyContext
-) -> tuple[ClassSession, AIResult | None]:
-    level = study.profile.operational_level or study.profile.selected_level
-    curriculum = get_level(level) if level else None
-    if curriculum is None:
-        raise GenerationFailed("Elegí un nivel disponible antes de pedir una clase.")
-
+def _plan(db: Session, study: StudyContext, curriculum, count: int) -> tuple[list[dict], list[dict], int]:
+    """Pedidos de ejercicios según el dashboard: foco, banco (T-213) y cupo (T-191)."""
     allow_speaking = has_audio_connection(db, study.account)
     focus = weak_abilities(
         ability_progress(db, study.profile.id, curriculum.level), allow_speaking=allow_speaking
@@ -751,6 +745,7 @@ def create_class(
     slots = select_slots(
         list(curriculum.skills),
         progress,
+        count,
         allow_speaking=allow_speaking,
         focus=focus,
     )
@@ -762,9 +757,25 @@ def create_class(
     # conservando los que refuerzan lo que más le cuesta al alumno.
     requested = len(slots)
     slots = fit_slots_to_quota(db, study.account, curriculum.level, slots, focus)
+    return slots, focus, requested
+
+
+def create_class(
+    db: Session, study: StudyContext, *, practice: bool = False
+) -> tuple[ClassSession, AIResult | None]:
+    level = study.profile.operational_level or study.profile.selected_level
+    curriculum = get_level(level) if level else None
+    if curriculum is None:
+        raise GenerationFailed("Elegí un nivel disponible antes de pedir una clase.")
+
+    count = settings.practice_batch_size if practice else EXERCISES_PER_CLASS
+    slots, focus, requested = _plan(db, study, curriculum, count)
     generation_request = {"level": curriculum.level, "slots": slots, "focus": focus}
     if len(slots) < requested:
         generation_request["reducedFrom"] = requested
+    if practice:
+        # T-214: práctica continua. La tanda 1 sale ya; las siguientes se piden con "Continuar".
+        generation_request["practice"] = {"batch": 1, "batchSize": count, "finished": False}
     session = ClassSession(
         study_profile_id=study.profile.id,
         account_id=study.account.id,
@@ -778,6 +789,17 @@ def create_class(
     db.commit()  # persistir la solicitud antes de llamar a la IA
     result = generate_content(db, study, session)
     return session, result
+
+
+def add_practice_batch(db: Session, study: StudyContext, session: ClassSession, batch: int) -> int:
+    """T-214: prepara la tanda `batch` (banco primero; la IA solo para huecos). Devuelve cuántos creó.
+    El foco se recalcula con lo corregido hasta ahora: la práctica se ajusta sobre la marcha."""
+    curriculum = get_level(session.target_level)
+    practice = (session.generation_request or {}).get("practice") or {}
+    slots, _, _ = _plan(db, study, curriculum, int(practice.get("batchSize") or settings.practice_batch_size))
+    last = db.scalar(select(func.max(Exercise.position)).where(Exercise.class_session_id == session.id))
+    _, created = _materialize(db, study, session, slots, batch=batch, start=(last or 0) + 1, first=False)
+    return created
 
 
 # ---------------------------------------------------------------- T-191 armar según el cupo
@@ -900,10 +922,24 @@ def _public_slot(slot: dict) -> dict:
 def generate_content(
     db: Session, study: StudyContext, session: ClassSession
 ) -> AIResult | None:
+    request = session.generation_request or {}
+    result, _ = _materialize(db, study, session, request.get("slots") or [], batch=1, start=0, first=True)
+    return result
+
+
+def _materialize(
+    db: Session, study: StudyContext, session: ClassSession, slots: list[dict], *,
+    batch: int, start: int, first: bool,
+) -> tuple[AIResult | None, int]:
+    """Crea los ejercicios de `slots` (banco primero, IA para el resto).
+
+    first=True: es la clase entera (o la tanda 1): si falla, la clase no se guarda (T-203) y al
+    terminar queda lista con título. first=False: tanda siguiente de la práctica (T-214): si no
+    sale nada, se informa y la clase sigue como estaba.
+    """
     from app.learning.models import BankItemStatus, ExerciseBankItem
 
     request = session.generation_request or {}
-    slots = request.get("slots") or []
     level = request.get("level")
     common = dict(
         class_session_id=session.id,
@@ -950,6 +986,8 @@ def generate_content(
             )
         except NoAIAvailable as exc:
             if not from_bank:
+                if not first:
+                    raise GenerationFailed("No hay más ejercicios disponibles por ahora. " + "; ".join(exc.errors))
                 discard_failed_session(db, session, "No hay conexiones de IA disponibles. " + "; ".join(exc.errors))
             result = None  # sin IA, la clase sale con lo que había en el banco
         if result is not None:
@@ -963,7 +1001,9 @@ def generate_content(
         if session.kind == SessionKind.EXAM
         else total >= max(1, len(slots) // 2)
     )
-    if not enough:
+    if not first and total == 0:
+        raise GenerationFailed("No se pudieron preparar más ejercicios por ahora.")
+    if first and not enough:
         message = f"La IA devolvió {len(matched)} ejercicios válidos de {len(ai_slots)} pedidos."
         if session.kind == SessionKind.EXAM:
             message += " El examen necesita ejercicios de todas las áreas."
@@ -971,7 +1011,8 @@ def generate_content(
 
     by_slot = {id(slot): item for slot, item in matched}
     new_exercises: list[Exercise] = []
-    position = 0
+    position = start
+    common = {**common, "batch": batch}
     for index, slot in enumerate(slots):
         if index in from_bank:
             db.add(bank.exercise_from_item(from_bank[index], position=position, **common))
@@ -1006,6 +1047,13 @@ def generate_content(
             bank.store(db, exercise, provider=result.connection.provider,
                        model=result.connection.model, session_id=session.id)
 
+    if not first:
+        practice = dict(request.get("practice") or {})
+        practice.setdefault("fromBank", {})[str(batch)] = len(from_bank)
+        session.generation_request = {**request, "practice": practice}
+        db.commit()
+        return result, total
+
     request = {**request, "fromBank": len(from_bank)}
     session.generation_request = request
     title = str((result.data if result else {}).get("title") or "").strip()[:200]
@@ -1018,7 +1066,7 @@ def generate_content(
     session.generated_at = utcnow()
     session.generated_by_connection_id = result.connection.id if result else None
     db.commit()
-    return result
+    return result, total
 
 
 def _bank_title(slots: list[dict], level: str | None) -> str:

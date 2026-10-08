@@ -200,6 +200,8 @@ class Exercise(Base):
     evaluation_mode: Mapped[EvaluationMode] = mapped_column(
         SqlEnum(EvaluationMode, native_enum=False)
     )
+    # T-214: tanda de la práctica continua (1 en clases clásicas y exámenes).
+    batch: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
     # T-212: ítem del banco del que sale (o al que se guardó) este ejercicio. Sirve para no repetir.
     bank_item_id: Mapped[int | None] = mapped_column(
         ForeignKey("exercise_bank_items.id", ondelete="SET NULL", name="fk_exercises_bank_item_id"),

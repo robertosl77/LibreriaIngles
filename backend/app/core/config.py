@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     # T-212/T-213: banco de ejercicios. La clase toma primero del banco; a la IA solo va lo que falta.
     exercise_bank_enabled: bool = True
     exercise_bank_repeat_days: int = 30  # el alumno no vuelve a ver un ítem del banco dentro de esta ventana
+    # T-214: práctica continua por tandas ("Nueva clase"). La clase clásica queda para el examen.
+    practice_batch_size: int = 5
 
     # P01 B2B: padrón oficial RNS sincronizado localmente + fallback DEV.
     organization_registry_path: str = "data/rns_registry.db"
