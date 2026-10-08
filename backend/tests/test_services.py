@@ -157,7 +157,7 @@ def test_without_service_platform_is_never_used(client) -> None:
     _connection(client, owner, "Plataforma", platform=True)
     alice = _student(client)
     created = _new_class(client, alice)
-    assert created["status"] == "GENERATION_FAILED"
+    assert "No se pudo generar" in created["detail"]  # T-203: no queda guardada
 
 
 def test_hybrid_uses_own_first_then_platform(client) -> None:
@@ -275,8 +275,8 @@ def test_platform_errors_do_not_name_platform_connections(client) -> None:
     alice = _student(client)
     _grant(client, owner, "alice@example.com", _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"])
     failed = _new_class(client, alice)
-    assert failed["status"] == "GENERATION_FAILED"
-    assert "Gemini interna" not in failed["generationError"]
+    assert "No se pudo generar" in failed["detail"]  # T-203: no queda guardada
+    assert "Gemini interna" not in failed["detail"]
 
 
 def test_dev_purge_account_removes_personal_history_and_never_owner(client) -> None:

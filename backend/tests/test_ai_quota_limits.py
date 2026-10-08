@@ -253,7 +253,7 @@ def test_renewable_429_backs_off_until_reset_not_paused(client, monkeypatch):
     monkeypatch.setattr(MockProvider, "complete_json", rate_limited)
     headers, connection_id = _student(client)
     klass = client.post("/api/v1/classes", headers=headers).json()
-    assert klass["status"] == "GENERATION_FAILED"
+    assert "No se pudo generar" in klass["detail"]  # T-203: no queda guardada
     with SessionLocal() as db:
         connection = db.get(AIConnection, connection_id)
         assert connection.status == AIConnectionStatus.RATE_LIMITED
@@ -278,9 +278,9 @@ def test_no_quota_skips_the_call_and_says_until_when(client, monkeypatch):
     monkeypatch.setattr(MockProvider, "complete_json", lambda *a, **k: called.append(1))
     klass = client.post("/api/v1/classes", headers=headers).json()
     assert called == []  # no se llamó: no se pagó ni se gastó un pedido
-    assert klass["status"] == "GENERATION_FAILED"
-    assert "sin cupo de pedidos del día hasta las" in klass["generationError"]
-    assert "REQUESTS/DAY" not in klass["generationError"]  # el alumno no ve el código
+    assert "No se pudo generar" in klass["detail"]  # T-203: no queda guardada
+    assert "sin cupo de pedidos del día hasta las" in klass["detail"]
+    assert "REQUESTS/DAY" not in klass["detail"]  # el alumno no ve el código
 
 
 def test_short_wait_is_waited_instead_of_failing(client, monkeypatch):

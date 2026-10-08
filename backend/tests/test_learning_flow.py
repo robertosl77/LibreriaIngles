@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from conftest import login
 
 API = "/api/v1"
@@ -162,19 +163,28 @@ def test_failover_uses_next_connection(client) -> None:
     assert broken["usable"] is False
 
 
-def test_generation_failure_is_persisted_and_retryable(client) -> None:
+def test_generation_failure_leaves_no_class_and_next_request_works(client) -> None:
+    """T-203: si la IA falla no se guarda la clase (no aparece en Pendientes); se vuelve a pedir."""
+    from app.ai.models import AIUsageEvent
+    from app.db import SessionLocal
+    from app.learning.models import ClassSession
+
     headers = _setup(client, model="mock-fail-quota")
-    klass = client.post(f"{API}/classes", headers=headers).json()
-    assert klass["status"] == "GENERATION_FAILED"
-    assert klass["generationError"]
+    response = client.post(f"{API}/classes", headers=headers)
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("No se pudo generar la clase.")
+    with SessionLocal() as db:
+        assert db.scalar(select(ClassSession)) is None
+        events = db.scalars(select(AIUsageEvent).where(AIUsageEvent.operation == "generate_class")).all()
+        assert all(e.subject_type == "CLASS_NOT_GENERATED" and e.subject_id is None for e in events)
+    assert client.get(f"{API}/me", headers=headers).json()["classes"]["generationFailed"] == 0
 
     client.post(
         f"{API}/ai/connections",
         json={"provider": "MOCK", "name": "Backup", "model": "mock", "priority": 5},
         headers=headers,
     )
-    retried = client.post(f"{API}/classes/{klass['id']}/retry-generation", headers=headers).json()
-    assert retried["status"] == "READY"
+    assert client.post(f"{API}/classes", headers=headers).json()["status"] == "READY"
 
 
 def test_classes_are_isolated_between_accounts(client) -> None:
@@ -208,7 +218,7 @@ def test_platform_connections_only_for_platform_owner(client) -> None:
     # T-003: un usuario común sin conexiones propias NO usa la IA de la plataforma.
     client.put(f"{API}/me/level", json={"level": "A1"}, headers=headers)
     klass = client.post(f"{API}/classes", headers=headers).json()
-    assert klass["status"] == "GENERATION_FAILED"
+    assert "No se pudo generar" in klass["detail"]  # T-203: no queda guardada
     assert client.get(f"{API}/me", headers=headers).json()["ai"]["connections"] == 0
     # El dueño sí la usa.
     client.put(f"{API}/me/level", json={"level": "A1"}, headers=owner)
@@ -233,11 +243,10 @@ def test_own_key_without_quota_never_falls_back_to_platform(client) -> None:
     )
     # Generar: falla la propia y la clase queda pendiente (reintentable), sin usar la plataforma.
     klass = client.post(f"{API}/classes", headers=user).json()
-    assert klass["status"] == "GENERATION_FAILED"
-    assert "Plataforma" not in (klass.get("generatedBy") or "")
-    # Reintento con la key todavía sin saldo: tampoco cae en la plataforma.
-    retry = client.post(f"{API}/classes/{klass['id']}/retry-generation", headers=user)
-    assert retry.json()["status"] == "GENERATION_FAILED"
+    assert "No se pudo generar" in klass["detail"]  # T-203: no queda guardada
+    # Nuevo pedido con la key todavía sin saldo: tampoco cae en la plataforma.
+    retry = client.post(f"{API}/classes", headers=user)
+    assert retry.status_code == 422
     # La plataforma no registró ningún uso de este usuario.
     usage = client.get(f"{API}/platform/overview", headers=owner).json()
     assert all(row["email"] != "user@example.com" for row in usage["topAccounts24h"])
@@ -266,3 +275,19 @@ def test_every_ai_path_uses_the_same_byok_rule(client) -> None:
             assert [c.name for c in candidate_connections(db, u, include_backoff=include_backoff)] == ["Mía"]
             assert "Plataforma" in [c.name for c in candidate_connections(db, o, include_backoff=include_backoff)]
         assert "Plataforma" not in [c.name for c in audio_connections(db, u, include_backoff=True)]
+
+
+def test_failed_attempts_stay_in_consumption_without_class(client, monkeypatch) -> None:
+    """T-203: el intento que gastó IA queda en Consumo como 'Clase · no generada'."""
+    from app.ai.mock import MockProvider
+    from app.ai.models import AIUsageEvent
+    from app.db import SessionLocal
+
+    headers = _setup(client)
+    monkeypatch.setattr(MockProvider, "complete_json", lambda self, s, u, t: {"title": "x", "exercises": []})
+    response = client.post(f"{API}/classes", headers=headers)
+    assert response.status_code == 422 and "ejercicios válidos" in response.json()["detail"]
+    with SessionLocal() as db:
+        [event] = db.scalars(select(AIUsageEvent).where(AIUsageEvent.operation == "generate_class")).all()
+        assert (event.subject_type, event.subject_id, event.subject_label) == (
+            "CLASS_NOT_GENERATED", None, "Clase · no generada")

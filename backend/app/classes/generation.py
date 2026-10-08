@@ -8,6 +8,7 @@
 import random
 
 from pydantic import BaseModel, ValidationError, field_validator
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.models import utcnow
@@ -91,6 +92,34 @@ SPEAK_TYPES = {"fill_blank", "rewrite", "short_writing", "conversation"}
 
 class GenerationFailed(Exception):
     pass
+
+
+# Consumo: los intentos de una clase/examen que no llegó a generarse quedan sin referencia a una clase.
+NOT_GENERATED = {"CLASS": "CLASS_NOT_GENERATED", "EXAM": "EXAM_NOT_GENERATED"}
+
+
+def discard_failed_session(db: Session, session: ClassSession, message: str) -> None:
+    """Si la IA no pudo generar la clase/examen, no queda nada guardado a la vista del alumno.
+
+    El registro solo existía para referenciar los intentos de IA; esos intentos siguen en Consumo
+    (gastaron IA) pero sin número de clase. Lanza GenerationFailed con el motivo.
+    """
+    from app.ai.models import AIUsageEvent
+
+    db.flush()  # los intentos recién registrados todavía pueden no estar en la base (autoflush=False)
+    kind = session.kind.value
+    label = "Examen · no generado" if session.kind == SessionKind.EXAM else "Clase · no generada"
+    events = db.scalars(
+        select(AIUsageEvent).where(AIUsageEvent.subject_type == kind, AIUsageEvent.subject_id == session.id)
+    ).all()
+    for event in events:
+        event.subject_type = NOT_GENERATED.get(kind, kind)
+        event.subject_id = None
+        event.subject_label = label
+        event.subject_route = None
+    db.delete(session)
+    db.commit()
+    raise GenerationFailed(message)
 
 
 # ---------------------------------------------------------------- balanceo por habilidad (T-034)
@@ -852,10 +881,7 @@ def generate_content(
             ),
         )
     except NoAIAvailable as exc:
-        session.status = ClassSessionStatus.GENERATION_FAILED
-        session.generation_error = "No hay conexiones de IA disponibles. " + "; ".join(exc.errors)
-        db.commit()
-        return None
+        discard_failed_session(db, session, "No hay conexiones de IA disponibles. " + "; ".join(exc.errors))
 
     # Snapshot histórico del motor que realmente respondió (T-041).
     request = {**request, "ai": connection_snapshot(result.connection)}
@@ -863,15 +889,10 @@ def generate_content(
 
     matched = _match_slots(result.data.get("exercises") or [], slots)
     if not _enough(session, slots, matched):
-        session.status = ClassSessionStatus.GENERATION_FAILED
-        session.generation_error = (
-            f"La IA devolvió {len(matched)} ejercicios válidos de {len(slots)} pedidos."
-        )
+        message = f"La IA devolvió {len(matched)} ejercicios válidos de {len(slots)} pedidos."
         if session.kind == SessionKind.EXAM:
-            session.generation_error += " El examen necesita ejercicios de todas las áreas."
-        session.generated_by_connection_id = result.connection.id
-        db.commit()
-        return None
+            message += " El examen necesita ejercicios de todas las áreas."
+        discard_failed_session(db, session, message)
 
     for position, (slot, item) in enumerate(matched):
         skill_key = slot["skillKey"]

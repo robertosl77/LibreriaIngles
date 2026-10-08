@@ -266,7 +266,7 @@ def create_class(study: CurrentStudy, db: DbSession) -> dict:
     try:
         session, result = generation.create_class(db, study)
     except generation.GenerationFailed as exc:
-        raise HTTPException(422, str(exc))
+        raise HTTPException(422, f"No se pudo generar la clase. {exc}")
     notice = SWITCH_NOTICE if result and result.switched else None
     return _detail(db, session, notice)
 
@@ -288,7 +288,10 @@ def retry_generation(class_id: int, study: CurrentStudy, db: DbSession) -> dict:
         raise HTTPException(status.HTTP_409_CONFLICT, "La clase no falló al generarse.")
     session.status = ClassSessionStatus.GENERATING
     db.commit()
-    result = generation.generate_content(db, study, session)
+    try:
+        result = generation.generate_content(db, study, session)
+    except generation.GenerationFailed as exc:
+        raise HTTPException(422, f"No se pudo generar la clase. {exc}")
     notice = SWITCH_NOTICE if result and result.switched else None
     return _detail(db, session, notice)
 
