@@ -174,3 +174,63 @@ def recent_prompts(db: Session, study_profile_id: int, skill_key: str, *, days: 
         .limit(limit)
     ).all()
     return [p[:90] for p in rows if p]
+
+
+# ---------------------------------------------------------------- T-216: calidad del banco
+
+
+def _maybe_retire(item: ExerciseBankItem) -> None:
+    from app.core.config import settings
+
+    if item.status != BankItemStatus.ACTIVE:
+        return
+    reasons = []
+    if (item.wrong_reports or 0) >= settings.bank_retire_wrong_reports:
+        reasons.append(f"{item.wrong_reports} reportes de 'está mal'")
+    if (item.repeat_reports or 0) >= settings.bank_retire_repeat_reports:
+        reasons.append(f"{item.repeat_reports} reportes de 'se repite'")
+    if (item.appeals_accepted or 0) >= settings.bank_retire_accepted_appeals:
+        reasons.append(f"{item.appeals_accepted} reclamos aceptados")
+    if reasons:
+        item.status = BankItemStatus.RETIRED
+        item.retired_reason = "Retirado automáticamente: " + ", ".join(reasons)
+
+
+def report(db: Session, exercise: Exercise, study_profile_id: int, reason: str) -> bool:
+    """Registra el reporte del alumno (una vez por ejercicio y motivo). True si es nuevo."""
+    from app.learning.models import ExerciseReport, ExerciseReportReason
+
+    kind = ExerciseReportReason(reason)
+    exists = db.scalar(select(ExerciseReport).where(
+        ExerciseReport.exercise_id == exercise.id,
+        ExerciseReport.study_profile_id == study_profile_id,
+        ExerciseReport.reason == kind,
+    ))
+    if exists:
+        return False
+    db.add(ExerciseReport(exercise_id=exercise.id, study_profile_id=study_profile_id,
+                          bank_item_id=exercise.bank_item_id, reason=kind))
+    item = db.get(ExerciseBankItem, exercise.bank_item_id) if exercise.bank_item_id else None
+    if item is not None:
+        if kind == ExerciseReportReason.WRONG:
+            item.wrong_reports = (item.wrong_reports or 0) + 1
+        else:
+            item.repeat_reports = (item.repeat_reports or 0) + 1
+        _maybe_retire(item)
+    return True
+
+
+def record_appeal(db: Session, exercise: Exercise, *, accepted: bool, variant: str | None) -> None:
+    """Un reclamo sobre un ejercicio del banco: cuenta para la calidad; si se aceptó una variante,
+    se suma a la clave del ítem (así no le vuelve a pasar a otro alumno)."""
+    item = db.get(ExerciseBankItem, exercise.bank_item_id) if exercise.bank_item_id else None
+    if item is None:
+        return
+    item.appeals = (item.appeals or 0) + 1
+    if accepted:
+        item.appeals_accepted = (item.appeals_accepted or 0) + 1
+        if variant:
+            accepted_answers = list((item.answer_key or {}).get("acceptedAnswers") or [])
+            if variant not in accepted_answers:
+                item.answer_key = {**(item.answer_key or {}), "acceptedAnswers": accepted_answers + [variant]}
+    _maybe_retire(item)

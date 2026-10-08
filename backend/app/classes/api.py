@@ -117,6 +117,14 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
         if attempt.score is not None:
             rounds.setdefault(attempt.attempt_number, []).append(attempt.score)
 
+    from app.learning.models import ExerciseReport
+
+    reported: dict[int, list[str]] = {}
+    if exercises:
+        for row in db.scalars(select(ExerciseReport).where(
+            ExerciseReport.exercise_id.in_([e.id for e in exercises])
+        )):
+            reported.setdefault(row.exercise_id, []).append(row.reason.value)
     practice = (session.generation_request or {}).get("practice") or None
     practice_view = bool(practice) and not practice.get("finished")
     batch_now = int((practice or {}).get("batch") or 1)
@@ -133,6 +141,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 "id": exercise.id,
                 "position": exercise.position,
                 "batch": exercise.batch,
+                "reported": reported.get(exercise.id, []),
                 "type": exercise.exercise_type,
                 "area": exercise.area,
                 "skillKey": exercise.skill_key,
@@ -280,6 +289,24 @@ def list_classes(study: CurrentStudy, db: DbSession, limit: int = 50) -> list[di
         }
         for s in sessions
     ]
+
+
+class ReportRequest(BaseModel):
+    reason: str = Field(pattern="^(REPEATED|WRONG)$")
+
+
+@router.post("/{class_id}/exercises/{exercise_id}/report")
+def report_exercise(class_id: int, exercise_id: int, payload: ReportRequest, study: CurrentStudy, db: DbSession) -> dict:
+    """T-216: "Este ejercicio se repite" / "Este ejercicio está mal". Alimenta la calidad del banco."""
+    from app.classes import bank
+
+    session = _get_class(db, study, class_id)
+    exercise = db.get(Exercise, exercise_id)
+    if exercise is None or exercise.class_session_id != session.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ejercicio inexistente.")
+    bank.report(db, exercise, session.study_profile_id, payload.reason)
+    db.commit()
+    return _detail(db, session)
 
 
 @router.post("/practice", status_code=status.HTTP_201_CREATED)

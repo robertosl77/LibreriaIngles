@@ -653,6 +653,19 @@ const RESULT_LABELS: Record<string, string> = {
                   </div>
                 }
               }
+              @if (c.kind !== 'EXAM') {
+                <!-- T-216: la calidad del banco se alimenta de estos reportes. -->
+                <div class="report-row small muted">
+                  @if (exercise.reported?.length) {
+                    Gracias, lo vamos a revisar.
+                  } @else {
+                    ¿Algo raro?
+                    <button class="btn-link small" type="button" (click)="report(exercise.id, 'REPEATED')" [disabled]="reporting()">Se repite</button>
+                    ·
+                    <button class="btn-link small" type="button" (click)="report(exercise.id, 'WRONG')" [disabled]="reporting()">Está mal</button>
+                  }
+                </div>
+              }
             </article>
           }
 
@@ -879,6 +892,7 @@ const RESULT_LABELS: Record<string, string> = {
     .history { display: flex; flex-direction: column; gap: 0.2rem; }
     .submit-status { display: flex; flex-direction: column; gap: 0.15rem; }
     .submit-status .missing { color: var(--warn); }
+    .report-row { margin-top: 0.6rem; display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
     .submit-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: flex-end; }
     .submit-bar {
       position: sticky; bottom: 0.8rem;
@@ -1497,6 +1511,27 @@ export class ClassComponent implements OnDestroy {
   async retake(): Promise<void> {
     await this.run(() => this.api.retakeClass(this.klass()!.id));
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  readonly reporting = signal(false);
+
+  /** T-216: reporte del alumno; no recarga la clase (no pisa respuestas en curso). */
+  async report(exerciseId: number, reason: 'REPEATED' | 'WRONG'): Promise<void> {
+    const c = this.klass();
+    if (!c || this.reporting()) return;
+    this.reporting.set(true);
+    try {
+      await firstValueFrom(this.api.reportExercise(c.id, exerciseId, reason));
+      this.klass.set({
+        ...c,
+        exercises: c.exercises.map((e) => (e.id === exerciseId ? { ...e, reported: [reason] } : e))
+      });
+      this.toast.show('Gracias. Lo vamos a revisar.');
+    } catch (err) {
+      this.toast.error(errorMessage(err));
+    } finally {
+      this.reporting.set(false);
+    }
   }
 
   async appeal(exerciseId: number): Promise<void> {

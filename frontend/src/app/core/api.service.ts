@@ -349,6 +349,11 @@ export class ApiService {
     );
   }
 
+  /** T-216: "Este ejercicio se repite" / "Este ejercicio está mal". */
+  reportExercise(classId: number, exerciseId: number, reason: 'REPEATED' | 'WRONG'): Observable<ClassDetail> {
+    return this.http.post<ClassDetail>(`${this.base}/classes/${classId}/exercises/${exerciseId}/report`, { reason });
+  }
+
   appeal(classId: number, exerciseId: number): Observable<ClassDetail> {
     return this.http.post<ClassDetail>(
       `${this.base}/classes/${classId}/exercises/${exerciseId}/appeal`,

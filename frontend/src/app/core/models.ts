@@ -560,6 +560,8 @@ export interface PronunciationResult {
 }
 
 export interface Exercise {
+  /** T-216: reportes que hizo este alumno sobre el ejercicio. */
+  reported?: ('REPEATED' | 'WRONG')[];
   /** T-214: tanda de la práctica continua (1 en clases clásicas). */
   batch?: number;
   id: number;

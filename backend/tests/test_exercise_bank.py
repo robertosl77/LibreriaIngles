@@ -150,3 +150,73 @@ def test_bank_can_be_turned_off(client, monkeypatch) -> None:
                 json={"provider": "MOCK", "name": "Simulado", "model": "mock", "priority": 1}, headers=other)
     client.post(f"{API}/classes", headers=other)
     assert _generation_calls("otra@example.com") == 1
+
+
+def _bank_exercise(klass_id: int) -> Exercise:
+    with SessionLocal() as db:
+        return db.scalars(select(Exercise).where(
+            Exercise.class_session_id == klass_id, Exercise.bank_item_id.is_not(None))).first()
+
+
+def test_report_counts_once_per_student_and_retires_bad_items(client) -> None:
+    """T-216: 'está mal' de 2 alumnos distintos retira el ítem del banco; repetir el reporte no suma."""
+    from app.learning.models import ClassSession, ExerciseReport
+
+    headers = _setup(client)
+    klass = client.post(f"{API}/classes", headers=headers).json()
+    exercise = _bank_exercise(klass["id"])
+    url = f"{API}/classes/{klass['id']}/exercises/{exercise.id}/report"
+    body = client.post(url, json={"reason": "WRONG"}, headers=headers).json()
+    assert next(e for e in body["exercises"] if e["id"] == exercise.id)["reported"] == ["WRONG"]
+    client.post(url, json={"reason": "WRONG"}, headers=headers)  # mismo alumno: no suma
+    assert client.post(url, json={"reason": "OTRO"}, headers=headers).status_code == 422
+    with SessionLocal() as db:
+        item = db.get(ExerciseBankItem, exercise.bank_item_id)
+        assert item.wrong_reports == 1 and item.status == BankItemStatus.ACTIVE
+        # Otro alumno reporta lo mismo → se retira.
+        db.add(ExerciseReport(exercise_id=exercise.id, study_profile_id=999, bank_item_id=item.id,
+                              reason="WRONG"))
+        twin = Exercise(class_session_id=exercise.class_session_id, study_profile_id=999, level="A1",
+                        skill_key=exercise.skill_key, exercise_type=exercise.exercise_type, prompt="x",
+                        evaluation_mode=exercise.evaluation_mode, bank_item_id=item.id)
+        db.add(twin)
+        db.flush()
+        assert bank.report(db, twin, 999, "WRONG") is True
+        db.commit()
+        db.refresh(item)
+        assert item.status == BankItemStatus.RETIRED and "está mal" in item.retired_reason
+        assert db.get(ClassSession, klass["id"]) is not None
+
+
+def test_retired_items_are_not_served(client, monkeypatch) -> None:
+    import copy
+
+    from app.classes import generation
+
+    first = client.post(f"{API}/classes", headers=_setup(client)).json()
+    slots = _class_slots(first["id"])
+    with SessionLocal() as db:
+        for item in db.scalars(select(ExerciseBankItem)):
+            item.status = BankItemStatus.RETIRED
+        db.commit()
+    monkeypatch.setattr(generation, "select_slots", lambda *a, **k: copy.deepcopy(slots))
+    other = login(client, "otra@example.com")
+    client.put(f"{API}/me/level", json={"level": "A1"}, headers=other)
+    client.post(f"{API}/ai/connections",
+                json={"provider": "MOCK", "name": "Simulado", "model": "mock", "priority": 1}, headers=other)
+    client.post(f"{API}/classes", headers=other)
+    assert _generation_calls("otra@example.com") == 1  # nada del banco: todo a la IA
+
+
+def test_accepted_appeal_teaches_the_bank_the_variant(client) -> None:
+    """T-216: si un reclamo agrega una variante válida, el ítem del banco también la aprende."""
+    headers = _setup(client)
+    klass = client.post(f"{API}/classes", headers=headers).json()
+    exercise = _bank_exercise(klass["id"])
+    with SessionLocal() as db:
+        ex = db.get(Exercise, exercise.id)
+        bank.record_appeal(db, ex, accepted=True, variant="otra forma válida")
+        db.commit()
+        item = db.get(ExerciseBankItem, ex.bank_item_id)
+        assert item.appeals == 1 and item.appeals_accepted == 1
+        assert "otra forma válida" in item.answer_key["acceptedAnswers"]

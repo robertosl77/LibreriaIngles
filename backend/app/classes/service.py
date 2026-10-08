@@ -406,11 +406,20 @@ def appeal(db: Session, study: StudyContext, session: ClassSession, exercise_id:
             if attempt.raw_answer.strip() not in accepted:
                 accepted.append(attempt.raw_answer.strip())
             exercise.answer_key = {**exercise.answer_key, "acceptedAnswers": accepted}
+        # T-216: el banco aprende la variante aceptada y cuenta el reclamo.
+        from app.classes import bank
+
+        bank.record_appeal(db, exercise, accepted=True,
+                           variant=(attempt.raw_answer.strip()
+                                    if new_score >= 100 and exercise.evaluation_mode.value != "AI" else None))
     else:
         attempt.evaluation_result = {
             **previous,
             "appeal": {"accepted": False, "feedback": result.get("feedback")},
         }
+        from app.classes import bank
+
+        bank.record_appeal(db, exercise, accepted=False, variant=None)
     db.commit()
 
     current = [a for a in attempts_of(db, session) if a.attempt_number == session.current_attempt]

@@ -264,6 +264,30 @@ class ExerciseBankItem(Base):
     appeals: Mapped[int] = mapped_column(Integer, default=0)
     appeals_accepted: Mapped[int] = mapped_column(Integer, default=0)
     repeat_reports: Mapped[int] = mapped_column(Integer, default=0)
+    wrong_reports: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ExerciseReportReason(str, Enum):
+    REPEATED = "REPEATED"  # "Este ejercicio se repite"
+    WRONG = "WRONG"  # "Este ejercicio está mal"
+
+
+class ExerciseReport(Base):
+    """T-216: reporte del alumno sobre un ejercicio (alimenta la calidad del banco)."""
+
+    __tablename__ = "exercise_reports"
+    __table_args__ = (
+        UniqueConstraint("exercise_id", "study_profile_id", "reason", name="uq_exercise_reports_once"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    exercise_id: Mapped[int] = mapped_column(
+        ForeignKey("exercises.id", ondelete="CASCADE", name="fk_exercise_reports_exercise_id"), index=True
+    )
+    study_profile_id: Mapped[int] = mapped_column(Integer)
+    bank_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    reason: Mapped[ExerciseReportReason] = mapped_column(SqlEnum(ExerciseReportReason, native_enum=False, length=10))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
