@@ -192,3 +192,47 @@ def test_single_word_fill_blank_is_never_spoken() -> None:
                              focus=[{"key": "SPEAKING", "kind": "ability"}], rng=random.Random(seed))
         assert not any(s["allowedTypes"][0] == "fill_blank" and s["response"] == "SPEAK" for s in slots)
         assert any(s["response"] == "SPEAK" for s in slots)  # el habla se cubre con otros tipos
+
+
+def test_slow_transcription_does_not_freeze_other_requests(client, monkeypatch) -> None:
+    """T-211 (#258): mientras la IA transcribe, otra pestaña (GET /me) sigue respondiendo."""
+    import threading
+    import time
+
+    from app.ai.mock import MockProvider
+
+    headers = _setup(client)
+    klass = client.post(f"{API}/classes", headers=headers).json()
+    with SessionLocal() as db:
+        exercise = next(
+            e for e in db.scalars(select(Exercise).where(Exercise.class_session_id == klass["id"])).all()
+            if e.exercise_type in {"rewrite", "short_writing", "conversation", "fill_blank"}
+        )
+        exercise.response_mode = ResponseMode.SPEAK
+        exercise_id = exercise.id
+        db.commit()
+
+    real = MockProvider.transcribe_audio
+
+    def slow(self, *args, **kwargs):
+        time.sleep(1.5)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(MockProvider, "transcribe_audio", slow)
+    result = {}
+
+    def speak():
+        result["r"] = client.post(
+            f"{API}/classes/{klass['id']}/answers/{exercise_id}/transcribe",
+            content=b"hello", headers={**headers, "content-type": "audio/webm", "x-audio-duration-ms": "900"},
+        )
+
+    worker = threading.Thread(target=speak)
+    worker.start()
+    time.sleep(0.3)
+    started = time.monotonic()
+    assert client.get(f"{API}/me", headers=headers).status_code == 200
+    elapsed = time.monotonic() - started
+    worker.join()
+    assert result["r"].status_code == 200, result["r"].text
+    assert elapsed < 1.0  # antes: esperaba los 1,5 s de la transcripción

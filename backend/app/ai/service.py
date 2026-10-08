@@ -455,6 +455,9 @@ def _run_json_task_with_connections(
             continue
         attempt_index += 1
         provider = None
+        # T-211: la llamada a la IA tarda segundos; no se retiene el lock de escritura de la base
+        # mientras tanto (SQLite admite un solo escritor: trabaría otras pestañas).
+        db.commit()
         try:
             provider = provider_for(connection)
             data = provider.complete_json(system, user, task)
@@ -588,6 +591,9 @@ def transcribe_audio(
             continue
         attempt_index += 1
         provider = None
+        # T-211: la llamada a la IA tarda segundos; no se retiene el lock de escritura de la base
+        # mientras tanto (SQLite admite un solo escritor: trabaría otras pestañas).
+        db.commit()
         try:
             provider = provider_for(connection)
             analysis = provider.analyze_speech(audio, mime_type)

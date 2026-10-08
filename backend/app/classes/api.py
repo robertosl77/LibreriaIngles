@@ -1,3 +1,4 @@
+from fastapi.concurrency import run_in_threadpool
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -346,7 +347,10 @@ async def transcribe_answer_audio(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "La grabación supera 60 segundos.")
 
     try:
-        result = transcribe_audio(
+        # T-211: la IA tarda segundos y su cliente es sincrónico; en el event loop congelaría todo el
+        # backend (cualquier pestaña). Se ejecuta en el pool de hilos.
+        result = await run_in_threadpool(
+            transcribe_audio,
             db,
             study.account,
             audio=audio,
