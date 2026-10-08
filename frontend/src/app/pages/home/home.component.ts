@@ -93,7 +93,13 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
                 <strong>Conectá una IA</strong>
                 @switch (ownKeys()) {
                   @case ('unused') {
-                    <p class="muted small">Tu servicio usa la IA de Librería Inglés: no tenés que configurar nada.</p>
+                    @if (isOwner()) {
+                      <p class="muted small">Las conexiones de la plataforma se configuran en <a routerLink="/app/ia">IA</a>: las usás vos y las heredan los servicios con IA de la plataforma.</p>
+                    } @else if (corporate()) {
+                      <p class="muted small">Tu organización administra la IA de tus clases: no tenés que configurar nada.</p>
+                    } @else {
+                      <p class="muted small">Tu servicio usa la IA de Librería Inglés: no tenés que configurar nada.</p>
+                    }
                   }
                   @case ('optional') {
                     <p class="muted small">
@@ -230,6 +236,8 @@ export class HomeComponent implements OnInit {
   readonly overall = signal<number | null>(null);
   readonly hasLevel = computed(() => !!this.auth.me()?.studyProfile.operationalLevel);
   readonly ownKeys = computed(() => this.auth.me()?.service.ownKeys ?? 'required');
+  readonly isOwner = computed(() => this.auth.me()?.account.isPlatformOwner ?? false);
+  readonly corporate = computed(() => this.auth.me()?.service.linkType === 'CORPORATE');
   /** Paso 2 listo: el servicio no exige keys propias, o ya cargó alguna. */
   readonly hasAi = computed(
     () => this.ownKeys() !== 'required' || (this.auth.me()?.ai.own ?? 0) > 0

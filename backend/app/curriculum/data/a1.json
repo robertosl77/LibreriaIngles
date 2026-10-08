@@ -15,7 +15,7 @@
               "key": "affirmative",
               "name": "Afirmativo (am / is / are)",
               "objectives": ["elegir am/is/are según el sujeto"],
-              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "exerciseTypes": ["fill_blank", "multiple_choice", "error_correction"],
               "examples": [
                 {
                   "type": "fill_blank",
@@ -43,6 +43,14 @@
                   "question": "I ___ a student.",
                   "options": ["am", "is", "are"],
                   "acceptedAnswers": ["am"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["be_agreement"]
+                },
+                {
+                  "type": "error_correction",
+                  "instruction": "Correct the mistake.",
+                  "question": "My parents is teachers.",
+                  "acceptedAnswers": ["My parents are teachers."],
                   "commonErrors": [],
                   "expectedConcepts": ["be_agreement"]
                 }
@@ -111,7 +119,7 @@
               "key": "third_person_singular",
               "name": "Tercera persona (-s / -es)",
               "objectives": ["agregar -s/-es con he/she/it", "verbo base con I/you/we/they"],
-              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "exerciseTypes": ["fill_blank", "multiple_choice", "gap_text", "error_correction"],
               "examples": [
                 {
                   "type": "fill_blank",
@@ -131,6 +139,25 @@
                   "options": ["watch", "watches", "watching"],
                   "acceptedAnswers": ["watches"],
                   "commonErrors": [],
+                  "expectedConcepts": ["third_person_s"]
+                },
+                {
+                  "type": "gap_text",
+                  "instruction": "Complete the text with the words in the box.",
+                  "question": "Complete the text with the words in the box.",
+                  "passage": "My brother ___ in a bank. He ___ work at eight and he ___ lunch at one.",
+                  "options": ["works", "starts", "has", "work"],
+                  "acceptedAnswers": [],
+                  "gaps": [["works"], ["starts"], ["has"]],
+                  "commonErrors": [],
+                  "expectedConcepts": ["third_person_s"]
+                },
+                {
+                  "type": "error_correction",
+                  "instruction": "Correct the mistake.",
+                  "question": "She go to school by bus.",
+                  "acceptedAnswers": ["She goes to school by bus."],
+                  "commonErrors": [{"answer": "She going to school by bus.", "feedback": "Con 'she' en presente simple el verbo lleva -s: goes.", "conceptResults": [{"concept": "third_person_s", "status": "incorrect"}]}],
                   "expectedConcepts": ["third_person_s"]
                 }
               ]
@@ -167,7 +194,7 @@
               "key": "questions_do_does",
               "name": "Preguntas con do / does",
               "objectives": ["elegir do/does", "verbo base después de does"],
-              "exerciseTypes": ["fill_blank", "rewrite"],
+              "exerciseTypes": ["fill_blank", "rewrite", "word_order"],
               "examples": [
                 {
                   "type": "fill_blank",
@@ -188,6 +215,14 @@
                     {"answer": "Does your parents live in Rosario?", "feedback": "'Your parents' es plural: se usa 'do'.", "conceptResults": [{"concept": "do_does_choice", "status": "incorrect"}, {"concept": "base_verb_after_do", "status": "correct"}]}
                   ],
                   "expectedConcepts": ["do_does_choice", "base_verb_after_do"]
+                },
+                {
+                  "type": "word_order",
+                  "instruction": "Put the words in order to make a question.",
+                  "question": "Put the words in order.",
+                  "acceptedAnswers": ["Does she work on Saturdays?"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["do_does_question"]
                 }
               ]
             }
@@ -326,7 +361,7 @@
               "key": "a_an",
               "name": "a / an",
               "objectives": ["a antes de sonido consonante", "an antes de sonido vocal"],
-              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "exerciseTypes": ["fill_blank", "multiple_choice", "error_correction"],
               "examples": [
                 {
                   "type": "fill_blank",
@@ -344,6 +379,14 @@
                   "question": "I eat ___ apple every day.",
                   "options": ["a", "an"],
                   "acceptedAnswers": ["an"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["a_an_sound"]
+                },
+                {
+                  "type": "error_correction",
+                  "instruction": "Correct the mistake.",
+                  "question": "I have a orange.",
+                  "acceptedAnswers": ["I have an orange."],
                   "commonErrors": [],
                   "expectedConcepts": ["a_an_sound"]
                 }
@@ -425,7 +468,7 @@
               "key": "basic",
               "name": "what / where / who / when / how",
               "objectives": ["elegir la palabra interrogativa correcta"],
-              "exerciseTypes": ["multiple_choice", "fill_blank"],
+              "exerciseTypes": ["multiple_choice", "fill_blank", "word_order"],
               "examples": [
                 {
                   "type": "multiple_choice",
@@ -443,6 +486,14 @@
                   "acceptedAnswers": ["Where"],
                   "commonErrors": [],
                   "expectedConcepts": ["wh_word_choice"]
+                },
+                {
+                  "type": "word_order",
+                  "instruction": "Put the words in order to make a question.",
+                  "question": "Put the words in order.",
+                  "acceptedAnswers": ["Where do you live?"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["wh_question_order"]
                 }
               ]
             }
@@ -711,7 +762,7 @@
               "key": "family",
               "name": "Familia",
               "objectives": ["nombres de miembros de la familia"],
-              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "exerciseTypes": ["fill_blank", "multiple_choice", "match_pairs"],
               "examples": [
                 {
                   "type": "fill_blank",
@@ -731,6 +782,15 @@
                   "acceptedAnswers": ["grandmother"],
                   "commonErrors": [],
                   "expectedConcepts": ["family_word"]
+                },
+                {
+                  "type": "match_pairs",
+                  "instruction": "Match the words.",
+                  "question": "Match each word with its meaning.",
+                  "acceptedAnswers": [],
+                  "pairs": [["mother", "madre"], ["brother", "hermano"], ["grandfather", "abuelo"], ["aunt", "tía"]],
+                  "commonErrors": [],
+                  "expectedConcepts": ["vocabulary_meaning"]
                 }
               ]
             },
@@ -738,7 +798,7 @@
               "key": "food",
               "name": "Comida",
               "objectives": ["alimentos y comidas del día"],
-              "exerciseTypes": ["multiple_choice"],
+              "exerciseTypes": ["multiple_choice", "match_pairs"],
               "examples": [
                 {
                   "type": "multiple_choice",
@@ -757,6 +817,15 @@
                   "acceptedAnswers": ["banana"],
                   "commonErrors": [],
                   "expectedConcepts": ["food_category"]
+                },
+                {
+                  "type": "match_pairs",
+                  "instruction": "Match the words.",
+                  "question": "Match each word with its meaning.",
+                  "acceptedAnswers": [],
+                  "pairs": [["bread", "pan"], ["cheese", "queso"], ["apple", "manzana"], ["chicken", "pollo"]],
+                  "commonErrors": [],
+                  "expectedConcepts": ["vocabulary_meaning"]
                 }
               ]
             },
@@ -764,7 +833,7 @@
               "key": "jobs",
               "name": "Trabajos",
               "objectives": ["profesiones comunes y lugares de trabajo"],
-              "exerciseTypes": ["fill_blank", "multiple_choice"],
+              "exerciseTypes": ["fill_blank", "multiple_choice", "match_pairs"],
               "examples": [
                 {
                   "type": "fill_blank",
@@ -782,6 +851,15 @@
                   "acceptedAnswers": ["teacher"],
                   "commonErrors": [],
                   "expectedConcepts": ["job_word"]
+                },
+                {
+                  "type": "match_pairs",
+                  "instruction": "Match the words.",
+                  "question": "Match each word with its meaning.",
+                  "acceptedAnswers": [],
+                  "pairs": [["teacher", "docente"], ["doctor", "médico"], ["cook", "cocinero"], ["driver", "conductor"]],
+                  "commonErrors": [],
+                  "expectedConcepts": ["vocabulary_meaning"]
                 }
               ]
             }
@@ -884,7 +962,7 @@
               "key": "colours",
               "name": "Colores",
               "objectives": ["colores básicos"],
-              "exerciseTypes": ["multiple_choice", "fill_blank"],
+              "exerciseTypes": ["multiple_choice", "fill_blank", "match_pairs"],
               "examples": [
                 {
                   "type": "multiple_choice",
@@ -902,6 +980,15 @@
                   "acceptedAnswers": ["yellow"],
                   "commonErrors": [],
                   "expectedConcepts": ["colours"]
+                },
+                {
+                  "type": "match_pairs",
+                  "instruction": "Match the words.",
+                  "question": "Match each word with its meaning.",
+                  "acceptedAnswers": [],
+                  "pairs": [["red", "rojo"], ["green", "verde"], ["yellow", "amarillo"], ["black", "negro"]],
+                  "commonErrors": [],
+                  "expectedConcepts": ["vocabulary_meaning"]
                 }
               ]
             },
@@ -909,7 +996,7 @@
               "key": "clothes",
               "name": "Ropa",
               "objectives": ["prendas de ropa frecuentes"],
-              "exerciseTypes": ["multiple_choice", "fill_blank"],
+              "exerciseTypes": ["multiple_choice", "fill_blank", "match_pairs"],
               "examples": [
                 {
                   "type": "multiple_choice",
@@ -927,6 +1014,15 @@
                   "acceptedAnswers": ["coat", "jacket", "jumper", "sweater"],
                   "commonErrors": [],
                   "expectedConcepts": ["clothes"]
+                },
+                {
+                  "type": "match_pairs",
+                  "instruction": "Match the words.",
+                  "question": "Match each word with its meaning.",
+                  "acceptedAnswers": [],
+                  "pairs": [["shirt", "camisa"], ["shoes", "zapatos"], ["skirt", "pollera"], ["hat", "sombrero"]],
+                  "commonErrors": [],
+                  "expectedConcepts": ["vocabulary_meaning"]
                 }
               ]
             }
@@ -940,7 +1036,7 @@
               "key": "rooms_furniture",
               "name": "La casa",
               "objectives": ["ambientes y muebles de la casa"],
-              "exerciseTypes": ["multiple_choice", "fill_blank"],
+              "exerciseTypes": ["multiple_choice", "fill_blank", "match_pairs"],
               "examples": [
                 {
                   "type": "multiple_choice",
@@ -958,6 +1054,15 @@
                   "acceptedAnswers": ["bed", "bedroom"],
                   "commonErrors": [],
                   "expectedConcepts": ["home_vocabulary"]
+                },
+                {
+                  "type": "match_pairs",
+                  "instruction": "Match the words.",
+                  "question": "Match each word with its meaning.",
+                  "acceptedAnswers": [],
+                  "pairs": [["kitchen", "cocina"], ["bedroom", "dormitorio"], ["bathroom", "baño"], ["garden", "jardín"]],
+                  "commonErrors": [],
+                  "expectedConcepts": ["vocabulary_meaning"]
                 }
               ]
             }
@@ -979,10 +1084,7 @@
               "objectives": [
                 "entender números, precios y horas en frases cortas"
               ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "exerciseTypes": ["fill_blank", "multiple_choice", "listen_form"],
               "presentations": ["LISTEN"],
               "examples": [
                 {
@@ -1029,6 +1131,16 @@
                   "expectedConcepts": [
                     "listening_numbers"
                   ]
+                },
+                {
+                  "type": "listen_form",
+                  "instruction": "Listen and complete the form.",
+                  "question": "Complete the form with what you hear.",
+                  "stimulus": "The museum opens at nine o'clock and closes at six. A ticket is twelve dollars.",
+                  "acceptedAnswers": [],
+                  "fields": [{"label": "Opens", "acceptedAnswers": ["9", "nine", "9:00", "nine o'clock", "9 o'clock"]}, {"label": "Closes", "acceptedAnswers": ["6", "six", "6:00", "six o'clock", "6 o'clock"]}, {"label": "Price", "acceptedAnswers": ["12", "twelve", "$12", "12 dollars", "twelve dollars"]}],
+                  "commonErrors": [],
+                  "expectedConcepts": ["listening_numbers"]
                 }
               ]
             },
@@ -1038,10 +1150,7 @@
               "objectives": [
                 "entender nombre, edad, país y deletreo en una presentación"
               ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "exerciseTypes": ["fill_blank", "multiple_choice", "dictation", "listen_form"],
               "presentations": ["LISTEN"],
               "examples": [
                 {
@@ -1076,6 +1185,25 @@
                   "expectedConcepts": [
                     "listening_personal_info"
                   ]
+                },
+                {
+                  "type": "dictation",
+                  "instruction": "Listen and write the sentence.",
+                  "question": "Write the sentence you hear.",
+                  "stimulus": "My name is Laura and I am twenty years old.",
+                  "acceptedAnswers": ["My name is Laura and I am twenty years old.", "My name is Laura and I'm twenty years old.", "My name is Laura and I am 20 years old.", "My name is Laura and I'm 20 years old."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["listening_detail", "sentence_writing"]
+                },
+                {
+                  "type": "listen_form",
+                  "instruction": "Listen and complete the form.",
+                  "question": "Complete the form with what you hear.",
+                  "stimulus": "Hello, I'm Tom Green. I'm thirty-two and I live in Madrid. I'm a teacher.",
+                  "acceptedAnswers": [],
+                  "fields": [{"label": "Name", "acceptedAnswers": ["Tom Green", "Tom"]}, {"label": "Age", "acceptedAnswers": ["32", "thirty-two", "thirty two"]}, {"label": "City", "acceptedAnswers": ["Madrid"]}, {"label": "Job", "acceptedAnswers": ["teacher", "a teacher"]}],
+                  "commonErrors": [],
+                  "expectedConcepts": ["listening_personal_info"]
                 }
               ]
             },
@@ -1134,10 +1262,7 @@
               "objectives": [
                 "entender instrucciones simples de clase o de la vida diaria"
               ],
-              "exerciseTypes": [
-                "fill_blank",
-                "multiple_choice"
-              ],
+              "exerciseTypes": ["fill_blank", "multiple_choice", "dictation"],
               "presentations": ["LISTEN"],
               "examples": [
                 {
@@ -1181,6 +1306,99 @@
                   "expectedConcepts": [
                     "listening_instructions"
                   ]
+                },
+                {
+                  "type": "dictation",
+                  "instruction": "Listen and write the sentence.",
+                  "question": "Write the sentence you hear.",
+                  "stimulus": "Open your book and read page ten.",
+                  "acceptedAnswers": ["Open your book and read page ten.", "Open your book and read page 10."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["listening_detail", "sentence_writing"]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "sounds",
+          "name": "Sonidos del inglés",
+          "skills": [
+            {
+              "key": "minimal_pairs",
+              "name": "Palabras que suenan parecido",
+              "objectives": ["distinguir palabras que suenan parecido (ship/sheep, live/leave, very/berry)"],
+              "exerciseTypes": ["minimal_pairs"],
+              "presentations": ["LISTEN"],
+              "examples": [
+                {
+                  "type": "minimal_pairs",
+                  "instruction": "Listen and choose the word.",
+                  "question": "Which word do you hear?",
+                  "stimulus": "sheep",
+                  "options": ["ship", "sheep"],
+                  "acceptedAnswers": ["sheep"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["sound_discrimination"]
+                },
+                {
+                  "type": "minimal_pairs",
+                  "instruction": "Listen and choose the word.",
+                  "question": "Which word do you hear?",
+                  "stimulus": "live",
+                  "options": ["live", "leave"],
+                  "acceptedAnswers": ["live"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["sound_discrimination"]
+                },
+                {
+                  "type": "minimal_pairs",
+                  "instruction": "Listen and choose the word.",
+                  "question": "Which word do you hear?",
+                  "stimulus": "very",
+                  "options": ["very", "berry"],
+                  "acceptedAnswers": ["very"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["sound_discrimination"]
+                }
+              ]
+            },
+            {
+              "key": "word_stress",
+              "name": "Sílaba fuerte",
+              "objectives": ["reconocer qué sílaba se pronuncia más fuerte en palabras comunes"],
+              "exerciseTypes": ["word_stress"],
+              "presentations": ["LISTEN"],
+              "examples": [
+                {
+                  "type": "word_stress",
+                  "instruction": "Listen. Which syllable is strong?",
+                  "question": "Choose the strong syllable.",
+                  "stimulus": "banana",
+                  "options": ["BA-na-na", "ba-NA-na", "ba-na-NA"],
+                  "acceptedAnswers": ["ba-NA-na"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["word_stress"]
+                },
+                {
+                  "type": "word_stress",
+                  "instruction": "Listen. Which syllable is strong?",
+                  "question": "Choose the strong syllable.",
+                  "stimulus": "hotel",
+                  "options": ["HO-tel", "ho-TEL"],
+                  "acceptedAnswers": ["ho-TEL"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["word_stress"]
+                },
+                {
+                  "type": "word_stress",
+                  "instruction": "Listen. Which syllable is strong?",
+                  "question": "Choose the strong syllable.",
+                  "stimulus": "teacher",
+                  "options": ["TEA-cher", "tea-CHER"],
+                  "acceptedAnswers": ["TEA-cher"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["word_stress"]
                 }
               ]
             }
@@ -1200,7 +1418,7 @@
               "key": "comprehension",
               "name": "Comprensión de textos breves",
               "objectives": ["identificar información concreta en un texto corto"],
-              "exerciseTypes": ["reading_multiple_choice"],
+              "exerciseTypes": ["reading_multiple_choice", "gap_text"],
               "examples": [
                 {
                   "type": "reading_multiple_choice",
@@ -1221,6 +1439,17 @@
                   "acceptedAnswers": ["He walks."],
                   "commonErrors": [],
                   "expectedConcepts": ["detail_comprehension"]
+                },
+                {
+                  "type": "gap_text",
+                  "instruction": "Complete the text with the words in the box.",
+                  "question": "Complete the text with the words in the box.",
+                  "passage": "Hi! I'm Sam. Every morning I ___ up at seven. I ___ breakfast with my sister. Then we ___ to school by bus.",
+                  "options": ["get", "have", "go", "goes"],
+                  "acceptedAnswers": [],
+                  "gaps": [["get"], ["have"], ["go"]],
+                  "commonErrors": [],
+                  "expectedConcepts": ["reading_detail"]
                 }
               ]
             }
@@ -1360,7 +1589,7 @@
               "key": "word_order",
               "name": "Armar oraciones",
               "objectives": ["ordenar palabras para formar una oración correcta", "escribir oraciones y preguntas completas con mayúscula y punto"],
-              "exerciseTypes": ["rewrite"],
+              "exerciseTypes": ["rewrite", "word_order"],
               "examples": [
                 {
                   "type": "rewrite",
@@ -1407,6 +1636,22 @@
                   "acceptedAnswers": ["She is from Spain.", "She's from Spain."],
                   "commonErrors": [],
                   "expectedConcepts": ["word_order", "be_use"]
+                },
+                {
+                  "type": "word_order",
+                  "instruction": "Put the words in order.",
+                  "question": "Put the words in order.",
+                  "acceptedAnswers": ["I drink coffee every day.", "Every day I drink coffee."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["word_order"]
+                },
+                {
+                  "type": "word_order",
+                  "instruction": "Put the words in order.",
+                  "question": "Put the words in order.",
+                  "acceptedAnswers": ["My sister lives in a small house."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["word_order"]
                 }
               ]
             }
@@ -1542,7 +1787,7 @@
               "key": "greetings",
               "name": "Saludos y respuestas",
               "objectives": ["responder a un saludo de manera apropiada", "devolver un saludo simple"],
-              "exerciseTypes": ["conversation"],
+              "exerciseTypes": ["conversation", "dialogue_choice", "read_aloud"],
               "examples": [
                 {
                   "type": "conversation",
@@ -1561,6 +1806,23 @@
                   "commonErrors": [],
                   "expectedConcepts": ["respond_to_greeting"],
                   "closing": "Have a good day!"
+                },
+                {
+                  "type": "dialogue_choice",
+                  "instruction": "Choose the best reply.",
+                  "question": "A: Good morning! How are you?",
+                  "options": ["I'm fine, thanks. And you?", "I'm from Brazil.", "See you tomorrow!"],
+                  "acceptedAnswers": ["I'm fine, thanks. And you?"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_greeting"]
+                },
+                {
+                  "type": "read_aloud",
+                  "instruction": "Read the sentence aloud.",
+                  "question": "Good morning! How are you today?",
+                  "acceptedAnswers": ["Good morning! How are you today?"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["pronunciation_clarity"]
                 }
               ]
             },
@@ -1568,7 +1830,7 @@
               "key": "introductions",
               "name": "Presentarse",
               "objectives": ["decir el nombre al presentarse", "responder a una presentación simple"],
-              "exerciseTypes": ["conversation"],
+              "exerciseTypes": ["conversation", "dialogue_choice", "read_aloud"],
               "examples": [
                 {
                   "type": "conversation",
@@ -1587,6 +1849,23 @@
                   "commonErrors": [],
                   "expectedConcepts": ["give_name"],
                   "closing": "Nice to meet you. Bye!"
+                },
+                {
+                  "type": "dialogue_choice",
+                  "instruction": "Choose the best reply.",
+                  "question": "A: Hi, I'm Tom. Nice to meet you.",
+                  "options": ["Nice to meet you too. I'm Ana.", "I'm fine, thanks.", "Goodbye, Tom!"],
+                  "acceptedAnswers": ["Nice to meet you too. I'm Ana."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_introduction"]
+                },
+                {
+                  "type": "read_aloud",
+                  "instruction": "Read the sentence aloud.",
+                  "question": "Hello, my name is Ana and I am from Argentina.",
+                  "acceptedAnswers": ["Hello, my name is Ana and I am from Argentina."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["pronunciation_clarity"]
                 }
               ]
             }
@@ -1600,7 +1879,7 @@
               "key": "basic_details",
               "name": "Datos personales básicos",
               "objectives": ["responder preguntas simples sobre país, ciudad o edad", "mantener el tema de una presentación"],
-              "exerciseTypes": ["conversation"],
+              "exerciseTypes": ["conversation", "dialogue_choice"],
               "examples": [
                 {
                   "type": "conversation",
@@ -1619,6 +1898,15 @@
                   "commonErrors": [],
                   "expectedConcepts": ["answer_personal_information"],
                   "closing": "Thanks for telling me."
+                },
+                {
+                  "type": "dialogue_choice",
+                  "instruction": "Choose the best reply.",
+                  "question": "A: Where are you from?",
+                  "options": ["I'm from Argentina.", "I'm twenty-five.", "Yes, I am."],
+                  "acceptedAnswers": ["I'm from Argentina."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["answer_personal_question"]
                 }
               ]
             }
@@ -1632,7 +1920,7 @@
               "key": "simple_requests",
               "name": "Pedir y responder algo simple",
               "objectives": ["hacer o responder pedidos cotidianos simples", "usar expresiones básicas de cortesía"],
-              "exerciseTypes": ["conversation"],
+              "exerciseTypes": ["conversation", "dialogue_choice"],
               "examples": [
                 {
                   "type": "conversation",
@@ -1651,6 +1939,15 @@
                   "commonErrors": [],
                   "expectedConcepts": ["respond_to_simple_request"],
                   "closing": "Thanks for your help!"
+                },
+                {
+                  "type": "dialogue_choice",
+                  "instruction": "Choose the best reply.",
+                  "question": "A: Can you open the window, please?",
+                  "options": ["Sure, no problem.", "I'm from Spain.", "Nice to meet you."],
+                  "acceptedAnswers": ["Sure, no problem."],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_simple_request"]
                 }
               ]
             },
@@ -1658,7 +1955,7 @@
               "key": "farewells",
               "name": "Cerrar una conversación",
               "objectives": ["responder a una despedida", "cerrar un intercambio breve de manera apropiada"],
-              "exerciseTypes": ["conversation"],
+              "exerciseTypes": ["conversation", "dialogue_choice", "read_aloud"],
               "examples": [
                 {
                   "type": "conversation",
@@ -1677,6 +1974,23 @@
                   "commonErrors": [],
                   "expectedConcepts": ["respond_to_farewell"],
                   "closing": "See you!"
+                },
+                {
+                  "type": "dialogue_choice",
+                  "instruction": "Choose the best reply.",
+                  "question": "A: It was nice to meet you. See you tomorrow!",
+                  "options": ["You too. See you tomorrow!", "Good morning!", "How old are you?"],
+                  "acceptedAnswers": ["You too. See you tomorrow!"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["respond_to_farewell"]
+                },
+                {
+                  "type": "read_aloud",
+                  "instruction": "Read the sentence aloud.",
+                  "question": "It was nice to meet you. See you next week!",
+                  "acceptedAnswers": ["It was nice to meet you. See you next week!"],
+                  "commonErrors": [],
+                  "expectedConcepts": ["pronunciation_clarity"]
                 }
               ]
             }

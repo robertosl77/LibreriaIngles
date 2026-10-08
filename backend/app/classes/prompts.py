@@ -5,6 +5,10 @@ dentro de ese marco (documento funcional §2.1) y devuelve JSON validable (§31)
 """
 
 import json
+from functools import lru_cache
+
+from app.classes.types import ALL_TYPES
+from app.curriculum.service import get_level
 
 GENERATION_SYSTEM = """You generate English-learning exercises for a structured learning app.
 The app owns the curriculum: you MUST stay within the requested CEFR level, skills,
@@ -16,7 +20,7 @@ Return ONLY a JSON object with this shape:
   "exercises": [
     {
       "skillKey": "<one of the requested skill keys>",
-      "type": "fill_blank | multiple_choice | reading_multiple_choice | rewrite | short_writing | conversation",
+      "type": "one of the slot allowedTypes",
       "instruction": "short instruction in simple English",
       "question": "the item shown to the student",
       "passage": "only for reading_multiple_choice: 40-80 word text",
@@ -29,7 +33,10 @@ Return ONLY a JSON object with this shape:
          "conceptResults": [{"concept": "<expected concept>", "status": "correct|incorrect"}]}
       ],
       "expectedConcepts": ["snake_case concept names evaluated by this item"],
-      "closing": "only for the final turn of a conversation pair: short partner farewell/closure"
+      "closing": "only for the final turn of a conversation pair: short partner farewell/closure",
+      "pairs": "only for match_pairs: [[\"english\", \"meaning\"], ...]",
+      "fields": "only for listen_form: [{\"label\": \"Name\", \"acceptedAnswers\": [\"Anna Brown\"]}, ...]",
+      "gaps": "only for gap_text: accepted answers per blank, in order: [[\"get\"], [\"have\"]]"
     }
   ]
 }
@@ -91,25 +98,27 @@ You receive the level, the exercise, the objectives, the reference answers and t
 Return ONLY a JSON object:
 {
   "result": "correct | partially_correct | incorrect",
-  "scoreSuggested": 0-100,
   "conceptResults": [{"concept": "<expected concept>", "status": "correct|partially_correct|incorrect", "score": 0-100}],
   "errors": [{"type": "GRAMMAR_ERROR|VOCABULARY_ERROR|SPELLING_ERROR|WORD_ORDER_ERROR|PRONUNCIATION_ERROR",
-              "fragment": "wrong part", "correction": "fix", "explanation": "en español"}],
+              "fragment": "wrong part", "correction": "fix", "explanation": "en español, máximo 15 palabras"}],
   "correctAnswer": "a correct version of the answer, or null for open writing",
-  "feedback": "1-2 frases en español, dirigidas al alumno",
-  "suggestions": [{"type": "STYLE_SUGGESTION|NATURALNESS_SUGGESTION|SHORTER_ALTERNATIVE|MECHANICS_NOTE", "text": "en español"}],
+  "feedback": "1-2 frases cortas en español, dirigidas al alumno",
+  "suggestions": [{"type": "STYLE_SUGGESTION|NATURALNESS_SUGGESTION|SHORTER_ALTERNATIVE|MECHANICS_NOTE", "text": "en español, máximo 15 palabras"}],
   "secondarySkillResults": [
-    {"skillKey": "<only from secondarySkillCandidates>", "status": "correct|partially_correct|incorrect",
+    {"skillKey": "<a key from the skill catalog>", "status": "correct|partially_correct|incorrect",
      "score": 0-100, "reason": "brief evidence in Spanish"}
   ]
 }
 
 Rules:
+- Be brief: at most 2 suggestions; each explanation, suggestion and reason short; do not repeat in "feedback" what "errors" already says.
 - Evaluate the PRIMARY result ONLY on what the objectives and expected concepts target, at the given level.
-- "secondarySkillCandidates" lists other curricular skills that may receive incidental evidence from
-  what the learner actually produced. Return secondarySkillResults ONLY for skills directly evidenced
-  by this answer, normally at most 3. Do not invent evidence. A secondary error must never reduce the
-  primary Conversation/task score unless it also makes the conversational objective fail.
+- The SKILL CATALOG at the end lists the curricular skills of the level. "secondaryAreas" says which
+  catalog areas may receive incidental evidence from what the learner actually produced. Return
+  secondarySkillResults ONLY for catalog skills of those areas (never the primary "skillKey") that are
+  directly evidenced by this answer, at most 3, using the catalog key exactly. If "secondaryAreas" is
+  empty, return []. Do not invent evidence. A secondary error must never reduce the primary
+  Conversation/task score unless it also makes the conversational objective fail.
 - The reference answers are examples, not an exhaustive list: a different answer that is
   grammatically correct and fulfils the task IS correct.
 - Never mark an answer incorrect only because a more natural alternative exists:
@@ -134,14 +143,12 @@ Rules:
   level? There is usually more than one valid reply. Grammar/vocabulary mistakes may be reported and
   may feed secondarySkillResults while the Conversation objective can still be correct or partial.
   Use conversationContext when supplied to check continuity with earlier turns.
-- If "response" is SPEAK, "studentAnswer" is a literal transcript of speech: ignore punctuation
-  and capitalization. If it differs from a correct answer only by a word that SOUNDS almost the
-  same (e.g. "sink" for "think", "berry" for "very", "ship" for "sheep"), treat it as a
-  pronunciation slip, not a grammar/vocabulary error: mark the concepts as correct and add one
-  error of type PRONUNCIATION_ERROR with that word.
-- If exercise.response is SPEAK, the answer is a literal speech-to-text transcript. Do not
-  penalize missing punctuation or capitalization that cannot be heard; evaluate the spoken
-  words, grammar, vocabulary and task completion.
+- If "response" is SPEAK, "studentAnswer" is a literal speech-to-text transcript: never penalize
+  punctuation or capitalization; evaluate the spoken words, grammar, vocabulary and task completion.
+  If it differs from a correct answer only by a word that SOUNDS almost the same (e.g. "sink" for
+  "think", "berry" for "very", "ship" for "sheep"), treat it as a pronunciation slip, not a
+  grammar/vocabulary error: mark the concepts as correct and add one error of type
+  PRONUNCIATION_ERROR with that word.
 - Minor spelling (1-2 letters wrong in a recognizable word, e.g. "taxy" for "taxi", "freind"
   for "friend") is NOT a concept error when the intended word is clear and is the right one:
   keep the concept as correct and add one error of type SPELLING_ERROR with the fix. If the
@@ -158,10 +165,203 @@ EXAM_NOTE = (
 )
 
 
+def compact_json(value) -> str:
+    """T-174: el modelo lee igual el JSON sin sangrías; se ahorra ≈35 % de caracteres."""
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+# T-183: reglas de los tipos nuevos. Viajan SOLO si la clase pide ese tipo (no engordan cada pedido).
+NEW_TYPE_RULES = {
+    'dictation': '- dictation (always LISTEN): "stimulus" is ONE short sentence (5-10 words) at the level; "question" is\n  "Write the sentence you hear."; acceptedAnswers = the sentence (plus contracted/full variants).',
+    'word_order': '- word_order: acceptedAnswers = every valid order of ONE sentence of 4-9 words, all using exactly the same\n  words (e.g. "I drink coffee every day.", "Every day I drink coffee."). "question" is "Put the words in order."\n  Do NOT shuffle the words yourself: the app builds the word tiles.',
+    'dialogue_choice': '- dialogue_choice: "question" is a short dialogue of 1-3 lines ending with the partner\'s line, e.g.\n  "A: Hi! I\'m Tom. Nice to meet you."; options = 3 possible learner replies, exactly ONE appropriate; the\n  others must be clearly wrong for that moment (not just less polite). With LISTEN, "stimulus" is the\n  partner\'s last line and "question" is "Choose the best reply."',
+    'read_aloud': '- read_aloud (always SPEAK, READ): "question" is ONLY the sentence to read aloud (5-12 words, useful everyday\n  English, no names that are hard to pronounce); acceptedAnswers = [that same sentence].',
+    'minimal_pairs': '- minimal_pairs (always LISTEN): "stimulus" is ONE word from a minimal pair hard for Spanish speakers\n  (ship/sheep, live/leave, very/berry, hat/hut, think/sink, beach/peach); options = the 2-3 similar words;\n  acceptedAnswers = [the word in the stimulus]; "question" is "Which word do you hear?".',
+    'match_pairs': '- match_pairs: "pairs" = 4-5 [english, meaning-in-Spanish] pairs from the slot topic, no repeated words;\n  acceptedAnswers []; "question" is "Match each word with its meaning.".',
+    'listen_form': '- listen_form (always LISTEN): "stimulus" = 2-3 sentences where a person gives personal data; "fields" = 3-4\n  labels in English (Name, Age, Phone, City, Job, Day, Time) with acceptedAnswers for what was said (for numbers\n  list digit and word forms); "question" is "Complete the form with what you hear."',
+    'gap_text': '- gap_text (READ): "passage" = a 30-60 word text with 3-4 blanks written as "___"; "gaps" = accepted answers for\n  each blank in order; "options" = a word bank with the correct words plus ONE distractor; acceptedAnswers [].',
+    'error_correction': '- error_correction: "question" is a sentence with exactly ONE typical A1 error (e.g. "She go to school by bus.");\n  acceptedAnswers = every correct version (contracted and full forms). The question itself must be wrong.',
+    'word_stress': '- word_stress (always LISTEN): "stimulus" is ONE common word of 2-3 syllables; options = the word split in\n  syllables with ONE syllable in capitals for each option (e.g. "BA-na-na", "ba-NA-na", "ba-na-NA");\n  acceptedAnswers = [the correctly stressed option].',
+}
+
+
 def generation_user_prompt(level: str, slots: list[dict], purpose: str = "class") -> str:
     header = "Generate a class.\n" if purpose != "exam" else f"Generate a level exam.\n{EXAM_NOTE}\n"
-    return header + json.dumps({"level": level, "slots": slots}, ensure_ascii=False, indent=2)
+    requested = dict.fromkeys(t for slot in slots for t in slot.get("allowedTypes") or [])
+    rules = [NEW_TYPE_RULES[t] for t in requested if t in NEW_TYPE_RULES]
+    if rules:
+        header += "Rules for these exercise types:\n" + "\n".join(rules) + "\n"
+    return header + compact_json({"level": level, "slots": slots})
 
 
 def evaluation_user_prompt(payload: dict) -> str:
-    return "Evaluate this answer.\n" + json.dumps(payload, ensure_ascii=False, indent=2)
+    return "Evaluate this answer.\n" + compact_json(payload)
+
+
+# T-171: varias respuestas de la misma clase en una sola llamada.
+BATCH_EVALUATION_NOTE = """
+BATCH MODE: "items" contains several answers from the same class. Evaluate EACH item independently,
+applying every rule above to that item only (its own type, objectives, references, secondaryAreas and
+conversationContext). Return ONLY {"results": [ {"id": <the item id>, ...the evaluation object...} ]}
+with exactly one result per item and the same ids.
+"""
+
+
+def evaluation_batch_user_prompt(level: str | None, items: list[dict]) -> str:
+    return "Evaluate these answers.\n" + compact_json({"level": level, "items": items})
+
+
+# ---------------------------------------------------------------- T-170 catálogo compacto por nivel
+
+# Áreas que pueden recibir evidencia secundaria (T-048). Writing solo en respuestas escritas.
+SECONDARY_AREAS = ("grammar", "vocabulary", "writing")
+
+
+def short_skill_key(skill_key: str) -> str:
+    """a1.grammar.to_be.negative → grammar.to_be.negative (el nivel ya está en el prompt)."""
+    return skill_key.split(".", 1)[1] if "." in skill_key else skill_key
+
+
+@lru_cache
+def skill_catalog(level: str | None) -> str:
+    """Una línea por skill: clave corta + tema · nombre. Sin objetivos (≈560 tokens en A1 vs ≈2.270)."""
+    curriculum = get_level(level) if level else None
+    if curriculum is None:
+        return ""
+    return "\n".join(
+        f"{short_skill_key(s.key)}: {s.topic_name} · {s.name}"
+        for s in curriculum.skills
+        if s.area_key in SECONDARY_AREAS
+    )
+
+
+@lru_cache
+def evaluation_system(level: str | None) -> str:
+    """System prompt de corrección del nivel: idéntico en cada llamada (prefijo cacheable)."""
+    catalog = skill_catalog(level)
+    if not catalog:
+        return EVALUATION_SYSTEM
+    return f"{EVALUATION_SYSTEM}\nSKILL CATALOG (level {level}; use these keys exactly):\n{catalog}\n"
+
+
+# ---------------------------------------------------------------- T-173 esquemas de respuesta (Gemini)
+# Garantizan la FORMA del JSON (no su contenido: el backend sigue validando todo).
+
+def _s(type_: str, **extra) -> dict:
+    return {"type": type_, **extra}
+
+
+_STR = _s("STRING")
+_STR_LIST = _s("ARRAY", items=_STR)
+_STATUS = _s("STRING", enum=["correct", "partially_correct", "incorrect"])
+
+EXERCISE_SCHEMA = _s(
+    "OBJECT",
+    properties={
+        "skillKey": _STR,
+        "type": _s("STRING", enum=sorted(ALL_TYPES)),
+        "instruction": _STR,
+        "question": _STR,
+        "passage": _s("STRING", nullable=True),
+        "stimulus": _s("STRING", nullable=True),
+        "options": _s("ARRAY", items=_STR, nullable=True),
+        "acceptedAnswers": _STR_LIST,
+        "commonErrors": _s(
+            "ARRAY",
+            items=_s(
+                "OBJECT",
+                properties={
+                    "answer": _STR,
+                    "feedback": _STR,
+                    "conceptResults": _s(
+                        "ARRAY", items=_s("OBJECT", properties={"concept": _STR, "status": _STATUS})
+                    ),
+                },
+                required=["answer", "feedback"],
+            ),
+        ),
+        "expectedConcepts": _STR_LIST,
+        "closing": _s("STRING", nullable=True),
+        "pairs": _s("ARRAY", items=_s("ARRAY", items=_STR), nullable=True),
+        "fields": _s(
+            "ARRAY",
+            items=_s("OBJECT", properties={"label": _STR, "acceptedAnswers": _STR_LIST}, required=["label", "acceptedAnswers"]),
+            nullable=True,
+        ),
+        "gaps": _s("ARRAY", items=_STR_LIST, nullable=True),
+    },
+    required=["skillKey", "type", "instruction", "question", "acceptedAnswers", "expectedConcepts"],
+)
+
+GENERATION_SCHEMA = _s(
+    "OBJECT",
+    properties={"title": _STR, "exercises": _s("ARRAY", items=EXERCISE_SCHEMA)},
+    required=["title", "exercises"],
+)
+
+_EVALUATION_PROPERTIES = {
+    "result": _STATUS,
+    "conceptResults": _s(
+        "ARRAY",
+        items=_s("OBJECT", properties={"concept": _STR, "status": _STATUS, "score": _s("NUMBER")},
+                 required=["concept", "status"]),
+    ),
+    "errors": _s(
+        "ARRAY",
+        items=_s(
+            "OBJECT",
+            properties={
+                "type": _s(
+                    "STRING",
+                    enum=["GRAMMAR_ERROR", "VOCABULARY_ERROR", "SPELLING_ERROR", "WORD_ORDER_ERROR", "PRONUNCIATION_ERROR"],
+                ),
+                "fragment": _STR,
+                "correction": _STR,
+                "explanation": _STR,
+            },
+            required=["type", "explanation"],
+        ),
+    ),
+    "correctAnswer": _s("STRING", nullable=True),
+    "feedback": _STR,
+    "suggestions": _s(
+        "ARRAY",
+        items=_s(
+            "OBJECT",
+            properties={
+                "type": _s(
+                    "STRING",
+                    enum=["STYLE_SUGGESTION", "NATURALNESS_SUGGESTION", "SHORTER_ALTERNATIVE", "MECHANICS_NOTE"],
+                ),
+                "text": _STR,
+            },
+            required=["type", "text"],
+        ),
+    ),
+    "secondarySkillResults": _s(
+        "ARRAY",
+        items=_s(
+            "OBJECT",
+            properties={"skillKey": _STR, "status": _STATUS, "score": _s("NUMBER"), "reason": _STR},
+            required=["skillKey", "status"],
+        ),
+    ),
+}
+_EVALUATION_REQUIRED = ["result", "conceptResults", "errors", "feedback"]
+
+EVALUATION_SCHEMA = _s("OBJECT", properties=_EVALUATION_PROPERTIES, required=_EVALUATION_REQUIRED)
+
+EVALUATION_BATCH_SCHEMA = _s(
+    "OBJECT",
+    properties={
+        "results": _s(
+            "ARRAY",
+            items=_s(
+                "OBJECT",
+                properties={"id": _s("INTEGER"), **_EVALUATION_PROPERTIES},
+                required=["id", *_EVALUATION_REQUIRED],
+            ),
+        )
+    },
+    required=["results"],
+)

@@ -358,7 +358,7 @@ def test_consumption_exposes_connection_route_only_when_viewer_can_manage_it(cli
         if item["connectionName"] == "Ruta plataforma"
     )
     assert platform_row["connectionId"] == platform_id
-    assert platform_row["connectionRoute"] == "/app/plataforma/configuracion"
+    assert platform_row["connectionRoute"] == "/app/ia"  # T-200: menú IA único
 
 
 def test_platform_owner_can_use_global_consumption_scope(client) -> None:

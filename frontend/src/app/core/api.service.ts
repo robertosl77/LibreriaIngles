@@ -28,8 +28,16 @@ import {
   LessonResponse,
   Me,
   ModelOption,
+  OrganizationCompanyLookupRequest,
+  OrganizationCompanyLookupResult,
+  OrganizationOnboardingConfig,
+  OrganizationOnboardingDraft,
+  OrganizationOnboardingDevPurgeResult,
+  OrganizationOnboardingResult,
   InvitationPreview,
   InvitationRedemption,
+  JobTitleOption,
+  JobTitleResolveResult,
   PlatformAccount,
   PlatformBenefit,
   PlatformBenefitDraft,
@@ -68,6 +76,59 @@ export function errorMessage(error: unknown, fallback = 'Ocurrió un error inesp
 export class ApiService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.apiUrl;
+
+  // Alta corporativa P01
+  organizationOnboardingConfig(): Observable<OrganizationOnboardingConfig> {
+    return this.http.get<OrganizationOnboardingConfig>(
+      `${this.base}/organization-onboarding/config`
+    );
+  }
+
+  organizationJobTitles(query = '', limit = 8): Observable<JobTitleOption[]> {
+    return this.http.get<JobTitleOption[]>(
+      `${this.base}/organization-onboarding/job-titles`,
+      { params: { q: query, limit } }
+    );
+  }
+
+  resolveOrganizationJobTitle(
+    name: string,
+    confirmSimilar = false
+  ): Observable<JobTitleResolveResult> {
+    return this.http.post<JobTitleResolveResult>(
+      `${this.base}/organization-onboarding/job-titles/resolve`,
+      { name, confirmSimilar }
+    );
+  }
+
+  lookupOrganizationCompany(
+    draft: OrganizationCompanyLookupRequest
+  ): Observable<OrganizationCompanyLookupResult> {
+    return this.http.post<OrganizationCompanyLookupResult>(
+      `${this.base}/organization-onboarding/company/lookup`,
+      draft
+    );
+  }
+
+  createOrganizationOnboarding(
+    draft: OrganizationOnboardingDraft
+  ): Observable<OrganizationOnboardingResult> {
+    return this.http.post<OrganizationOnboardingResult>(
+      `${this.base}/organization-onboarding`,
+      draft
+    );
+  }
+
+  purgeOrganizationOnboardingDev(
+    country: string,
+    taxIdType: string,
+    taxId: string
+  ): Observable<OrganizationOnboardingDevPurgeResult> {
+    return this.http.delete<OrganizationOnboardingDevPurgeResult>(
+      `${this.base}/organization-onboarding/dev-purge`,
+      { params: { country, taxIdType, taxId } }
+    );
+  }
 
   // Auth
   authConfig(): Observable<AuthConfig> {

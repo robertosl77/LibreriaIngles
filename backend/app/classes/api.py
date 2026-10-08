@@ -13,6 +13,7 @@ from app.ai.service import (
 from app.ai.usage import AIUsageContext
 from app.classes import generation, service
 from app.classes.reference import exercise_display_number
+from app.classes.types import NO_APPEAL_TYPES
 from app.pronunciation import normalize_ai_pronunciation
 from app.core.deps import CurrentStudy, DbSession
 from app.curriculum.lessons import get_lesson
@@ -28,7 +29,7 @@ from app.progress.service import skill_name
 
 router = APIRouter(prefix="/classes", tags=["classes"])
 
-SWITCH_NOTICE = "Se cambió automáticamente el proveedor de IA."
+SWITCH_NOTICE = "Tu clase se preparó con una conexión alternativa."
 MAX_AUDIO_BYTES = 6 * 1024 * 1024
 MAX_AUDIO_DURATION_MS = 65_000
 
@@ -77,6 +78,7 @@ def _result_payload(db, attempt: Attempt, exercise: Exercise, viewer) -> dict | 
         "ai": public_trace(db, result.get("ai"), viewer),
         "appeal": result.get("appeal"),
         "canAppeal": attempt.score < 100
+        and exercise.exercise_type not in NO_APPEAL_TYPES
         and attempt.appealed_at is None
         and bool(attempt.normalized_answer),
     }
@@ -134,6 +136,10 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 "stimulus": _stimulus(exercise),
                 "options": (exercise.content or {}).get("options"),
                 "conversation": (exercise.content or {}).get("conversation"),
+                # T-183: fichas (word_order), columnas (match_pairs), campos (listen_form).
+                "tiles": (exercise.content or {}).get("tiles"),
+                "pairs": (exercise.content or {}).get("pairs"),
+                "fields": (exercise.content or {}).get("fields"),
                 "answer": attempt.raw_answer if attempt else (draft.answer_text if draft else ""),
                 "audioDurationMs": (
                     attempt.audio_duration_ms
@@ -199,6 +205,7 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
         "examResult": session.exam_result,
         # Balanceo por habilidad (T-034): qué refuerza esta clase y por qué.
         "focus": (session.generation_request or {}).get("focus") or [],
+        "reducedFrom": (session.generation_request or {}).get("reducedFrom"),
         "certificateCode": _certificate_code(db, session),
         "notice": notice,
     }
@@ -259,7 +266,7 @@ def create_class(study: CurrentStudy, db: DbSession) -> dict:
     try:
         session, result = generation.create_class(db, study)
     except generation.GenerationFailed as exc:
-        raise HTTPException(422, str(exc))
+        raise HTTPException(422, f"No se pudo generar la clase. {exc}")
     notice = SWITCH_NOTICE if result and result.switched else None
     return _detail(db, session, notice)
 
@@ -281,7 +288,10 @@ def retry_generation(class_id: int, study: CurrentStudy, db: DbSession) -> dict:
         raise HTTPException(status.HTTP_409_CONFLICT, "La clase no falló al generarse.")
     session.status = ClassSessionStatus.GENERATING
     db.commit()
-    result = generation.generate_content(db, study, session)
+    try:
+        result = generation.generate_content(db, study, session)
+    except generation.GenerationFailed as exc:
+        raise HTTPException(422, f"No se pudo generar la clase. {exc}")
     notice = SWITCH_NOTICE if result and result.switched else None
     return _detail(db, session, notice)
 

@@ -64,8 +64,8 @@ def test_per_account_limit_blocks_only_that_account(client, membership) -> None:
     first = client.post(f"{API}/classes", headers=alice).json()
     assert first["status"] == "READY"
     second = client.post(f"{API}/classes", headers=alice).json()
-    assert second["status"] == "GENERATION_FAILED"
-    assert "límite" in second["generationError"]
+    assert "No se pudo generar" in second["detail"]  # T-203: no queda guardada
+    assert "límite" in second["detail"]
 
     # Otra cuenta todavía tiene cupo.
     bob = _student(client, "bob@example.com")

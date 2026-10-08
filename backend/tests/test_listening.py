@@ -6,7 +6,7 @@ la corrección es la misma.
 
 import random
 
-from conftest import login
+from conftest import correct_answer, login
 
 from app.classes.generation import EVALUATION_MODE_BY_TYPE, _validate_exercise, ensure_listening, slot_for
 from app.curriculum.service import EXERCISE_TYPES, get_level
@@ -128,7 +128,7 @@ def test_listening_class_flow_and_ability_progress(client) -> None:
             elif exercise.exercise_type == "conversation":
                 answers[str(e["id"])] = "Hi! I'm Ana. I'm fine, thanks."
             else:
-                answers[str(e["id"])] = exercise.answer_key["acceptedAnswers"][0]
+                answers[str(e["id"])] = correct_answer(exercise)
     result = client.post(
         f"{API}/classes/{klass['id']}/submit", json={"answers": answers}, headers=headers
     ).json()

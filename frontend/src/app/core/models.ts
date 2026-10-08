@@ -490,7 +490,21 @@ export interface AiConnection {
   perAccountDailyLimit: number | null;
   usage24h: number | null;
   supportsAudioInput: boolean;
+  /** T-191: límites del proveedor aprendidos solos (del rechazo o de los headers). */
+  learnedLimits?: LearnedLimit[];
   test?: { ok: boolean; error: string | null };
+}
+
+export interface LearnedLimit {
+  kind: 'RENEWABLE' | 'EXHAUSTED';
+  dimension: 'REQUESTS' | 'TOKENS' | 'INPUT_TOKENS' | 'OUTPUT_TOKENS';
+  window: 'MINUTE' | 'DAY' | 'MONTH';
+  limit: number | null;
+  used: number | null;
+  resetAt: string | null;
+  source: 'HEADER' | 'ERROR' | 'ESTIMATED';
+  tier: string | null;
+  observedAt: string | null;
 }
 
 export type ClassStatus =
@@ -554,7 +568,18 @@ export interface Exercise {
     | 'reading_multiple_choice'
     | 'rewrite'
     | 'short_writing'
-    | 'conversation';
+    | 'conversation'
+    // T-183: tipos nuevos de A1.
+    | 'dictation'
+    | 'word_order'
+    | 'dialogue_choice'
+    | 'read_aloud'
+    | 'minimal_pairs'
+    | 'match_pairs'
+    | 'listen_form'
+    | 'gap_text'
+    | 'error_correction'
+    | 'word_stress';
   area: string | null;
   skillKey: string | null;
   skillName: string | null;
@@ -569,6 +594,10 @@ export interface Exercise {
   options: string[] | null;
   /** T-048: dos ejercicios enlazados forman una microconversación. */
   conversation: { group: string; turn: number; total: number; closing: string | null } | null;
+  /** T-183: fichas mezcladas (word_order), columnas (match_pairs) y campos (listen_form). */
+  tiles?: string[] | null;
+  pairs?: { left: string[]; right: string[] } | null;
+  fields?: string[] | null;
   answer: string;
   audioDurationMs: number | null;
   pronunciationResult: PronunciationResult | null;
@@ -600,6 +629,8 @@ export interface LessonResponse {
 }
 
 export interface ClassDetail {
+  /** T-191: la clase se generó con menos ejercicios por falta de cupo de IA. */
+  reducedFrom?: number | null;
   id: number;
   kind: SessionKind;
   examResult: ExamResult | null;
@@ -984,4 +1015,134 @@ export interface Certificate {
   issuedAt: string;
   issuer: string;
   notice: string;
+}
+
+
+export type OrganizationActingCapacity =
+  | 'LEGAL_REPRESENTATIVE'
+  | 'PROXY'
+  | 'AUTHORIZED_EMPLOYEE'
+  | 'OTHER';
+
+export interface OrganizationOnboardingConfig {
+  countries: Array<{
+    code: string;
+    name: string;
+    taxIdTypes: Array<{ code: string; name: string }>;
+  }>;
+  actingCapacities: Array<{ code: OrganizationActingCapacity; name: string }>;
+  emailVerificationImplemented: boolean;
+  devPurgeAllowed: boolean;
+}
+
+export interface OrganizationCompanyLookupRequest {
+  country: string;
+  taxIdType: string;
+  taxId: string;
+}
+
+export interface OrganizationCompanyLookupResult {
+  state: 'VERIFIED' | 'PENDING' | 'REVIEW_REQUIRED';
+  country: string;
+  taxIdType: string;
+  taxId: string;
+  source: string;
+  message: string;
+  checkedAt: string;
+  developmentSimulation: boolean;
+  company: {
+    legalName: string | null;
+    legalEntityType: string | null;
+    registryJurisdiction: string | null;
+    registryNumber: string | null;
+    fiscalAddress: string | null;
+    legalAddress: string | null;
+    primaryActivity: string | null;
+  };
+  platform: {
+    alreadyRegistered: boolean;
+    onboardingInProgress: boolean;
+    onboardingPublicId: string | null;
+  };
+}
+
+export interface OrganizationOnboardingDraft extends OrganizationCompanyLookupRequest {
+  displayName: string | null;
+  website: string | null;
+  referent: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    jobTitleId: number | null;
+    jobTitle: string;
+    phone: string;
+    actingCapacity: OrganizationActingCapacity;
+    authorityDeclared: boolean;
+  };
+}
+
+export interface OrganizationOnboardingResult {
+  publicId: string;
+  status:
+    | 'DRAFT'
+    | 'COMPANY_VERIFIED'
+    | 'VERIFICATION_PENDING'
+    | 'REVIEW_REQUIRED'
+    | 'ABANDONED'
+    | 'PROVISIONED';
+  company: {
+    country: string;
+    taxIdType: string;
+    taxId: string;
+    legalName: string | null;
+    displayName: string | null;
+    legalEntityType: string | null;
+    registryJurisdiction: string | null;
+    registryNumber: string | null;
+    fiscalAddress: string | null;
+    legalAddress: string | null;
+    primaryActivity: string | null;
+    website: string | null;
+  };
+  referent: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    jobTitleId: number | null;
+    jobTitle: string;
+    phone: string;
+    actingCapacity: OrganizationActingCapacity;
+    emailVerified: boolean;
+  };
+  verification: {
+    source: string | null;
+    message: string | null;
+    checkedAt: string | null;
+    developmentSimulation: boolean;
+  };
+  nextStep:
+    | 'EMAIL_VERIFICATION_PENDING_P02'
+    | 'COMPANY_VERIFICATION_PENDING'
+    | 'MANUAL_REVIEW_REQUIRED';
+}
+
+
+export interface OrganizationOnboardingDevPurgeResult {
+  country: string;
+  taxIdType: string;
+  taxId: string;
+  deletedOnboardings: number;
+}
+
+
+export interface JobTitleOption {
+  id: number;
+  name: string;
+  score?: number;
+}
+
+export interface JobTitleResolveResult {
+  status: 'EXISTING' | 'CREATED' | 'SIMILAR';
+  item: JobTitleOption | null;
+  similar: JobTitleOption[];
 }

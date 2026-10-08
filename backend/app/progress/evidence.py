@@ -108,6 +108,10 @@ def attempt_evidence(attempt, exercise) -> list[Evidence]:
         if not skip:
             evidence[area] = Evidence(area, score, weight, assisted)
 
+    # T-183: el dictado se escucha Y se escribe entero: también es evidencia de Writing.
+    if exercise.exercise_type == "dictation" and not spoken and "WRITING" not in evidence:
+        evidence["WRITING"] = Evidence("WRITING", score, weight, assisted)
+
     if spoken:
         # Regrabar mucho = le costó decirlo: se marca, pero no baja la nota (T-046 v2).
         retakes = int(signals.get("speakRetakes") or 0)

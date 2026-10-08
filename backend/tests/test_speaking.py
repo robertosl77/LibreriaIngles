@@ -42,7 +42,8 @@ def test_speaking_keeps_existing_exercise_types() -> None:
 
     ensure_speaking(slots, 1, _Rng())
     assert slots[0]["response"] == "SELECT"
-    assert slots[1]["response"] == "SPEAK"
+    assert slots[1]["response"] == "WRITE"  # T-207: completar una palabra nunca se habla
+    assert slots[2]["response"] == "SPEAK"
     assert all(slot["allowedTypes"][0] != "speaking_prompt" for slot in slots)
 
 
@@ -171,3 +172,23 @@ def test_pronunciation_result_is_null_when_service_is_unavailable(client, monkey
         assert draft is not None
         assert draft.pronunciation_result is None
         assert not hasattr(draft, "audio")
+
+
+def test_single_word_fill_blank_is_never_spoken() -> None:
+    """T-207: completar una palabra va por texto aunque la clase tenga habla habilitada."""
+    import random
+
+    from app.classes.generation import select_slots, slot_for
+    from app.curriculum.service import get_level
+
+    skills = list(get_level("A1").skills)
+    fill = [s for s in skills if "fill_blank" in s.exercise_types]
+    rng = random.Random(1)
+    for _ in range(200):
+        slot = slot_for(rng.choice(fill), rng, allow_speaking=True, types={"fill_blank"})
+        assert slot["response"] != "SPEAK"
+    for seed in range(40):
+        slots = select_slots(skills, {}, allow_speaking=True,
+                             focus=[{"key": "SPEAKING", "kind": "ability"}], rng=random.Random(seed))
+        assert not any(s["allowedTypes"][0] == "fill_blank" and s["response"] == "SPEAK" for s in slots)
+        assert any(s["response"] == "SPEAK" for s in slots)  # el habla se cubre con otros tipos

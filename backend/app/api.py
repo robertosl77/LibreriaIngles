@@ -7,6 +7,7 @@ from app.classes.api import router as classes_router
 from app.campaigns.api import router as campaign_notices_router
 from app.exams.api import router as exams_router
 from app.invitations.api import router as invitations_router
+from app.organizations.api import router as organization_onboarding_router
 from app.platform.api import router as platform_router
 from app.platform.benefits_api import router as platform_benefits_router
 from app.platform.campaigns_api import router as platform_campaigns_router
@@ -24,6 +25,7 @@ router.include_router(ai_usage_router)
 router.include_router(classes_router)
 router.include_router(campaign_notices_router)
 router.include_router(invitations_router)
+router.include_router(organization_onboarding_router)
 router.include_router(exams_router)
 router.include_router(progress_router)
 router.include_router(platform_router)

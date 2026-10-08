@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.accounts.models import Account, PlatformRole
+from app.ai import limits as quota
 from app.ai.models import (
     AICredentialAuditEvent,
     AIConnection,
@@ -75,6 +76,9 @@ def _owner_filter(account: Account, scope: Scope):
     if scope == "platform":
         if not _is_platform_owner(account):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo PLATFORM_OWNER.")
+        return AIConnectionOwnerType.PLATFORM, None
+    if _is_platform_owner(account):
+        # T-200: sr.macros tiene una sola lista, la de la plataforma (menú IA).
         return AIConnectionOwnerType.PLATFORM, None
     return AIConnectionOwnerType.ACCOUNT, account.id
 
@@ -154,6 +158,8 @@ def _serialize(connection: AIConnection, db=None) -> dict:
         "perAccountDailyLimit": connection.per_account_daily_limit,
         "usage24h": usage,
         "supportsAudioInput": PROVIDERS[connection.provider].supports_audio_input,
+        # T-191: límites del proveedor aprendidos solos (sin carga manual).
+        "learnedLimits": quota.describe(db, connection) if db is not None else [],
     }
 
 
