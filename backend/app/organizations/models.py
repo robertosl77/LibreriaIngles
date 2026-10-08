@@ -75,7 +75,7 @@ class OrganizationOnboarding(Base):
         String(36), unique=True, index=True, default=lambda: str(uuid4())
     )
     status: Mapped[OrganizationOnboardingStatus] = mapped_column(
-        SqlEnum(OrganizationOnboardingStatus, native_enum=False),
+        SqlEnum(OrganizationOnboardingStatus, native_enum=False, length=32),  # igual que la migración
         default=OrganizationOnboardingStatus.DRAFT,
         index=True,
     )
@@ -109,7 +109,7 @@ class OrganizationOnboarding(Base):
     contact_job_title: Mapped[str] = mapped_column(String(160))
     contact_phone: Mapped[str] = mapped_column(String(64))
     acting_capacity: Mapped[OrganizationActingCapacity] = mapped_column(
-        SqlEnum(OrganizationActingCapacity, native_enum=False)
+        SqlEnum(OrganizationActingCapacity, native_enum=False, length=40)  # igual que la migración
     )
     authority_declared: Mapped[bool] = mapped_column(Boolean, default=False)
 
