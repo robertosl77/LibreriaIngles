@@ -312,8 +312,8 @@ def test_class_is_reduced_to_fit_tokens_keeping_conversation_pairs(client, monke
     with SessionLocal() as db:
         connection = db.get(AIConnection, connection_id)
         # Entra un pedido chico pero no uno de 6 ejercicios.
-        full = generation.generation_chars("A1", real_select(list(__import__("app.curriculum.service", fromlist=["get_level"]).get_level("A1").skills), {}, rng=__import__("random").Random(5)))
-        cap = int(full / quota.DEFAULT_CHARS_PER_TOKEN * 0.75 / settings.ai_quota_margin)
+        full = generation.generation_chars("A1", real_select(list(__import__("app.curriculum.service", fromlist=["get_level"]).get_level("A1").skills), {}, allow_speaking=True, rng=__import__("random").Random(5)))
+        cap = int(full / quota.DEFAULT_CHARS_PER_TOKEN * 0.88 / settings.ai_quota_margin)  # el prompt fijo pesa ~75 %
         quota.record(db, connection, [quota.LimitInfo(kind=RENEWABLE, dimension="INPUT_TOKENS", window="MINUTE", limit=cap)])
         db.commit()
     klass = client.post("/api/v1/classes", headers=headers).json()

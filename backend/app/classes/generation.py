@@ -87,7 +87,11 @@ STIMULUS_MAX = 600
 LISTEN_SHARE = 0.3
 # Respuestas habladas: solo sobre tipos que normalmente se escriben.
 SPEAK_SHARE = 0.3
-SPEAK_TYPES = {"fill_blank", "rewrite", "short_writing", "conversation"}
+# Tipos que se pueden responder hablando. T-207: fill_blank (completar UNA palabra) queda afuera:
+# transcribir + corregir + pronunciación por una sola palabra no vale el gasto; va por texto.
+SPEAK_TYPES = {"rewrite", "short_writing", "conversation"}
+# Tipos de producción propia (escritos): se usan para mantener escrita la Writing reforzada.
+PRODUCTIVE_TYPES = SPEAK_TYPES | {"fill_blank"}
 
 
 class GenerationFailed(Exception):
@@ -300,7 +304,7 @@ def select_slots(
             skill,
             rng,
             allow_speaking=allow_speaking and skill.key not in keep_written,
-            types=SPEAK_TYPES if skill.key in keep_written else None,
+            types=PRODUCTIVE_TYPES if skill.key in keep_written else None,
         )
         for skill in chosen
     ]
@@ -308,8 +312,10 @@ def select_slots(
     ensure_listening(slots, skills, 2 if "LISTENING" in focus_keys else 1, rng)
     if allow_speaking:
         speak_min = 2 if focus_keys & SPEECH_ABILITIES else 1
-        if focus_keys & SPEECH_ABILITIES:
-            _make_speakable(slots, chosen, speak_min, rng, exclude=keep_written)
+        # T-207: sin fill_blank hablado, a veces no queda ningún tipo hablable: se cambia el tipo de
+        # alguna skill que admita uno (reescritura, escritura corta, lectura en voz alta).
+        _make_speakable(slots, chosen, speak_min, rng, exclude=keep_written)
+        _add_speakable_skill(slots, chosen, skills, speak_min, rng, exclude=keep_written, focus=focus or [])
         ensure_speaking(slots, speak_min, rng, exclude=keep_written)
     pair_conversation_slots(slots)
     return slots
@@ -361,18 +367,55 @@ def _make_speakable(
     speakable = sum(
         1 for s in slots if s["response"] == "SPEAK" or s["allowedTypes"][0] in SPEAK_TYPES
     )
+    # La conversación no se crea acá (dejaría un turno sin pareja); read_aloud ya es hablado.
+    targets = (SPEAK_TYPES - {"conversation"}) | SPEAK_ONLY_TYPES
     for i in rng.sample(range(len(slots)), len(slots)):
         if speakable >= minimum:
             return
         skill, slot = chosen[i], slots[i]
-        if slot["allowedTypes"][0] in SPEAK_TYPES or skill.key in exclude:
+        if slot["allowedTypes"][0] in SPEAK_TYPES or slot["response"] == "SPEAK" or skill.key in exclude:
             continue
-        if not set(skill.exercise_types) & SPEAK_TYPES:
+        if slot.get("allowedTypes") == ["conversation"] or not set(skill.exercise_types) & targets:
             continue
         presentation = slot["presentation"]
-        slots[i] = slot_for(skill, rng, types=SPEAK_TYPES)
-        slots[i]["presentation"] = presentation
+        slots[i] = slot_for(skill, rng, allow_speaking=True, types=targets)
+        if slots[i]["allowedTypes"][0] in SPEAK_ONLY_TYPES or "READ" in skill.presentations:
+            slots[i]["presentation"] = presentation if presentation in skill.presentations else slots[i]["presentation"]
         speakable += 1
+
+
+def _add_speakable_skill(
+    slots: list[dict], chosen: list[Skill], skills: list[Skill], minimum: int, rng, *, exclude: set[str],
+    focus: list[dict],
+) -> None:
+    """T-207: si no alcanzan los ejercicios hablables, se reemplazan ejercicios del área más repetida
+    (nunca foco, conversación ni escucha) por skills que admitan un tipo hablable."""
+    def speakable() -> int:
+        return sum(1 for s in slots if s["response"] == "SPEAK" or s["allowedTypes"][0] in SPEAK_TYPES | SPEAK_ONLY_TYPES)
+
+    targets = (SPEAK_TYPES - {"conversation"}) | SPEAK_ONLY_TYPES
+    while speakable() < minimum:
+        taken = {s.key for s in chosen}
+        candidates = [s for s in skills if s.key not in taken and set(s.exercise_types) & targets]
+        counts: dict[str, int] = {}
+        for skill in chosen:
+            counts[skill.area_key] = counts.get(skill.area_key, 0) + 1
+        replaceable = [
+            i for i, (skill, slot) in enumerate(zip(chosen, slots))
+            if skill.key not in exclude and slot.get("allowedTypes") != ["conversation"]
+            and not _is_focus(slot, focus)
+            and slot["allowedTypes"][0] not in SPEAK_TYPES | SPEAK_ONLY_TYPES
+        ]
+        if not candidates or not replaceable:
+            return
+        # Primero los que no son escucha (la escucha mínima ya se garantizó antes).
+        index = max(replaceable, key=lambda i: (slots[i].get("presentation") != "LISTEN", counts[chosen[i].area_key], i))
+        presentation = slots[index].get("presentation")
+        skill = rng.choice(candidates)
+        chosen[index] = skill
+        slots[index] = slot_for(skill, rng, allow_speaking=True, types=targets)
+        if presentation in skill.presentations and slots[index]["allowedTypes"][0] not in READ_ONLY_TYPES:
+            slots[index]["presentation"] = presentation
 
 
 def _presentation_for(skill: Skill, rng) -> str:
