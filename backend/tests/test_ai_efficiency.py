@@ -46,8 +46,20 @@ def test_thinking_config_only_for_gemini_25_flash(efficiency_on):
     task = {"kind": "evaluate_answer", "exercise": {"type": "fill_blank"}}
     for model in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "Gemini-2.5-Flash-preview"):
         assert gemini_generation_config(model, task, {})["thinkingConfig"] == {"thinkingBudget": 0}
-    for model in ("gemini-2.5-pro", "gemini-3.5-flash-lite", None):
+    for model in ("gemini-2.5-pro", None):
         assert "thinkingConfig" not in gemini_generation_config(model, task, {})
+
+
+def test_gemini3_uses_thinking_level(efficiency_on):
+    """T-202: Gemini 3 baja el razonamiento con niveles; 3.8 Flash no acepta 'minimal'."""
+    closed = {"kind": "evaluate_answer", "exercise": {"type": "fill_blank"}}
+    open_ = {"kind": "evaluate_answer", "exercise": {"type": "short_writing"}}
+    gen = {"kind": "generate_class"}
+    level = lambda m, t: gemini_generation_config(m, t, {})["thinkingConfig"]["thinkingLevel"]  # noqa: E731
+    for model in ("gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3-flash-preview"):
+        assert level(model, closed) == "minimal" and level(model, gen) == "minimal"
+        assert level(model, open_) == "low"
+    assert level("gemini-3.8-flash", gen) == "low" and level("gemini-3.8-flash", open_) == "low"
 
 
 def test_gemini_ignores_thought_parts(monkeypatch, efficiency_on):
