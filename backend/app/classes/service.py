@@ -549,6 +549,7 @@ def practice_background(session_id: int, study: StudyContext) -> None:
         db.refresh(session)
         if practice_finished(session):
             return
+        _note_mistakes(db, session, current_batch(session) - 1)
         with _practice_lock(session_id):
             db.refresh(session)
             following = current_batch(session) + 1
@@ -557,3 +558,39 @@ def practice_background(session_id: int, study: StudyContext) -> None:
                     generation.add_practice_batch(db, study, session, following)
                 except generation.GenerationFailed:
                     pass  # al tocar "Continuar" se vuelve a intentar o se avisa
+
+
+REINFORCE_BELOW = 70  # puntaje bajo el cual un ejercicio vuelve como refuerzo dirigido (T-215)
+
+
+def _note_mistakes(db: Session, session: ClassSession, batch: int) -> None:
+    """T-215: qué salió mal en la tanda corregida (tema, tipo y errores concretos), para que la
+    próxima tanda que se prepare lo refuerce con ejercicios dirigidos."""
+    if batch < 1:
+        return
+    exercises = {e.id: e for e in exercises_of(db, session) if e.batch == batch}
+    targets: dict[str, dict] = {}
+    for attempt in attempts_of(db, session):
+        exercise = exercises.get(attempt.exercise_id)
+        if exercise is None or attempt.attempt_number != session.current_attempt:
+            continue
+        if attempt.score is None or attempt.score >= REINFORCE_BELOW or not exercise.skill_key:
+            continue
+        mistakes = []
+        for error in (attempt.evaluation_result or {}).get("errors") or []:
+            text = " → ".join(x for x in (error.get("fragment"), error.get("correction")) if x)
+            text = text or error.get("explanation") or ""
+            if text:
+                mistakes.append(text[:80])
+        if not mistakes:
+            mistakes.append(f'question "{(exercise.prompt or "")[:60]}" · answered "{(attempt.raw_answer or "")[:40]}"')
+        target = targets.setdefault(
+            exercise.skill_key, {"skillKey": exercise.skill_key, "type": exercise.exercise_type, "mistakes": []}
+        )
+        target["mistakes"] = (target["mistakes"] + mistakes)[:2]
+    if not targets:
+        return
+    practice = dict(session.generation_request.get("practice") or {})
+    practice["reinforce"] = list(targets.values())
+    session.generation_request = {**session.generation_request, "practice": practice}
+    db.commit()

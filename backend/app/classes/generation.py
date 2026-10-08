@@ -796,10 +796,41 @@ def add_practice_batch(db: Session, study: StudyContext, session: ClassSession, 
     El foco se recalcula con lo corregido hasta ahora: la práctica se ajusta sobre la marcha."""
     curriculum = get_level(session.target_level)
     practice = (session.generation_request or {}).get("practice") or {}
-    slots, _, _ = _plan(db, study, curriculum, int(practice.get("batchSize") or settings.practice_batch_size))
+    slots, focus, _ = _plan(db, study, curriculum, int(practice.get("batchSize") or settings.practice_batch_size))
+    _inject_reinforcement(slots, focus, curriculum, practice.get("reinforce") or [])
+    if practice.get("reinforce"):
+        practice = {**practice, "reinforce": [], "reinforced": practice.get("reinforce")}
+        session.generation_request = {**session.generation_request, "practice": practice}
     last = db.scalar(select(func.max(Exercise.position)).where(Exercise.class_session_id == session.id))
     _, created = _materialize(db, study, session, slots, batch=batch, start=(last or 0) + 1, first=False)
     return created
+
+
+MAX_REINFORCE_PER_BATCH = 2
+
+
+def _inject_reinforcement(slots: list[dict], focus: list[dict], curriculum, reinforce: list[dict]) -> None:
+    """T-215: los errores de la tanda corregida vuelven como ejercicios dirigidos (los arma la IA,
+    con un poco de razonamiento). Reemplazan pedidos que no son foco; si no hay, se suman."""
+    skills = {s.key: s for s in curriculum.skills}
+    rng = random.Random()
+    for target in reinforce[:MAX_REINFORCE_PER_BATCH]:
+        skill = skills.get(target.get("skillKey"))
+        if skill is None:
+            continue
+        kind = target.get("type")
+        slot = slot_for(skill, rng, types={kind} if kind in skill.exercise_types else None)
+        slot["reinforce"] = target.get("mistakes") or []
+        replace = next(
+            (i for i in range(len(slots) - 1, -1, -1)
+             if not slots[i].get("reinforce") and not slots[i].get("conversationGroup")
+             and slots[i].get("allowedTypes") != ["conversation"] and not _is_focus(slots[i], focus)),
+            None,
+        )
+        if replace is None:
+            slots.append(slot)
+        else:
+            slots[replace] = slot
 
 
 # ---------------------------------------------------------------- T-191 armar según el cupo
@@ -959,7 +990,15 @@ def _materialize(
     result: AIResult | None = None
     matched: list[tuple[dict, ExerciseOut]] = []
     if ai_slots:
-        public_slots = [_public_slot(s) for s in ai_slots]
+        public_slots = []
+        for s in ai_slots:
+            public = _public_slot(s)
+            if session.kind != SessionKind.EXAM:
+                avoid = bank.recent_prompts(db, session.study_profile_id, s["skillKey"],
+                                            days=settings.exercise_bank_repeat_days)
+                if avoid:
+                    public["avoid"] = avoid
+            public_slots.append(public)
         try:
             result = run_json_task(
                 db,
@@ -971,6 +1010,7 @@ def _materialize(
                     "level": level,
                     "slots": ai_slots,
                     "schema": GENERATION_SCHEMA,
+                    "reinforce": any(s.get("reinforce") for s in ai_slots),
                 },
                 usage_context=AIUsageContext(
                     organization_id=session.organization_id,

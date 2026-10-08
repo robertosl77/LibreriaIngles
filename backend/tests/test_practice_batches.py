@@ -85,3 +85,55 @@ def test_continue_without_ai_or_bank_says_to_finish(client, monkeypatch) -> None
     response = client.post(f"{API}/classes/{klass['id']}/continue", json={"answers": _answers(klass, 1)}, headers=headers)
     assert response.status_code == 409
     assert "Finalizar y comprobar" in response.json()["detail"]
+
+
+def test_mistakes_of_a_batch_come_back_as_targeted_exercises(client) -> None:
+    """T-215: lo que salió mal en la tanda 1 se refuerza en la tanda 3 (la 2 ya estaba preparada)."""
+    headers = _setup(client)
+    klass = client.post(f"{API}/classes/practice", headers=headers).json()
+    wrong = {str(e["id"]): "xx" for e in klass["exercises"]}
+    with SessionLocal() as db:
+        failed_skills = {e.skill_key for e in db.scalars(
+            select(Exercise).where(Exercise.class_session_id == klass["id"], Exercise.batch == 1))}
+    client.post(f"{API}/classes/{klass['id']}/continue", json={"answers": wrong}, headers=headers)
+    with SessionLocal() as db:
+        session = db.get(ClassSession, klass["id"])
+        reinforced = session.generation_request["practice"].get("reinforced") or []
+        assert reinforced and all(r["mistakes"] for r in reinforced)
+        assert {r["skillKey"] for r in reinforced} <= failed_skills
+        third = {e.skill_key for e in db.scalars(
+            select(Exercise).where(Exercise.class_session_id == klass["id"], Exercise.batch == 3))}
+        assert third & {r["skillKey"] for r in reinforced}
+
+
+def test_ai_is_told_not_to_repeat_what_the_student_saw(client, monkeypatch) -> None:
+    from app.classes import generation
+
+    import copy
+
+    headers = _setup(client)
+    first = client.post(f"{API}/classes", headers=headers).json()
+    with SessionLocal() as db:
+        slots = [{k: v for k, v in s.items() if k != "bankItemId"}
+                 for s in db.get(ClassSession, first["id"]).generation_request["slots"]]
+    monkeypatch.setattr(generation, "select_slots", lambda *a, **k: copy.deepcopy(slots))
+    seen = []
+    real = generation.run_json_task
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("user", ""))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(generation, "run_json_task", spy)
+    monkeypatch.setattr(generation.settings, "exercise_bank_enabled", False)
+    client.post(f"{API}/classes", headers=headers)
+    assert seen and any('"avoid"' in prompt and "Do NOT repeat" in prompt for prompt in seen)
+
+
+def test_targeted_generation_may_reason_a_little(monkeypatch) -> None:
+    from app.ai.providers import reasoning_budget
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ai_reasoning_control", True)
+    assert reasoning_budget({"kind": "generate_class"}) == 0
+    assert reasoning_budget({"kind": "generate_class", "reinforce": True}) == settings.ai_reasoning_budget_open

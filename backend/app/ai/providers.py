@@ -126,6 +126,8 @@ def reasoning_budget(task: dict | None) -> int | None:
     if not settings.ai_reasoning_control or not task:
         return None
     kind = task.get("kind")
+    if kind == "generate_class" and task.get("reinforce"):
+        return max(0, settings.ai_reasoning_budget_open)  # T-215: ejercicio dirigido a un error
     if kind in NO_REASONING_KINDS:
         return 0
     if kind == "evaluate_answer":

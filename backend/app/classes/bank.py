@@ -155,3 +155,22 @@ def exercise_from_item(item: ExerciseBankItem, **fields) -> Exercise:
         bank_item_id=item.id,
         **fields,
     )
+
+
+def recent_prompts(db: Session, study_profile_id: int, skill_key: str, *, days: int, limit: int = 3) -> list[str]:
+    """T-215: últimas consignas que el alumno vio de ese tema (para pedirle a la IA que no las repita)."""
+    from datetime import timedelta
+
+    from app.ai.models import utcnow
+
+    rows = db.scalars(
+        select(Exercise.prompt)
+        .where(
+            Exercise.study_profile_id == study_profile_id,
+            Exercise.skill_key == skill_key,
+            Exercise.created_at >= utcnow() - timedelta(days=days),
+        )
+        .order_by(Exercise.id.desc())
+        .limit(limit)
+    ).all()
+    return [p[:90] for p in rows if p]
