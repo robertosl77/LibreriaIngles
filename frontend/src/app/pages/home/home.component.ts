@@ -291,7 +291,7 @@ export class HomeComponent implements OnInit {
   async newClass(): Promise<void> {
     this.creating.set(true);
     try {
-      const created = await firstValueFrom(this.api.createClass());
+      const created = await firstValueFrom(this.api.createPractice());
       if (created.notice) {
         this.toast.show(created.notice);
       }

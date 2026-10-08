@@ -194,11 +194,21 @@ def submit(
     if session.status not in (ClassSessionStatus.READY, ClassSessionStatus.IN_PROGRESS):
         raise ClassStateError("La clase no está disponible para enviar.")
 
+    if is_practice(session):
+        # T-214: "Finalizar y comprobar". La tanda preparada que no se mostró se descarta
+        # (sus ítems siguen en el banco) y no cuenta como vista.
+        _drop_hidden_batches(db, session)
+        practice = dict(session.generation_request.get("practice") or {})
+        practice["finished"] = True
+        session.generation_request = {**session.generation_request, "practice": practice}
     exercises = exercises_of(db, session)
     drafts = drafts_of(db, session)
+    answered = _answered_ids(db, session)
 
     # 1) Persistir TODAS las respuestas antes de evaluar (documento funcional §2.4).
     for exercise in exercises:
+        if exercise.id in answered:  # tanda ya entregada con "Continuar"
+            continue
         # SPEAK se procesa al enviar la clase: la transcripción válida vive en
         # el borrador creado desde el audio confirmado, no en el payload textual.
         if exercise.response_mode == ResponseMode.SPEAK and exercise.id in drafts:
@@ -313,6 +323,8 @@ def evaluate_pending(db: Session, account: Account, session: ClassSession) -> bo
 
     current = [a for a in attempts_of(db, session) if a.attempt_number == session.current_attempt]
     complete = bool(current) and all(a.score is not None for a in current)
+    if is_practice(session) and not practice_finished(session):
+        complete = False  # T-214: la práctica termina recién con "Finalizar y comprobar"
     if complete:
         session.score = round(sum(a.score for a in current) / len(current), 1)
         session.status = ClassSessionStatus.COMPLETED
@@ -394,11 +406,20 @@ def appeal(db: Session, study: StudyContext, session: ClassSession, exercise_id:
             if attempt.raw_answer.strip() not in accepted:
                 accepted.append(attempt.raw_answer.strip())
             exercise.answer_key = {**exercise.answer_key, "acceptedAnswers": accepted}
+        # T-216: el banco aprende la variante aceptada y cuenta el reclamo.
+        from app.classes import bank
+
+        bank.record_appeal(db, exercise, accepted=True,
+                           variant=(attempt.raw_answer.strip()
+                                    if new_score >= 100 and exercise.evaluation_mode.value != "AI" else None))
     else:
         attempt.evaluation_result = {
             **previous,
             "appeal": {"accepted": False, "feedback": result.get("feedback")},
         }
+        from app.classes import bank
+
+        bank.record_appeal(db, exercise, accepted=False, variant=None)
     db.commit()
 
     current = [a for a in attempts_of(db, session) if a.attempt_number == session.current_attempt]
@@ -423,3 +444,162 @@ def appeal(db: Session, study: StudyContext, session: ClassSession, exercise_id:
 
         finalize_exam(db, session)
     return attempt
+
+
+# ---------------------------------------------------------------- T-214 · práctica continua por tandas
+
+import threading  # noqa: E402
+
+_PRACTICE_LOCKS: dict[int, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def _practice_lock(session_id: int) -> threading.Lock:
+    with _LOCKS_GUARD:
+        return _PRACTICE_LOCKS.setdefault(session_id, threading.Lock())
+
+
+def is_practice(session: ClassSession) -> bool:
+    return bool((session.generation_request or {}).get("practice"))
+
+
+def practice_finished(session: ClassSession) -> bool:
+    return bool(((session.generation_request or {}).get("practice") or {}).get("finished"))
+
+
+def current_batch(session: ClassSession) -> int:
+    return int(((session.generation_request or {}).get("practice") or {}).get("batch") or 1)
+
+
+def _answered_ids(db: Session, session: ClassSession) -> set[int]:
+    return {
+        a.exercise_id
+        for a in attempts_of(db, session)
+        if a.attempt_number == session.current_attempt
+    }
+
+
+def _drop_hidden_batches(db: Session, session: ClassSession) -> None:
+    for exercise in exercises_of(db, session):
+        if exercise.batch > current_batch(session):
+            db.delete(exercise)
+    db.flush()
+
+
+def _batch_exists(db: Session, session: ClassSession, batch: int) -> bool:
+    return any(e.batch == batch for e in exercises_of(db, session))
+
+
+def continue_practice(
+    db: Session, study: StudyContext, session: ClassSession, answers: dict[int, str]
+) -> None:
+    """"Continuar": guarda la tanda actual (se corrige en segundo plano) y muestra la siguiente.
+    La siguiente normalmente ya está preparada; si no, se arma ahora (banco primero)."""
+    from app.classes import generation
+
+    if not is_practice(session) or practice_finished(session):
+        raise ClassStateError("Esta clase no es una práctica en curso.")
+    if session.status not in (ClassSessionStatus.READY, ClassSessionStatus.IN_PROGRESS):
+        raise ClassStateError("La clase no está disponible.")
+    batch = current_batch(session)
+    drafts = drafts_of(db, session)
+    answered = _answered_ids(db, session)
+    for exercise in exercises_of(db, session):
+        if exercise.batch != batch or exercise.id in answered:
+            continue
+        if exercise.response_mode == ResponseMode.SPEAK and exercise.id in drafts:
+            text = drafts[exercise.id].answer_text
+        else:
+            text = answers.get(exercise.id) or (drafts[exercise.id].answer_text if exercise.id in drafts else "")
+        draft = drafts.get(exercise.id)
+        db.add(Attempt(
+            exercise_id=exercise.id,
+            study_profile_id=session.study_profile_id,
+            account_id=study.account.id,
+            organization_id=session.organization_id,
+            membership_id=session.membership_id,
+            attempt_number=session.current_attempt,
+            raw_answer=text,
+            normalized_answer=normalize_answer(text),
+            response_mode=exercise.response_mode,
+            audio_duration_ms=draft.audio_duration_ms if draft else None,
+            signals=draft.signals if draft else None,
+            pronunciation_result=draft.pronunciation_result if draft else None,
+            assistance=draft.assistance if draft else Assistance.NONE,
+        ))
+        if draft:
+            db.delete(draft)
+    db.commit()
+
+    with _practice_lock(session.id):
+        db.refresh(session)
+        if not _batch_exists(db, session, batch + 1):
+            try:
+                generation.add_practice_batch(db, study, session, batch + 1)
+            except generation.GenerationFailed as exc:
+                raise ClassStateError(f"{exc} Tocá «Finalizar y comprobar» para ver tu resultado.")
+        practice = dict(session.generation_request.get("practice") or {})
+        practice["batch"] = batch + 1
+        session.generation_request = {**session.generation_request, "practice": practice}
+        session.status = ClassSessionStatus.IN_PROGRESS
+        db.commit()
+
+
+def practice_background(session_id: int, study: StudyContext) -> None:
+    """Después de responder: corrige lo entregado y prepara la próxima tanda (sin que nadie espere)."""
+    from app.classes import generation
+    from app.db import SessionLocal
+
+    with SessionLocal() as db:
+        session = db.get(ClassSession, session_id)
+        if session is None or not is_practice(session):
+            return
+        evaluate_pending(db, study.account, session)
+        db.refresh(session)
+        if practice_finished(session):
+            return
+        _note_mistakes(db, session, current_batch(session) - 1)
+        with _practice_lock(session_id):
+            db.refresh(session)
+            following = current_batch(session) + 1
+            if not _batch_exists(db, session, following):
+                try:
+                    generation.add_practice_batch(db, study, session, following)
+                except generation.GenerationFailed:
+                    pass  # al tocar "Continuar" se vuelve a intentar o se avisa
+
+
+REINFORCE_BELOW = 70  # puntaje bajo el cual un ejercicio vuelve como refuerzo dirigido (T-215)
+
+
+def _note_mistakes(db: Session, session: ClassSession, batch: int) -> None:
+    """T-215: qué salió mal en la tanda corregida (tema, tipo y errores concretos), para que la
+    próxima tanda que se prepare lo refuerce con ejercicios dirigidos."""
+    if batch < 1:
+        return
+    exercises = {e.id: e for e in exercises_of(db, session) if e.batch == batch}
+    targets: dict[str, dict] = {}
+    for attempt in attempts_of(db, session):
+        exercise = exercises.get(attempt.exercise_id)
+        if exercise is None or attempt.attempt_number != session.current_attempt:
+            continue
+        if attempt.score is None or attempt.score >= REINFORCE_BELOW or not exercise.skill_key:
+            continue
+        mistakes = []
+        for error in (attempt.evaluation_result or {}).get("errors") or []:
+            text = " → ".join(x for x in (error.get("fragment"), error.get("correction")) if x)
+            text = text or error.get("explanation") or ""
+            if text:
+                mistakes.append(text[:80])
+        if not mistakes:
+            mistakes.append(f'question "{(exercise.prompt or "")[:60]}" · answered "{(attempt.raw_answer or "")[:40]}"')
+        target = targets.setdefault(
+            exercise.skill_key, {"skillKey": exercise.skill_key, "type": exercise.exercise_type, "mistakes": []}
+        )
+        target["mistakes"] = (target["mistakes"] + mistakes)[:2]
+    if not targets:
+        return
+    practice = dict(session.generation_request.get("practice") or {})
+    practice["reinforce"] = list(targets.values())
+    session.generation_request = {**session.generation_request, "practice": practice}
+    db.commit()

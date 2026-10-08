@@ -276,3 +276,14 @@ class AIQuotaLimit(Base):
     source: Mapped[str] = mapped_column(String(20))
     tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AIPlatformLimit(Base):
+    """T-217: límites de uso de la IA de plataforma que aplican a la PERSONA (todas las conexiones
+    de plataforma sumadas), no a una conexión. Una fila por clave; la configura SrMacros."""
+
+    __tablename__ = "ai_platform_limits"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

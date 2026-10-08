@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.concurrency import run_in_threadpool
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -116,14 +117,31 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
         if attempt.score is not None:
             rounds.setdefault(attempt.attempt_number, []).append(attempt.score)
 
+    from app.learning.models import ExerciseReport
+
+    reported: dict[int, list[str]] = {}
+    if exercises:
+        for row in db.scalars(select(ExerciseReport).where(
+            ExerciseReport.exercise_id.in_([e.id for e in exercises])
+        )):
+            reported.setdefault(row.exercise_id, []).append(row.reason.value)
+    practice = (session.generation_request or {}).get("practice") or None
+    practice_view = bool(practice) and not practice.get("finished")
+    batch_now = int((practice or {}).get("batch") or 1)
+
     items = []
     for exercise in exercises:
+        # T-214: la tanda ya preparada no se muestra hasta "Continuar".
+        if practice and exercise.batch > batch_now:
+            continue
         attempt = current.get(exercise.id)
         draft = drafts.get(exercise.id)
         items.append(
             {
                 "id": exercise.id,
                 "position": exercise.position,
+                "batch": exercise.batch,
+                "reported": reported.get(exercise.id, []),
                 "type": exercise.exercise_type,
                 "area": exercise.area,
                 "skillKey": exercise.skill_key,
@@ -161,7 +179,10 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
                 ),
                 "hasLesson": session.kind == SessionKind.CLASS
                 and get_lesson(exercise.skill_key) is not None,
-                "result": _result_payload(db, attempt, exercise, viewer) if attempt else None,
+                # T-214: en la práctica, las correcciones se ven todas juntas al finalizar.
+                "result": (
+                    _result_payload(db, attempt, exercise, viewer) if attempt and not practice_view else None
+                ),
             }
         )
 
@@ -195,6 +216,15 @@ def _detail(db, session: ClassSession, notice: str | None = None) -> dict:
             else (connection.name if connection else None)
         ),
         "generationAi": generation_ai,
+        "practice": (
+            {
+                "batch": batch_now,
+                "batchSize": practice.get("batchSize"),
+                "finished": bool(practice.get("finished")),
+            }
+            if practice
+            else None
+        ),
         "exercises": items,
         "answered": sum(1 for i in items if (i["answer"] or "").strip()),
         "history": [
@@ -259,6 +289,50 @@ def list_classes(study: CurrentStudy, db: DbSession, limit: int = 50) -> list[di
         }
         for s in sessions
     ]
+
+
+class ReportRequest(BaseModel):
+    reason: str = Field(pattern="^(REPEATED|WRONG)$")
+
+
+@router.post("/{class_id}/exercises/{exercise_id}/report")
+def report_exercise(class_id: int, exercise_id: int, payload: ReportRequest, study: CurrentStudy, db: DbSession) -> dict:
+    """T-216: "Este ejercicio se repite" / "Este ejercicio está mal". Alimenta la calidad del banco."""
+    from app.classes import bank
+
+    session = _get_class(db, study, class_id)
+    exercise = db.get(Exercise, exercise_id)
+    if exercise is None or exercise.class_session_id != session.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ejercicio inexistente.")
+    bank.report(db, exercise, session.study_profile_id, payload.reason)
+    db.commit()
+    return _detail(db, session)
+
+
+@router.post("/practice", status_code=status.HTTP_201_CREATED)
+def create_practice(study: CurrentStudy, db: DbSession, background: BackgroundTasks) -> dict:
+    """T-214: "Nueva clase" = práctica continua. Sale la tanda 1; la 2 se prepara en segundo plano."""
+    try:
+        session, result = generation.create_class(db, study, practice=True)
+    except generation.GenerationFailed as exc:
+        raise HTTPException(422, f"No se pudo generar la clase. {exc}")
+    background.add_task(service.practice_background, session.id, study)
+    notice = SWITCH_NOTICE if result and result.switched else None
+    return _detail(db, session, notice)
+
+
+@router.post("/{class_id}/continue")
+def continue_practice(
+    class_id: int, payload: SubmitRequest, study: CurrentStudy, db: DbSession, background: BackgroundTasks
+) -> dict:
+    """T-214: "Continuar": guarda la tanda, la corrige en segundo plano y muestra la siguiente."""
+    session = _get_class(db, study, class_id)
+    try:
+        service.continue_practice(db, study, session, payload.answers)
+    except service.ClassStateError as exc:
+        raise _conflict(exc)
+    background.add_task(service.practice_background, session.id, study)
+    return _detail(db, session)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -346,7 +420,10 @@ async def transcribe_answer_audio(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "La grabación supera 60 segundos.")
 
     try:
-        result = transcribe_audio(
+        # T-211: la IA tarda segundos y su cliente es sincrónico; en el event loop congelaría todo el
+        # backend (cualquier pestaña). Se ejecuta en el pool de hilos.
+        result = await run_in_threadpool(
+            transcribe_audio,
             db,
             study.account,
             audio=audio,

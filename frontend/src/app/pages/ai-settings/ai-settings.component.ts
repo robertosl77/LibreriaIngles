@@ -75,6 +75,21 @@ import { MyServiceComponent } from '../../shared/my-service.component';
         }
 
         @if (isOwner()) {
+          <!-- T-217: tope por persona sumando todas las conexiones (cambiar de conexión no lo reinicia). -->
+          <section class="card stack">
+            <h2>Límite diario por persona</h2>
+            <p class="muted small">
+              Pedidos a la IA por persona en 24 h, sumando todas las conexiones de la plataforma. Vos no
+              tenés tope. Vacío = sin tope.
+            </p>
+            <div class="row">
+              <input type="number" min="1" placeholder="Sin tope" [value]="personCap() ?? ''"
+                     (input)="capDraft = $any($event.target).value" aria-label="Pedidos por persona por día" />
+              <button type="button" class="button" [disabled]="savingCap()" (click)="saveCap()">Guardar</button>
+              @if (capMessage()) { <span class="small muted">{{ capMessage() }}</span> }
+            </div>
+          </section>
+
           <!-- T-200: una sola lista para sr.macros, la de la plataforma (la usa él y la heredan todos). -->
           <app-connections-manager
             scope="platform"
@@ -126,6 +141,30 @@ export class AiSettingsComponent implements OnInit {
   });
   readonly active = signal<ActiveAiConnections>({ default: null, audio: null });
 
+  readonly personCap = signal<number | null>(null);
+  readonly savingCap = signal(false);
+  readonly capMessage = signal('');
+  capDraft = '';
+
+  async saveCap(): Promise<void> {
+    const raw = this.capDraft.trim();
+    const value = raw === '' ? null : Number(raw);
+    if (value !== null && (!Number.isInteger(value) || value < 1)) {
+      this.capMessage.set('Tiene que ser un número entero, 1 o más.');
+      return;
+    }
+    this.savingCap.set(true);
+    try {
+      const saved = await firstValueFrom(this.api.setAiLimits(value));
+      this.personCap.set(saved.personDailyRequests);
+      this.capMessage.set('Guardado.');
+    } catch {
+      this.capMessage.set('No se pudo guardar.');
+    } finally {
+      this.savingCap.set(false);
+    }
+  }
+
   private connectionIdFromQuery(): number | null {
     const value = Number(this.route.snapshot.queryParamMap.get('connectionId'));
     return Number.isInteger(value) && value > 0 ? value : null;
@@ -133,6 +172,13 @@ export class AiSettingsComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.refreshActive();
+    if (this.isOwner()) {
+      try {
+        const limits = await firstValueFrom(this.api.aiLimits());
+        this.personCap.set(limits.personDailyRequests);
+        this.capDraft = limits.personDailyRequests?.toString() ?? '';
+      } catch { /* sin datos: queda vacío */ }
+    }
   }
 
   async refreshActive(): Promise<void> {

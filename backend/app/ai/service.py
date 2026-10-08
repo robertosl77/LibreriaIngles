@@ -55,7 +55,8 @@ BACKOFF = {
 class NoAIAvailable(Exception):
     def __init__(self, errors: list[str], retry_at=None):
         super().__init__("No hay conexiones de IA disponibles.")
-        self.errors = errors
+        # T-217: el tope por persona se repite en cada conexión de plataforma; se muestra una vez.
+        self.errors = list(dict.fromkeys(errors))
         # T-191: si todas estaban sin cupo, cuándo vuelve a haber (la más próxima).
         self.retry_at = retry_at
 
@@ -402,8 +403,28 @@ def platform_requests(db: Session, account_id: int, *, since) -> int:
     )
 
 
+PERSON_DAILY_REQUESTS = "person_daily_requests"
+
+
+def person_daily_limit(db: Session) -> int | None:
+    from app.ai.models import AIPlatformLimit
+
+    row = db.get(AIPlatformLimit, PERSON_DAILY_REQUESTS)
+    return row.value if row is not None and row.value else None
+
+
 def limit_reason(db: Session, connection: AIConnection, account: Account) -> str | None:
     """Motivo por el que la conexión no puede usarse ahora por límites, o None."""
+    # T-217: tope diario de la PERSONA sumando todas las conexiones de plataforma (cambiar de
+    # conexión no reinicia la cuenta). El dueño no tiene tope.
+    if (
+        connection.owner_type == AIConnectionOwnerType.PLATFORM
+        and account is not None
+        and account.platform_role != PlatformRole.PLATFORM_OWNER
+    ):
+        cap = person_daily_limit(db)
+        if cap is not None and platform_requests(db, account.id, since=utcnow() - LIMIT_WINDOW) >= cap:
+            return "alcanzaste tu límite diario de uso de la IA"
     if connection.daily_request_limit is None and connection.per_account_daily_limit is None:
         return None
     since = utcnow() - LIMIT_WINDOW
@@ -455,6 +476,9 @@ def _run_json_task_with_connections(
             continue
         attempt_index += 1
         provider = None
+        # T-211: la llamada a la IA tarda segundos; no se retiene el lock de escritura de la base
+        # mientras tanto (SQLite admite un solo escritor: trabaría otras pestañas).
+        db.commit()
         try:
             provider = provider_for(connection)
             data = provider.complete_json(system, user, task)
@@ -588,6 +612,9 @@ def transcribe_audio(
             continue
         attempt_index += 1
         provider = None
+        # T-211: la llamada a la IA tarda segundos; no se retiene el lock de escritura de la base
+        # mientras tanto (SQLite admite un solo escritor: trabaría otras pestañas).
+        db.commit()
         try:
             provider = provider_for(connection)
             analysis = provider.analyze_speech(audio, mime_type)

@@ -17,6 +17,7 @@ import { OrganizationOnboardingComponent } from './pages/organization-onboarding
 import { CampaignsAdminComponent } from './pages/platform/campaigns-admin.component';
 import { PlatformConfigComponent } from './pages/platform/platform-config.component';
 import { PlatformOverviewComponent } from './pages/platform/platform-overview.component';
+import { BankReviewComponent } from './pages/platform/bank-review.component';
 import { PlatformComponent } from './pages/platform/platform.component';
 
 export const routes: Routes = [
@@ -59,6 +60,11 @@ export const routes: Routes = [
             path: 'campanas',
             component: CampaignsAdminComponent,
             title: 'Campañas · Librería Inglés'
+          },
+          {
+            path: 'ejercicios',
+            component: BankReviewComponent,
+            title: 'Ejercicios en revisión · Librería Inglés'
           }
         ]
       }

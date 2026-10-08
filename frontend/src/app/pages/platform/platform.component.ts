@@ -7,7 +7,8 @@ import { TabNavComponent, TabNavItem } from '../../shared/ui/tab-nav.component';
 const PLATFORM_TABS: TabNavItem[] = [
   { label: 'Resumen', route: 'resumen' },
   { label: 'Configuración', route: 'configuracion' },
-  { label: 'Campañas', route: 'campanas' }
+  { label: 'Campañas', route: 'campanas' },
+  { label: 'Ejercicios', route: 'ejercicios' }
 ];
 
 @Component({
@@ -67,6 +68,9 @@ export class PlatformComponent implements OnDestroy {
   private descriptionFor(url: string): string {
     if (url.includes('/campanas')) {
       return 'Creación, segmentación, prioridad, convivencia, vigencia y seguimiento de campañas.';
+    }
+    if (url.includes('/ejercicios')) {
+      return 'Mantenimiento del banco de ejercicios: lo que reportaron los alumnos, para reactivar, corregir o retirar.';
     }
     if (url.includes('/configuracion')) {
       return 'Configuración de fuentes, servicios, membresías, cuentas, beneficios, invitaciones y conexiones.';

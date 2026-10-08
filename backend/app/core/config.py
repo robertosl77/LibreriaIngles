@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     ai_quota_max_wait_seconds: float = 10.0  # si el cupo vuelve en menos, se espera en vez de fallar
     ai_class_min_exercises: int = 3  # con poco cupo, la clase se reduce hasta este mínimo
     display_timezone: str = "America/Argentina/Buenos_Aires"  # horas mostradas en avisos de cupo
+    # T-212/T-213: banco de ejercicios. La clase toma primero del banco; a la IA solo va lo que falta.
+    exercise_bank_enabled: bool = True
+    exercise_bank_repeat_days: int = 30  # el alumno no vuelve a ver un ítem del banco dentro de esta ventana
+    # T-214: práctica continua por tandas ("Nueva clase"). La clase clásica queda para el examen.
+    practice_batch_size: int = 5
+    # T-216: con este número de alumnos DISTINTOS reportando un ítem, pasa a revisión (deja de
+    # servirse) hasta que SrMacros decida. Antes de eso sigue normal: un alumno solo no lo frena.
+    bank_review_after_reports: int = 3
 
     # P01 B2B: padrón oficial RNS sincronizado localmente + fallback DEV.
     organization_registry_path: str = "data/rns_registry.db"

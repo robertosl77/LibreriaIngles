@@ -8,7 +8,7 @@
 import random
 
 from pydantic import BaseModel, ValidationError, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai.models import utcnow
@@ -21,6 +21,7 @@ from app.ai.service import (
 )
 from app.ai.usage import AIUsageContext
 from app.core.config import settings
+from app.classes import bank
 from app.classes.normalize import BLANK, normalize_answer, normalize_blank
 from app.classes.types import (
     CASE_SENSITIVE_TYPES,
@@ -734,14 +735,8 @@ def _enough(session: ClassSession, slots: list[dict], matched: list) -> bool:
     return len(matched) * 4 >= len(slots) * 3 and areas_requested <= areas_matched
 
 
-def create_class(
-    db: Session, study: StudyContext
-) -> tuple[ClassSession, AIResult | None]:
-    level = study.profile.operational_level or study.profile.selected_level
-    curriculum = get_level(level) if level else None
-    if curriculum is None:
-        raise GenerationFailed("Elegí un nivel disponible antes de pedir una clase.")
-
+def _plan(db: Session, study: StudyContext, curriculum, count: int) -> tuple[list[dict], list[dict], int]:
+    """Pedidos de ejercicios según el dashboard: foco, banco (T-213) y cupo (T-191)."""
     allow_speaking = has_audio_connection(db, study.account)
     focus = weak_abilities(
         ability_progress(db, study.profile.id, curriculum.level), allow_speaking=allow_speaking
@@ -750,17 +745,37 @@ def create_class(
     slots = select_slots(
         list(curriculum.skills),
         progress,
+        count,
         allow_speaking=allow_speaking,
         focus=focus,
     )
     focus = focus + weak_topics_in(slots, progress)
+    # T-213: lo que el banco tiene sin repetir sale de ahí (0 tokens); a la IA va solo lo que falta.
+    if settings.exercise_bank_enabled:
+        bank.assign(db, slots, curriculum.level, study.profile.id, days=settings.exercise_bank_repeat_days)
     # T-191: si el cupo aprendido de la IA no alcanza, la clase sale con menos ejercicios,
     # conservando los que refuerzan lo que más le cuesta al alumno.
     requested = len(slots)
     slots = fit_slots_to_quota(db, study.account, curriculum.level, slots, focus)
+    return slots, focus, requested
+
+
+def create_class(
+    db: Session, study: StudyContext, *, practice: bool = False
+) -> tuple[ClassSession, AIResult | None]:
+    level = study.profile.operational_level or study.profile.selected_level
+    curriculum = get_level(level) if level else None
+    if curriculum is None:
+        raise GenerationFailed("Elegí un nivel disponible antes de pedir una clase.")
+
+    count = settings.practice_batch_size if practice else EXERCISES_PER_CLASS
+    slots, focus, requested = _plan(db, study, curriculum, count)
     generation_request = {"level": curriculum.level, "slots": slots, "focus": focus}
     if len(slots) < requested:
         generation_request["reducedFrom"] = requested
+    if practice:
+        # T-214: práctica continua. La tanda 1 sale ya; las siguientes se piden con "Continuar".
+        generation_request["practice"] = {"batch": 1, "batchSize": count, "finished": False}
     session = ClassSession(
         study_profile_id=study.profile.id,
         account_id=study.account.id,
@@ -774,6 +789,48 @@ def create_class(
     db.commit()  # persistir la solicitud antes de llamar a la IA
     result = generate_content(db, study, session)
     return session, result
+
+
+def add_practice_batch(db: Session, study: StudyContext, session: ClassSession, batch: int) -> int:
+    """T-214: prepara la tanda `batch` (banco primero; la IA solo para huecos). Devuelve cuántos creó.
+    El foco se recalcula con lo corregido hasta ahora: la práctica se ajusta sobre la marcha."""
+    curriculum = get_level(session.target_level)
+    practice = (session.generation_request or {}).get("practice") or {}
+    slots, focus, _ = _plan(db, study, curriculum, int(practice.get("batchSize") or settings.practice_batch_size))
+    _inject_reinforcement(slots, focus, curriculum, practice.get("reinforce") or [])
+    if practice.get("reinforce"):
+        practice = {**practice, "reinforce": [], "reinforced": practice.get("reinforce")}
+        session.generation_request = {**session.generation_request, "practice": practice}
+    last = db.scalar(select(func.max(Exercise.position)).where(Exercise.class_session_id == session.id))
+    _, created = _materialize(db, study, session, slots, batch=batch, start=(last or 0) + 1, first=False)
+    return created
+
+
+MAX_REINFORCE_PER_BATCH = 2
+
+
+def _inject_reinforcement(slots: list[dict], focus: list[dict], curriculum, reinforce: list[dict]) -> None:
+    """T-215: los errores de la tanda corregida vuelven como ejercicios dirigidos (los arma la IA,
+    con un poco de razonamiento). Reemplazan pedidos que no son foco; si no hay, se suman."""
+    skills = {s.key: s for s in curriculum.skills}
+    rng = random.Random()
+    for target in reinforce[:MAX_REINFORCE_PER_BATCH]:
+        skill = skills.get(target.get("skillKey"))
+        if skill is None:
+            continue
+        kind = target.get("type")
+        slot = slot_for(skill, rng, types={kind} if kind in skill.exercise_types else None)
+        slot["reinforce"] = target.get("mistakes") or []
+        replace = next(
+            (i for i in range(len(slots) - 1, -1, -1)
+             if not slots[i].get("reinforce") and not slots[i].get("conversationGroup")
+             and slots[i].get("allowedTypes") != ["conversation"] and not _is_focus(slots[i], focus)),
+            None,
+        )
+        if replace is None:
+            slots.append(slot)
+        else:
+            slots[replace] = slot
 
 
 # ---------------------------------------------------------------- T-191 armar según el cupo
@@ -798,7 +855,8 @@ def _drop_one(slots: list[dict], focus: list[dict], minimum: int) -> list[dict] 
     """Saca el último ejercicio que no es foco (una conversación sale con sus dos turnos)."""
     for index in range(len(slots) - 1, -1, -1):
         slot = slots[index]
-        if _is_focus(slot, focus):
+        # Los que salen del banco no gastan tokens: sacarlos no ayuda al cupo (T-213).
+        if _is_focus(slot, focus) or slot.get("bankItemId"):
             continue
         group = slot.get("conversationGroup")
         drop = {i for i, s in enumerate(slots) if group and s.get("conversationGroup") == group} or {index}
@@ -814,10 +872,13 @@ def fit_slots_to_quota(db: Session, account, level: str, slots: list[dict], focu
     router informa hasta cuándo no hay cupo."""
     if not settings.ai_quota_control:
         return slots
-    from app.ai.limits import can_run
+    from app.ai.limits import QuotaDecision, can_run
 
     def decide(current):
-        return can_run(db, account, "generate_class", chars=generation_chars(level, current), items=len(current))
+        ai = [s for s in current if not s.get("bankItemId")]
+        if not ai:  # todo sale del banco: no hay llamada a la IA
+            return QuotaDecision()
+        return can_run(db, account, "generate_class", chars=generation_chars(level, ai), items=len(ai))
 
     current = list(slots)
     decision = decide(current)
@@ -883,7 +944,7 @@ def _prompt_example(example: dict | None) -> dict | None:
 
 def _public_slot(slot: dict) -> dict:
     """Lo que viaja a la IA: sin `examples` (solo para el simulado) y con el ejemplo compacto."""
-    public = {k: v for k, v in slot.items() if k != "examples"}
+    public = {k: v for k, v in slot.items() if k not in ("examples", "bankItemId")}
     if "example" in public:
         public["example"] = _prompt_example(public["example"])
     return public
@@ -893,83 +954,164 @@ def generate_content(
     db: Session, study: StudyContext, session: ClassSession
 ) -> AIResult | None:
     request = session.generation_request or {}
-    slots = request.get("slots") or []
-    public_slots = [_public_slot(s) for s in slots]
-    try:
-        result = run_json_task(
-            db,
-            study.account,
-            system=GENERATION_SYSTEM,
-            user=generation_user_prompt(
-                request.get("level", ""), public_slots, purpose=request.get("purpose", "class")
-            ),
-            task={
-                "kind": "generate_class",
-                "level": request.get("level"),
-                "slots": slots,
-                "schema": GENERATION_SCHEMA,
-            },
-            usage_context=AIUsageContext(
-                organization_id=session.organization_id,
-                membership_id=session.membership_id,
-                subject_type=session.kind.value,
-                subject_id=session.id,
-                subject_label=(
-                    f"Examen #{session.id}"
-                    if session.kind == SessionKind.EXAM
-                    else f"Clase #{session.id}"
+    result, _ = _materialize(db, study, session, request.get("slots") or [], batch=1, start=0, first=True)
+    return result
+
+
+def _materialize(
+    db: Session, study: StudyContext, session: ClassSession, slots: list[dict], *,
+    batch: int, start: int, first: bool,
+) -> tuple[AIResult | None, int]:
+    """Crea los ejercicios de `slots` (banco primero, IA para el resto).
+
+    first=True: es la clase entera (o la tanda 1): si falla, la clase no se guarda (T-203) y al
+    terminar queda lista con título. first=False: tanda siguiente de la práctica (T-214): si no
+    sale nada, se informa y la clase sigue como estaba.
+    """
+    from app.learning.models import BankItemStatus, ExerciseBankItem
+
+    request = session.generation_request or {}
+    level = request.get("level")
+    common = dict(
+        class_session_id=session.id,
+        study_profile_id=session.study_profile_id,
+        organization_id=session.organization_id,
+        membership_id=session.membership_id,
+    )
+
+    # T-213: los pedidos cubiertos por el banco no van a la IA (si el ítem sigue activo).
+    from_bank: dict[int, ExerciseBankItem] = {}
+    for index, slot in enumerate(slots):
+        item = db.get(ExerciseBankItem, slot["bankItemId"]) if slot.get("bankItemId") else None
+        if item is not None and item.status == BankItemStatus.ACTIVE:
+            from_bank[index] = item
+    ai_slots = [s for i, s in enumerate(slots) if i not in from_bank]
+
+    result: AIResult | None = None
+    matched: list[tuple[dict, ExerciseOut]] = []
+    if ai_slots:
+        public_slots = []
+        for s in ai_slots:
+            public = _public_slot(s)
+            if session.kind != SessionKind.EXAM:
+                avoid = bank.recent_prompts(db, session.study_profile_id, s["skillKey"],
+                                            days=settings.exercise_bank_repeat_days)
+                if avoid:
+                    public["avoid"] = avoid
+            public_slots.append(public)
+        try:
+            result = run_json_task(
+                db,
+                study.account,
+                system=GENERATION_SYSTEM,
+                user=generation_user_prompt(level or "", public_slots, purpose=request.get("purpose", "class")),
+                task={
+                    "kind": "generate_class",
+                    "level": level,
+                    "slots": ai_slots,
+                    "schema": GENERATION_SCHEMA,
+                    "reinforce": any(s.get("reinforce") for s in ai_slots),
+                },
+                usage_context=AIUsageContext(
+                    organization_id=session.organization_id,
+                    membership_id=session.membership_id,
+                    subject_type=session.kind.value,
+                    subject_id=session.id,
+                    subject_label=(
+                        f"Examen #{session.id}" if session.kind == SessionKind.EXAM else f"Clase #{session.id}"
+                    ),
+                    subject_route=f"/app/clase/{session.id}",
+                    diagnostic=_generation_diagnostic(public_slots),
                 ),
-                subject_route=f"/app/clase/{session.id}",
-                diagnostic=_generation_diagnostic(public_slots),
-            ),
-        )
-    except NoAIAvailable as exc:
-        discard_failed_session(db, session, "No hay conexiones de IA disponibles. " + "; ".join(exc.errors))
+            )
+        except NoAIAvailable as exc:
+            if not from_bank:
+                if not first:
+                    raise GenerationFailed("No hay más ejercicios disponibles por ahora. " + "; ".join(exc.errors))
+                discard_failed_session(db, session, "No hay conexiones de IA disponibles. " + "; ".join(exc.errors))
+            result = None  # sin IA, la clase sale con lo que había en el banco
+        if result is not None:
+            # Snapshot histórico del motor que realmente respondió (T-041).
+            request = {**request, "ai": connection_snapshot(result.connection)}
+            matched = _match_slots(result.data.get("exercises") or [], ai_slots)
 
-    # Snapshot histórico del motor que realmente respondió (T-041).
-    request = {**request, "ai": connection_snapshot(result.connection)}
-    session.generation_request = request
-
-    matched = _match_slots(result.data.get("exercises") or [], slots)
-    if not _enough(session, slots, matched):
-        message = f"La IA devolvió {len(matched)} ejercicios válidos de {len(slots)} pedidos."
+    total = len(from_bank) + len(matched)
+    enough = (
+        _enough(session, slots, matched)  # el examen no usa el banco
+        if session.kind == SessionKind.EXAM
+        else total >= max(1, len(slots) // 2)
+    )
+    if not first and total == 0:
+        raise GenerationFailed("No se pudieron preparar más ejercicios por ahora.")
+    if first and not enough:
+        message = f"La IA devolvió {len(matched)} ejercicios válidos de {len(ai_slots)} pedidos."
         if session.kind == SessionKind.EXAM:
             message += " El examen necesita ejercicios de todas las áreas."
         discard_failed_session(db, session, message)
 
-    for position, (slot, item) in enumerate(matched):
+    by_slot = {id(slot): item for slot, item in matched}
+    new_exercises: list[Exercise] = []
+    position = start
+    common = {**common, "batch": batch}
+    for index, slot in enumerate(slots):
+        if index in from_bank:
+            db.add(bank.exercise_from_item(from_bank[index], position=position, **common))
+            position += 1
+            continue
+        item = by_slot.get(id(slot))
+        if item is None:
+            continue
         skill_key = slot["skillKey"]
-        db.add(
-            Exercise(
-                class_session_id=session.id,
-                study_profile_id=session.study_profile_id,
-                organization_id=session.organization_id,
-                membership_id=session.membership_id,
-                position=position,
-                level=request.get("level"),
-                area=skill_key.split(".")[1],
-                skill_key=skill_key,
-                exercise_type=item.type,
-                instruction=item.instruction,
-                prompt=item.question,
-                content=_content(item, request.get("level"), slot),
-                presentation_mode=PresentationMode(slot.get("presentation", "READ")),
-                response_mode=ResponseMode(
-                    slot.get("response", default_response_mode(item.type).value)
-                ),
-                expected_concepts=item.expectedConcepts,
-                answer_key=_answer_key(item),
-                evaluation_mode=EVALUATION_MODE_BY_TYPE[item.type],
-            )
+        exercise = Exercise(
+            **common,
+            position=position,
+            level=level,
+            area=skill_key.split(".")[1],
+            skill_key=skill_key,
+            exercise_type=item.type,
+            instruction=item.instruction,
+            prompt=item.question,
+            content=_content(item, level, slot),
+            presentation_mode=PresentationMode(slot.get("presentation", "READ")),
+            response_mode=ResponseMode(slot.get("response", default_response_mode(item.type).value)),
+            expected_concepts=item.expectedConcepts,
+            answer_key=_answer_key(item),
+            evaluation_mode=EVALUATION_MODE_BY_TYPE[item.type],
         )
-    title = str(result.data.get("title") or "").strip()[:200]
+        db.add(exercise)
+        new_exercises.append(exercise)
+        position += 1
+    # T-212: los ejercicios de práctica nuevos y validados quedan en el banco compartido.
+    if session.kind != SessionKind.EXAM and result is not None:
+        for exercise in new_exercises:
+            bank.store(db, exercise, provider=result.connection.provider,
+                       model=result.connection.model, session_id=session.id)
+
+    if not first:
+        practice = dict(request.get("practice") or {})
+        practice.setdefault("fromBank", {})[str(batch)] = len(from_bank)
+        session.generation_request = {**request, "practice": practice}
+        db.commit()
+        return result, total
+
+    request = {**request, "fromBank": len(from_bank)}
+    session.generation_request = request
+    title = str((result.data if result else {}).get("title") or "").strip()[:200]
     if session.kind == SessionKind.EXAM:
-        session.title = f"Examen de nivel {request.get('level')}"
+        session.title = f"Examen de nivel {level}"
     else:
-        session.title = title or f"Clase {request.get('level')}"
+        session.title = title or _bank_title(slots, level)
     session.status = ClassSessionStatus.READY
     session.generation_error = None
     session.generated_at = utcnow()
-    session.generated_by_connection_id = result.connection.id
+    session.generated_by_connection_id = result.connection.id if result else None
     db.commit()
-    return result
+    return result, total
+
+
+def _bank_title(slots: list[dict], level: str | None) -> str:
+    """Título cuando la clase salió entera del banco (sin la IA que lo inventa)."""
+    topics = [s.get("topic") for s in slots if s.get("topic")]
+    if topics:
+        return f"Práctica: {max(set(topics), key=topics.count)}"
+    return f"Clase {level}"
