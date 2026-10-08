@@ -87,7 +87,9 @@ class AudioTranscriptionResult:
 def ai_sources(db: Session, account: Account) -> tuple[bool, bool]:
     """(usa propias, usa plataforma) según el servicio vigente de la cuenta (T-004)."""
     if account.platform_role == PlatformRole.PLATFORM_OWNER:
-        return True, True
+        # T-200: las conexiones de sr.macros SON las de la plataforma; usa las mismas que hereda todo
+        # el que tiene servicio Plataforma (no tiene una lista "personal" aparte).
+        return False, True
     source = effective_service(db, account).source
     if source == AISource.PLATFORM:
         return False, True

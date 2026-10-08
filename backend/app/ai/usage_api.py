@@ -610,7 +610,7 @@ def _connection_config_route(
     if connection.owner_type == AIConnectionOwnerType.PLATFORM:
         if not _is_owner(viewer):
             return None
-        return "/app/plataforma/configuracion"
+        return "/app/ia"  # T-200: las conexiones de plataforma se administran en el menú IA
     return None
 
 

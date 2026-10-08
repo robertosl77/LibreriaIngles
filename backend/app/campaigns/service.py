@@ -480,15 +480,17 @@ def _class_lifecycle_metric(
         )
 
     if field == "CLASSES_GENERATION_FAILED":
-        # Hoy ClassSession no conserva failed_at; el fallo ocurre en el mismo flujo
-        # inmediato de generación, por lo que created_at es la marca persistente disponible.
+        # T-203: una clase que no se pudo generar no se guarda; sus intentos quedan en Consumo
+        # como CLASS_NOT_GENERATED. Cada pedido fallido = una ejecución (failover incluido).
+        from app.ai.models import AIUsageEvent
+        from app.classes.generation import NOT_GENERATED
+
         return int(
             db.scalar(
-                select(func.count(ClassSession.id)).where(
-                    ClassSession.account_id == account.id,
-                    ClassSession.kind == SessionKind.CLASS,
-                    ClassSession.status == ClassSessionStatus.GENERATION_FAILED,
-                    ClassSession.created_at >= since,
+                select(func.count(func.distinct(AIUsageEvent.execution_id))).where(
+                    AIUsageEvent.account_id == account.id,
+                    AIUsageEvent.subject_type == NOT_GENERATED["CLASS"],
+                    AIUsageEvent.created_at >= since,
                 )
             )
             or 0

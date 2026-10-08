@@ -49,11 +49,18 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
       } @else {
         <ul class="list">
           @for (c of connections(); track c.id) {
-            <li class="list-item conn" [class.focused]="focusConnectionId() === c.id" [attr.id]="'ai-connection-' + c.id">
+            <li class="list-item conn" [class.focused]="focusConnectionId() === c.id" [class.in-use]="activeId() === c.id"
+              [attr.id]="'ai-connection-' + c.id">
               <div class="conn-main">
                 <div class="row">
                   <strong>{{ c.name }}</strong>
                   <span [class]="chip(c)">{{ statusText[c.status] || c.status }}</span>
+                  @if (activeId() === c.id) {
+                    <span class="chip chip-active" title="Es la que se usa en el próximo pedido a la IA">En uso ahora</span>
+                  }
+                  @if (audioId() === c.id && activeId() !== c.id) {
+                    <span class="chip chip-active" title="Es la que se usa para audio">En uso para audio</span>
+                  }
                   @if (!c.active) { <span class="chip">Pausada</span> }
                   @if (limitReached(c)) { <span class="chip chip-warn">Límite 24 h alcanzado</span> }
                 </div>
@@ -248,6 +255,9 @@ type LimitField = 'dailyRequestLimit' | 'perAccountDailyLimit';
     :host { display: contents; }
     .note { margin: -0.4rem 0 0.8rem; }
     .conn { align-items: flex-start; flex-wrap: wrap; }
+    .conn.in-use { border-left: 4px solid var(--in-use, #2f4fb3); padding-left: 0.75rem;
+      background: color-mix(in srgb, var(--in-use, #2f4fb3) 6%, transparent); }
+    .chip-active { background: var(--in-use, #2f4fb3); color: #fff; }
     .conn.focused { background: var(--warn-bg); border-radius: 0.65rem; padding-inline: 0.7rem; }
     .conn-main { display: flex; flex-direction: column; gap: 0.35rem; flex: 1; min-width: 240px; }
     .conn-actions { justify-content: flex-end; }
@@ -284,6 +294,9 @@ export class ConnectionsManagerComponent implements OnInit {
   readonly embedded = input(false);
   /** Conexión a resaltar al llegar desde Consumo. */
   readonly focusConnectionId = input<number | null>(null);
+  /** Conexión que el router usaría ahora (texto) y para audio: se resalta en azul. */
+  readonly activeId = input<number | null>(null);
+  readonly audioId = input<number | null>(null);
   readonly changed = output<void>();
 
   private readonly api = inject(ApiService);

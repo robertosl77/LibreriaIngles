@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.learning.models import (
+    EvaluationMode,
     Assistance,
     Attempt,
     Exercise,
@@ -128,7 +129,11 @@ def test_signals_are_recorded_copied_and_drive_listening_score(client) -> None:
     klass = client.post(f"{API}/classes", headers=headers).json()
     with SessionLocal() as db:
         exercises = db.scalars(select(Exercise).where(Exercise.class_session_id == klass["id"])).all()
-        target = next(e for e in exercises if e.exercise_type in {"fill_blank", "multiple_choice"})
+        # La clase del simulado es al azar: se fija un ejercicio conocido para que el test no dependa de eso.
+        target = exercises[0]
+        target.exercise_type = "fill_blank"
+        target.evaluation_mode = EvaluationMode.DETERMINISTIC
+        target.answer_key = {"acceptedAnswers": ["is"], "commonErrors": []}
         target.presentation_mode = PresentationMode.LISTEN
         target.response_mode = ResponseMode.SELECT if target.exercise_type == "multiple_choice" else ResponseMode.WRITE
         target.content = {**(target.content or {}), "stimulus": "My sister is a nurse."}
@@ -250,7 +255,8 @@ def test_spoken_sink_through_full_class(client) -> None:
         for e in exercises:  # el resto, escrito
             if e.response_mode == ResponseMode.SPEAK:
                 e.response_mode = ResponseMode.WRITE
-        target = next(e for e in exercises if e.exercise_type not in {"multiple_choice", "reading_multiple_choice"})
+        target = exercises[0]  # tipo fijo: la clase del simulado es al azar
+        target.exercise_type = "rewrite"
         target.response_mode = ResponseMode.SPEAK
         target.evaluation_mode = EvaluationMode.DETERMINISTIC
         target.answer_key = {"acceptedAnswers": ["I think so."], "commonErrors": []}

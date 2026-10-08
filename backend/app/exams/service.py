@@ -270,8 +270,9 @@ def create_exam(db: Session, study: StudyContext) -> tuple[ClassSession, AIResul
     db.commit()  # persistir la solicitud antes de llamar a la IA
     try:
         result = generate_content(db, study, session)
-    except GenerationFailed as exc:  # pragma: no cover - generate_content no la lanza hoy
-        raise ExamError(str(exc)) from exc
+    except GenerationFailed as exc:
+        # T-203: el examen que no se pudo generar no queda guardado (no bloquea "Rendir").
+        raise ExamError(f"No se pudo generar el examen. {exc}") from exc
     return session, result
 
 

@@ -537,16 +537,18 @@ def test_preview_can_segment_by_class_lifecycle_metrics(client) -> None:
                 created_at=now - timedelta(days=5),
                 generated_at=now - timedelta(days=5),
             ),
-            ClassSession(
-                study_profile_id=link.study_profile_id,
-                account_id=account.id,
-                status=ClassSessionStatus.GENERATION_FAILED,
-                kind=SessionKind.CLASS,
-                target_level="A1",
-                created_at=now - timedelta(days=2),
-                generation_error="fallo simulado",
-            ),
         ]
+        # T-203: una clase que no se pudo generar no se guarda; queda su intento en Consumo
+        # (dos intentos por failover = un solo pedido fallido).
+        from app.ai.models import AIConnectionOwnerType, AIUsageEvent
+
+        for attempt in (1, 2):
+            rows.append(AIUsageEvent(
+                owner_type=AIConnectionOwnerType.PLATFORM, provider="MOCK", account_id=account.id,
+                execution_id="fallo-simulado", attempt_index=attempt, operation="generate_class",
+                subject_type="CLASS_NOT_GENERATED", subject_label="Clase · no generada",
+                success=False, created_at=now - timedelta(days=2),
+            ))
         db.add_all(rows)
         db.commit()
 

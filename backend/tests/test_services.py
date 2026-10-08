@@ -77,7 +77,8 @@ def test_owner_is_shown_as_platform_owner(client) -> None:
     owner = login(client, OWNER)
     service = client.get(f"{API}/me", headers=owner).json()["service"]
     assert service["name"] == "Dueño de la plataforma"
-    assert service["usesOwnKeys"] is True and service["usesPlatform"] is True
+    # T-200: sus conexiones son las de la plataforma; no tiene lista personal aparte.
+    assert service["usesOwnKeys"] is False and service["usesPlatform"] is True
 
 
 def test_portal_is_only_for_platform_owner(client) -> None:
@@ -156,7 +157,7 @@ def test_without_service_platform_is_never_used(client) -> None:
     _connection(client, owner, "Plataforma", platform=True)
     alice = _student(client)
     created = _new_class(client, alice)
-    assert created["status"] == "GENERATION_FAILED"
+    assert "No se pudo generar" in created["detail"]  # T-203: no queda guardada
 
 
 def test_hybrid_uses_own_first_then_platform(client) -> None:
@@ -263,10 +264,9 @@ def test_platform_connection_details_are_hidden_from_students(client) -> None:
     body = json.dumps(client.get(f"{API}/classes/{created['id']}", headers=alice).json())
     assert "Gemini interna" not in body and "Clave secreta" not in body
 
-    # El dueño ve sus conexiones de plataforma con nombre.
-    _connection(client, owner, "Mía del dueño")
+    # El dueño ve las conexiones de plataforma con nombre (T-200: son las suyas).
     owner_active = client.get(f"{API}/ai/active", headers=owner).json()["default"]
-    assert owner_active["connection"] == "Mía del dueño"
+    assert owner_active["connection"] in {"Gemini interna", "Clave secreta sr.macros"}
 
 
 def test_platform_errors_do_not_name_platform_connections(client) -> None:
@@ -275,8 +275,8 @@ def test_platform_errors_do_not_name_platform_connections(client) -> None:
     alice = _student(client)
     _grant(client, owner, "alice@example.com", _services(client, owner)["INDIVIDUAL_PLATFORM"]["id"])
     failed = _new_class(client, alice)
-    assert failed["status"] == "GENERATION_FAILED"
-    assert "Gemini interna" not in failed["generationError"]
+    assert "No se pudo generar" in failed["detail"]  # T-203: no queda guardada
+    assert "Gemini interna" not in failed["detail"]
 
 
 def test_dev_purge_account_removes_personal_history_and_never_owner(client) -> None:
