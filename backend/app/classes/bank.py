@@ -179,21 +179,18 @@ def recent_prompts(db: Session, study_profile_id: int, skill_key: str, *, days: 
 # ---------------------------------------------------------------- T-216: calidad del banco
 
 
-def _maybe_retire(item: ExerciseBankItem) -> None:
-    from app.core.config import settings
+def _reports_today(db: Session, study_profile_id: int) -> int:
+    from datetime import timedelta
 
-    if item.status != BankItemStatus.ACTIVE:
-        return
-    reasons = []
-    if (item.wrong_reports or 0) >= settings.bank_retire_wrong_reports:
-        reasons.append(f"{item.wrong_reports} reportes de 'está mal'")
-    if (item.repeat_reports or 0) >= settings.bank_retire_repeat_reports:
-        reasons.append(f"{item.repeat_reports} reportes de 'se repite'")
-    if (item.appeals_accepted or 0) >= settings.bank_retire_accepted_appeals:
-        reasons.append(f"{item.appeals_accepted} reclamos aceptados")
-    if reasons:
-        item.status = BankItemStatus.RETIRED
-        item.retired_reason = "Retirado automáticamente: " + ", ".join(reasons)
+    from sqlalchemy import func
+
+    from app.ai.models import utcnow
+    from app.learning.models import ExerciseReport
+
+    return db.scalar(select(func.count(ExerciseReport.id)).where(
+        ExerciseReport.study_profile_id == study_profile_id,
+        ExerciseReport.created_at >= utcnow() - timedelta(days=1),
+    )) or 0
 
 
 def report(db: Session, exercise: Exercise, study_profile_id: int, reason: str) -> bool:
@@ -208,6 +205,9 @@ def report(db: Session, exercise: Exercise, study_profile_id: int, reason: str) 
     ))
     if exists:
         return False
+    from app.core.config import settings
+
+    suspends = _reports_today(db, study_profile_id) < settings.bank_reports_per_day
     db.add(ExerciseReport(exercise_id=exercise.id, study_profile_id=study_profile_id,
                           bank_item_id=exercise.bank_item_id, reason=kind))
     item = db.get(ExerciseBankItem, exercise.bank_item_id) if exercise.bank_item_id else None
@@ -216,7 +216,9 @@ def report(db: Session, exercise: Exercise, study_profile_id: int, reason: str) 
             item.wrong_reports = (item.wrong_reports or 0) + 1
         else:
             item.repeat_reports = (item.repeat_reports or 0) + 1
-        _maybe_retire(item)
+        # Un reporte alcanza para dejar de servirlo; decide SrMacros (dentro del tope diario).
+        if suspends and item.status == BankItemStatus.ACTIVE:
+            item.status = BankItemStatus.REVIEW
     return True
 
 
@@ -233,4 +235,76 @@ def record_appeal(db: Session, exercise: Exercise, *, accepted: bool, variant: s
             accepted_answers = list((item.answer_key or {}).get("acceptedAnswers") or [])
             if variant not in accepted_answers:
                 item.answer_key = {**(item.answer_key or {}), "acceptedAnswers": accepted_answers + [variant]}
-    _maybe_retire(item)
+
+
+# ---------------------------------------------------------------- T-216: decisión de SrMacros
+
+
+def review_queue(db: Session) -> list[dict]:
+    """Ítems en revisión, los más reportados primero, con sus reportes y quién los hizo."""
+    from sqlalchemy import func
+
+    from app.accounts.models import Account
+    from app.learning.models import ExerciseReport
+    from app.learning.models import ClassSession
+
+    items = db.scalars(select(ExerciseBankItem).where(ExerciseBankItem.status == BankItemStatus.REVIEW)).all()
+    totals = dict(db.execute(
+        select(ExerciseReport.study_profile_id, func.count(ExerciseReport.id)).group_by(ExerciseReport.study_profile_id)
+    ).all())
+    queue = []
+    for item in items:
+        reports = db.scalars(
+            select(ExerciseReport).where(ExerciseReport.bank_item_id == item.id).order_by(ExerciseReport.created_at)
+        ).all()
+        rows = []
+        for r in reports:
+            reported_exercise = db.get(Exercise, r.exercise_id)
+            session = db.get(ClassSession, reported_exercise.class_session_id) if reported_exercise else None
+            account = db.get(Account, session.account_id) if session and session.account_id else None
+            rows.append({
+                "reason": r.reason.value,
+                "at": r.created_at,
+                "email": account.email if account else None,
+                "reporterTotal": totals.get(r.study_profile_id, 0),
+            })
+        queue.append({
+            "id": item.id,
+            "level": item.level,
+            "skillKey": item.skill_key,
+            "type": item.exercise_type,
+            "instruction": item.instruction,
+            "prompt": item.prompt,
+            "options": (item.content or {}).get("options"),
+            "acceptedAnswers": (item.answer_key or {}).get("acceptedAnswers") or [],
+            "wrongReports": item.wrong_reports or 0,
+            "repeatReports": item.repeat_reports or 0,
+            "appeals": item.appeals or 0,
+            "appealsAccepted": item.appeals_accepted or 0,
+            "timesServed": item.times_served or 0,
+            "reports": rows,
+        })
+    queue.sort(key=lambda q: (-(q["wrongReports"] + q["repeatReports"]), q["id"]))
+    return queue
+
+
+def decide(db: Session, item_id: int, action: str, accepted_answers: list[str] | None = None) -> ExerciseBankItem:
+    item = db.get(ExerciseBankItem, item_id)
+    if item is None:
+        raise ValueError("Ítem inexistente.")
+    if action == "RETIRE":
+        item.status = BankItemStatus.RETIRED
+        item.retired_reason = "Retirado por SrMacros tras revisión"
+    elif action in ("ACTIVATE", "FIX"):
+        if action == "FIX":
+            answers = [a.strip() for a in (accepted_answers or []) if a and a.strip()]
+            if not answers:
+                raise ValueError("Indicá al menos una respuesta correcta.")
+            item.answer_key = {**(item.answer_key or {}), "acceptedAnswers": answers}
+        item.status = BankItemStatus.ACTIVE
+        item.retired_reason = None
+        item.wrong_reports = 0
+        item.repeat_reports = 0
+    else:
+        raise ValueError("Acción inválida.")
+    return item

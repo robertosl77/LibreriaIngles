@@ -53,8 +53,7 @@ import {
   PlatformService,
   PlatformServiceDraft,
   ProviderInfo,
-  TokenResponse
-} from './models';
+  TokenResponse, BankReviewItem } from './models';
 
 export function errorMessage(error: unknown, fallback = 'Ocurrió un error inesperado.'): string {
   if (error instanceof HttpErrorResponse) {
@@ -374,6 +373,14 @@ export class ApiService {
   }
 
   // Plataforma (PLATFORM_OWNER)
+  bankReview(): Observable<BankReviewItem[]> {
+    return this.http.get<BankReviewItem[]>(`${this.base}/platform/bank/review`);
+  }
+
+  bankDecision(itemId: number, action: 'ACTIVATE' | 'RETIRE' | 'FIX', acceptedAnswers?: string[]): Observable<BankReviewItem[]> {
+    return this.http.post<BankReviewItem[]>(`${this.base}/platform/bank/${itemId}/decision`, { action, acceptedAnswers });
+  }
+
   platformOverview(): Observable<PlatformOverview> {
     return this.http.get<PlatformOverview>(`${this.base}/platform/overview`);
   }

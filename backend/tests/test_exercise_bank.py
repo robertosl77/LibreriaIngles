@@ -158,10 +158,8 @@ def _bank_exercise(klass_id: int) -> Exercise:
             Exercise.class_session_id == klass_id, Exercise.bank_item_id.is_not(None))).first()
 
 
-def test_report_counts_once_per_student_and_retires_bad_items(client) -> None:
-    """T-216: 'está mal' de 2 alumnos distintos retira el ítem del banco; repetir el reporte no suma."""
-    from app.learning.models import ClassSession, ExerciseReport
-
+def test_one_report_puts_item_in_review_and_owner_decides(client) -> None:
+    """T-216: un reporte suspende el ítem (no se sirve); SrMacros lo ve en la cola y decide."""
     headers = _setup(client)
     klass = client.post(f"{API}/classes", headers=headers).json()
     exercise = _bank_exercise(klass["id"])
@@ -172,20 +170,42 @@ def test_report_counts_once_per_student_and_retires_bad_items(client) -> None:
     assert client.post(url, json={"reason": "OTRO"}, headers=headers).status_code == 422
     with SessionLocal() as db:
         item = db.get(ExerciseBankItem, exercise.bank_item_id)
-        assert item.wrong_reports == 1 and item.status == BankItemStatus.ACTIVE
-        # Otro alumno reporta lo mismo → se retira.
-        db.add(ExerciseReport(exercise_id=exercise.id, study_profile_id=999, bank_item_id=item.id,
-                              reason="WRONG"))
-        twin = Exercise(class_session_id=exercise.class_session_id, study_profile_id=999, level="A1",
-                        skill_key=exercise.skill_key, exercise_type=exercise.exercise_type, prompt="x",
-                        evaluation_mode=exercise.evaluation_mode, bank_item_id=item.id)
-        db.add(twin)
-        db.flush()
-        assert bank.report(db, twin, 999, "WRONG") is True
-        db.commit()
-        db.refresh(item)
-        assert item.status == BankItemStatus.RETIRED and "está mal" in item.retired_reason
-        assert db.get(ClassSession, klass["id"]) is not None
+        assert item.wrong_reports == 1 and item.status == BankItemStatus.REVIEW
+
+    owner = login(client, "owner@example.com")
+    assert client.get(f"{API}/platform/bank/review", headers=headers).status_code == 403
+    queue = client.get(f"{API}/platform/bank/review", headers=owner).json()
+    assert [q["id"] for q in queue] == [exercise.bank_item_id]
+    assert queue[0]["reports"][0]["email"] == "roberto@example.com" and queue[0]["wrongReports"] == 1
+
+    fixed = client.post(f"{API}/platform/bank/{exercise.bank_item_id}/decision",
+                        json={"action": "FIX", "acceptedAnswers": ["respuesta corregida"]}, headers=owner)
+    assert fixed.status_code == 200 and fixed.json() == []
+    with SessionLocal() as db:
+        item = db.get(ExerciseBankItem, exercise.bank_item_id)
+        assert item.status == BankItemStatus.ACTIVE and item.wrong_reports == 0
+        assert item.answer_key["acceptedAnswers"] == ["respuesta corregida"]
+    assert client.post(f"{API}/platform/bank/{exercise.bank_item_id}/decision",
+                       json={"action": "RETIRE"}, headers=owner).status_code == 200
+    with SessionLocal() as db:
+        assert db.get(ExerciseBankItem, exercise.bank_item_id).status == BankItemStatus.RETIRED
+
+
+def test_daily_report_cap_protects_from_reporting_everything(client, monkeypatch) -> None:
+    """T-216: pasado el tope diario, el reporte se guarda pero ya no suspende."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "bank_reports_per_day", 1)
+    headers = _setup(client)
+    klass = client.post(f"{API}/classes", headers=headers).json()
+    with SessionLocal() as db:
+        banked = db.scalars(select(Exercise).where(
+            Exercise.class_session_id == klass["id"], Exercise.bank_item_id.is_not(None))).all()[:2]
+    for exercise in banked:
+        client.post(f"{API}/classes/{klass['id']}/exercises/{exercise.id}/report", json={"reason": "WRONG"}, headers=headers)
+    with SessionLocal() as db:
+        states = [db.get(ExerciseBankItem, e.bank_item_id).status for e in banked]
+    assert states == [BankItemStatus.REVIEW, BankItemStatus.ACTIVE]
 
 
 def test_retired_items_are_not_served(client, monkeypatch) -> None:

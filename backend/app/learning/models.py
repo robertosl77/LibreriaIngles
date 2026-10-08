@@ -215,6 +215,7 @@ class Exercise(Base):
 
 class BankItemStatus(str, Enum):
     ACTIVE = "ACTIVE"
+    REVIEW = "REVIEW"  # T-216: reportado por un alumno; no se sirve hasta que SrMacros decida
     RETIRED = "RETIRED"
 
 

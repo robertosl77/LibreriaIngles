@@ -10,6 +10,7 @@ from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import case, func, select
 
 from app.accounts.models import Account, PlatformRole
@@ -181,3 +182,31 @@ def overview(_: PlatformOwner, db: DbSession) -> dict:
         "benefitUsage": benefit_usage,
         "accountBenefits": account_benefits,
     }
+
+
+# ---------------------------------------------------------------- T-216: ejercicios en revisión
+
+
+class BankDecision(BaseModel):
+    action: str  # ACTIVATE | RETIRE | FIX
+    acceptedAnswers: list[str] | None = None
+
+
+@router.get("/bank/review")
+def bank_review(_: PlatformOwner, db: DbSession) -> list[dict]:
+    """Ejercicios del banco reportados por alumnos (no se sirven hasta decidir). Más reportados primero."""
+    from app.classes import bank
+
+    return bank.review_queue(db)
+
+
+@router.post("/bank/{item_id}/decision")
+def bank_decision(item_id: int, payload: BankDecision, _: PlatformOwner, db: DbSession) -> list[dict]:
+    from app.classes import bank
+
+    try:
+        bank.decide(db, item_id, payload.action, payload.acceptedAnswers)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+    db.commit()
+    return bank.review_queue(db)

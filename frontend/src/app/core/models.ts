@@ -1152,3 +1152,21 @@ export interface JobTitleResolveResult {
   item: JobTitleOption | null;
   similar: JobTitleOption[];
 }
+
+/** T-216: ejercicio del banco reportado por alumnos (cola de revisión de SrMacros). */
+export interface BankReviewItem {
+  id: number;
+  level: string;
+  skillKey: string;
+  type: string;
+  instruction: string | null;
+  prompt: string;
+  options: string[] | null;
+  acceptedAnswers: string[];
+  wrongReports: number;
+  repeatReports: number;
+  appeals: number;
+  appealsAccepted: number;
+  timesServed: number;
+  reports: { reason: 'WRONG' | 'REPEATED'; at: string; email: string | null; reporterTotal: number }[];
+}
