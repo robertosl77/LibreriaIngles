@@ -210,3 +210,39 @@ def bank_decision(item_id: int, payload: BankDecision, _: PlatformOwner, db: DbS
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
     db.commit()
     return bank.review_queue(db)
+
+
+# ---------------------------------------------------------------- T-217: tope diario por persona
+
+
+class AILimits(BaseModel):
+    personDailyRequests: int | None = None
+
+
+def _ai_limits(db) -> dict:
+    from app.ai.service import person_daily_limit
+
+    return {"personDailyRequests": person_daily_limit(db)}
+
+
+@router.get("/ai-limits")
+def get_ai_limits(_: PlatformOwner, db: DbSession) -> dict:
+    """Tope diario de pedidos por persona, sumando todas las conexiones de la plataforma (vacío = sin tope)."""
+    return _ai_limits(db)
+
+
+@router.put("/ai-limits")
+def set_ai_limits(payload: AILimits, _: PlatformOwner, db: DbSession) -> dict:
+    from app.ai.models import AIPlatformLimit
+    from app.ai.service import PERSON_DAILY_REQUESTS
+
+    value = payload.personDailyRequests
+    if value is not None and value < 1:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El tope tiene que ser 1 o más (vacío = sin tope).")
+    row = db.get(AIPlatformLimit, PERSON_DAILY_REQUESTS)
+    if row is None:
+        db.add(AIPlatformLimit(key=PERSON_DAILY_REQUESTS, value=value))
+    else:
+        row.value = value
+    db.commit()
+    return _ai_limits(db)

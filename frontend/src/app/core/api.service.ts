@@ -381,6 +381,15 @@ export class ApiService {
     return this.http.post<BankReviewItem[]>(`${this.base}/platform/bank/${itemId}/decision`, { action, acceptedAnswers });
   }
 
+  /** T-217: tope diario de pedidos por persona (todas las conexiones de plataforma). */
+  aiLimits(): Observable<{ personDailyRequests: number | null }> {
+    return this.http.get<{ personDailyRequests: number | null }>(`${this.base}/platform/ai-limits`);
+  }
+
+  setAiLimits(personDailyRequests: number | null): Observable<{ personDailyRequests: number | null }> {
+    return this.http.put<{ personDailyRequests: number | null }>(`${this.base}/platform/ai-limits`, { personDailyRequests });
+  }
+
   platformOverview(): Observable<PlatformOverview> {
     return this.http.get<PlatformOverview>(`${this.base}/platform/overview`);
   }
