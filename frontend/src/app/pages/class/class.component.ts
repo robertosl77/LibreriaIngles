@@ -210,11 +210,11 @@ const RESULT_LABELS: Record<string, string> = {
 
           @if (editable()) {
             <p class="muted small">
-              Tus respuestas se guardan automáticamente. {{ answeredCount() }}/{{ c.exercises.length }} respondidas.
+              Tus respuestas se guardan automáticamente. {{ answeredCount() }}/{{ visible().length }} respondidas.@if (practiceRunning()) { Tanda {{ c.practice!.batch }}. }
             </p>
           }
 
-          @for (exercise of c.exercises; track exercise.id; let i = $index) {
+          @for (exercise of visible(); track exercise.id; let i = $index) {
             <article
               class="card exercise"
               [attr.id]="'ex-' + exercise.id"
@@ -677,7 +677,7 @@ const RESULT_LABELS: Record<string, string> = {
           @if (editable()) {
             <div class="submit-bar">
               <div class="submit-status">
-                <span class="muted small">{{ answeredCount() }}/{{ c.exercises.length }} respondidas</span>
+                <span class="muted small">{{ answeredCount() }}/{{ visible().length }} respondidas</span>
                 @if (!busy() && !allAnswered()) {
                   <span class="small missing">
                     @if (pendingSpeakingCount()) {
@@ -688,9 +688,17 @@ const RESULT_LABELS: Record<string, string> = {
                   </span>
                 }
               </div>
-              <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="busy() || !allAnswered()">
-                @if (busy()) { <span class="spinner"></span> Corrigiendo… } @else { {{ c.kind === 'EXAM' ? 'Finalizar examen' : 'Finalizar y comprobar' }} }
-              </button>
+              <div class="submit-actions">
+                @if (practiceRunning()) {
+                  <!-- T-214: Continuar = esta tanda se corrige en segundo plano y aparece la siguiente. -->
+                  <button class="btn" type="button" (click)="continuePractice()" [disabled]="busy() || !allAnswered()">
+                    @if (continuing()) { <span class="spinner"></span> Cargando… } @else { Continuar }
+                  </button>
+                }
+                <button class="btn btn-primary" type="button" (click)="submit()" [disabled]="busy() || !allAnswered()">
+                  @if (busy() && !continuing()) { <span class="spinner"></span> Corrigiendo… } @else { {{ c.kind === 'EXAM' ? 'Finalizar examen' : 'Finalizar y comprobar' }} }
+                </button>
+              </div>
             </div>
           }
 
@@ -871,6 +879,7 @@ const RESULT_LABELS: Record<string, string> = {
     .history { display: flex; flex-direction: column; gap: 0.2rem; }
     .submit-status { display: flex; flex-direction: column; gap: 0.15rem; }
     .submit-status .missing { color: var(--warn); }
+    .submit-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: flex-end; }
     .submit-bar {
       position: sticky; bottom: 0.8rem;
       display: flex; align-items: center; justify-content: space-between; gap: 1rem;
@@ -923,12 +932,24 @@ export class ClassComponent implements OnDestroy {
   });
   /** Desde que se envía a corregir, ninguna interacción puede alterar la evidencia. */
   readonly formLocked = computed(() => this.busy() || !this.editable());
+  /** T-214: práctica en curso → solo se ven los ejercicios de la tanda actual (evita scroll). */
+  readonly practiceRunning = computed(() => {
+    const p = this.klass()?.practice;
+    return !!p && !p.finished && this.editable();
+  });
+  readonly visible = computed(() => {
+    const c = this.klass();
+    if (!c) return [];
+    if (!this.practiceRunning()) return c.exercises;
+    return c.exercises.filter((exercise) => (exercise.batch ?? 1) === c.practice!.batch);
+  });
+  readonly continuing = signal(false);
   readonly answeredCount = computed(() => {
     const c = this.klass();
     if (!c) return 0;
     const answers = this.answers();
     const confirmed = this.confirmedSpeaking();
-    return c.exercises.filter((exercise) =>
+    return this.visible().filter((exercise) =>
       exercise.response === 'SPEAK'
         ? confirmed.has(exercise.id)
         : this.isAnswered(exercise, answers[exercise.id] ?? '')
@@ -938,7 +959,7 @@ export class ClassComponent implements OnDestroy {
   /** Se puede finalizar recién cuando todos los ejercicios tienen respuesta (las habladas, confirmadas). */
   readonly allAnswered = computed(() => {
     const c = this.klass();
-    return !!c && c.exercises.length > 0 && this.answeredCount() === c.exercises.length;
+    return !!c && this.visible().length > 0 && this.answeredCount() === this.visible().length;
   });
 
   private readonly edits = new Subject<{ exerciseId: number; answer: string; immediate: boolean }>();
@@ -1363,7 +1384,7 @@ export class ClassComponent implements OnDestroy {
     if (!c) return;
     const answers = this.answers();
     const confirmed = this.confirmedSpeaking();
-    const missing = c.exercises.find((exercise) =>
+    const missing = this.visible().find((exercise) =>
       exercise.response === 'SPEAK'
         ? !confirmed.has(exercise.id)
         : !this.isAnswered(exercise, answers[exercise.id] ?? '')
@@ -1385,31 +1406,7 @@ export class ClassComponent implements OnDestroy {
 
     this.busy.set(true);
     try {
-      // Recién al entregar la clase salen del navegador los audios confirmados.
-      // Cada audio se procesa como máximo una vez salvo que el alumno lo reemplace.
-      for (const exercise of c.exercises) {
-        if (exercise.response !== 'SPEAK' || !this.confirmedSpeaking().has(exercise.id)) {
-          continue;
-        }
-        const stored = await this.speakingAudio.get(c.id, c.currentAttempt, exercise.id);
-        if (!stored) {
-          throw new Error('Falta una grabación confirmada. Volvé a grabar ese ejercicio.');
-        }
-        if (!stored.processed) {
-          const result = await firstValueFrom(
-            this.api.processSpeakingAnswer(
-              c.id,
-              exercise.id,
-              stored.blob,
-              stored.durationMs
-            )
-          );
-          await this.speakingAudio.markProcessed(c.id, c.currentAttempt, exercise.id);
-          if (result.switched) {
-            this.toast.show('Se cambió automáticamente el proveedor para transcribir un audio.');
-          }
-        }
-      }
+      await this.processSpeaking(c);
 
       const detail = await firstValueFrom(this.api.submitClass(c.id, this.answers()));
       await this.speakingAudio.clearAttempt(c.id, c.currentAttempt);
@@ -1419,6 +1416,61 @@ export class ClassComponent implements OnDestroy {
       this.toast.error(errorMessage(err, err instanceof Error ? err.message : undefined));
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  /** T-214: "Continuar": esta tanda se guarda (se corrige en segundo plano) y aparece la siguiente. */
+  async continuePractice(): Promise<void> {
+    const c = this.klass();
+    if (!c || !this.practiceRunning() || this.busy()) return;
+    if (!this.allAnswered()) {
+      this.toast.show('Respondé todos los ejercicios de esta tanda antes de continuar.');
+      this.goToFirstMissing();
+      return;
+    }
+    this.busy.set(true);
+    this.continuing.set(true);
+    try {
+      await this.processSpeaking(c);
+      const ids = new Set(this.visible().map((exercise) => exercise.id));
+      const answers = Object.fromEntries(
+        Object.entries(this.answers()).filter(([id]) => ids.has(Number(id)))
+      );
+      this.setClass(await firstValueFrom(this.api.continuePractice(c.id, answers)));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      this.toast.error(errorMessage(err, err instanceof Error ? err.message : undefined));
+    } finally {
+      this.continuing.set(false);
+      this.busy.set(false);
+    }
+  }
+
+  /** Recién al entregar salen del navegador los audios confirmados (solo los de lo que se ve).
+   *  Cada audio se procesa como máximo una vez salvo que el alumno lo reemplace. */
+  private async processSpeaking(c: ClassDetail): Promise<void> {
+    for (const exercise of this.visible()) {
+      if (exercise.response !== 'SPEAK' || !this.confirmedSpeaking().has(exercise.id)) {
+        continue;
+      }
+      const stored = await this.speakingAudio.get(c.id, c.currentAttempt, exercise.id);
+      if (!stored) {
+        throw new Error('Falta una grabación confirmada. Volvé a grabar ese ejercicio.');
+      }
+      if (!stored.processed) {
+        const result = await firstValueFrom(
+          this.api.processSpeakingAnswer(
+            c.id,
+            exercise.id,
+            stored.blob,
+            stored.durationMs
+          )
+        );
+        await this.speakingAudio.markProcessed(c.id, c.currentAttempt, exercise.id);
+        if (result.switched) {
+          this.toast.show('Se cambió automáticamente el proveedor para transcribir un audio.');
+        }
+      }
     }
   }
 

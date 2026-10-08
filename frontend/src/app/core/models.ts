@@ -560,6 +560,8 @@ export interface PronunciationResult {
 }
 
 export interface Exercise {
+  /** T-214: tanda de la práctica continua (1 en clases clásicas). */
+  batch?: number;
   id: number;
   position: number;
   type:
@@ -652,6 +654,8 @@ export interface ClassDetail {
   answered: number;
   history: { attempt: number; score: number }[];
   notice: string | null;
+  /** T-214: práctica continua por tandas (null en la clase clásica y el examen). */
+  practice?: { batch: number; batchSize: number; finished: boolean } | null;
 }
 
 export interface SkillProgress {

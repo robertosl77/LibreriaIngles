@@ -250,6 +250,15 @@ export class ApiService {
     return this.http.post<ClassDetail>(`${this.base}/classes`, {});
   }
 
+  /** T-214: "Nueva clase" = práctica continua por tandas. */
+  createPractice(): Observable<ClassDetail> {
+    return this.http.post<ClassDetail>(`${this.base}/classes/practice`, {});
+  }
+
+  continuePractice(classId: number, answers: Record<number, string>): Observable<ClassDetail> {
+    return this.http.post<ClassDetail>(`${this.base}/classes/${classId}/continue`, { answers });
+  }
+
   getClass(id: number): Observable<ClassDetail> {
     return this.http.get<ClassDetail>(`${this.base}/classes/${id}`);
   }
