@@ -1084,8 +1084,13 @@ def _materialize(
     # T-212: los ejercicios de práctica nuevos y validados quedan en el banco compartido.
     if session.kind != SessionKind.EXAM and result is not None:
         for exercise in new_exercises:
-            bank.store(db, exercise, provider=result.connection.provider,
-                       model=result.connection.model, session_id=session.id)
+            connection = result.connection
+            owner_type = getattr(connection, "owner_type", None)
+            bank.store(db, exercise, provider=connection.provider,
+                       model=connection.model, session_id=session.id,
+                       owner_type=getattr(owner_type, "value", owner_type),
+                       owner_id=getattr(connection, "owner_id", None),
+                       organization_id=session.organization_id)
 
     if not first:
         practice = dict(request.get("practice") or {})

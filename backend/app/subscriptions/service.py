@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.accounts.models import Account
+from app.core.config import settings
 from app.subscriptions.models import (
     AISource,
     Plan,
@@ -30,12 +31,12 @@ from app.subscriptions.models import (
 DEFAULT_CODE = "INDIVIDUAL_BYOK"
 DEFAULT_SERVICES = [
     ("INDIVIDUAL_BYOK", "Individual · propias keys", AISource.BYOK, "Usás tus propias API keys."),
-    ("INDIVIDUAL_PLATFORM", "Individual · Plataforma", AISource.PLATFORM, "Usás la IA de Librería Inglés."),
+    ("INDIVIDUAL_PLATFORM", "Individual · Plataforma", AISource.PLATFORM, f"Usás la IA de {settings.brand_name}."),
     (
         "INDIVIDUAL_HYBRID",
         "Individual · Híbrido",
         AISource.HYBRID,
-        "Tus API keys primero; si fallan, la IA de Librería Inglés.",
+        f"Tus API keys primero; si fallan, la IA de {settings.brand_name}.",
     ),
 ]
 # Aviso "tu servicio venció" visible durante estos días.

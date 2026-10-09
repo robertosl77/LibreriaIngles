@@ -390,7 +390,7 @@ def create_onboarding(payload: OnboardingCreateIn, db: DbSession) -> dict:
     if existing_org is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Esa organización ya existe en Librería Inglés.",
+            f"Esa organización ya existe en {settings.brand_name}.",
         )
 
     existing_onboarding = db.scalar(

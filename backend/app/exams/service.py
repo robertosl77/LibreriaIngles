@@ -412,9 +412,9 @@ def certificate_payload(certificate: LevelCertificate) -> dict:
         "score": certificate.score,
         "areaScores": certificate.area_scores,
         "issuedAt": certificate.issued_at,
-        "issuer": "Librería Inglés",
+        "issuer": settings.brand_name,
         "notice": (
-            "Certificado emitido por Librería Inglés según su propio examen de nivel, "
+            f"Certificado emitido por {settings.brand_name} según su propio examen de nivel, "
             "con referencia a los niveles del MCER (CEFR). No es una certificación oficial "
             "CEFR ni de Cambridge u otro organismo."
         ),

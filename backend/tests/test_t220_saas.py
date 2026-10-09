@@ -468,3 +468,25 @@ def test_migration_keeps_the_t217_platform_cap(tmp_path) -> None:
     command.upgrade(config, "head")
     with engine.connect() as connection:
         assert connection.execute(text("SELECT value FROM platform_limits")).scalar() == 35
+
+
+# ---------------------------------------------------------------- N-02 procedencia del banco
+
+
+def test_bank_items_record_who_paid_and_for_which_organization(client) -> None:
+    from app.learning.models import ExerciseBankItem
+
+    headers = _student_with_level(client)
+    org_id = _organization()
+    _membership("ana@example.com", org_id)
+    created = client.post(f"{API}/classes", headers={**headers, "X-Organization-Id": str(org_id)})
+    assert created.status_code == 201, created.text
+
+    with SessionLocal() as db:
+        items = db.scalars(select(ExerciseBankItem)).all()
+        assert items, "la clase debería haber llenado el banco"
+        for item in items:
+            # La conexión usada es la BYOK de la alumna, y la clase fue para su empresa.
+            assert item.source_owner_type == "ACCOUNT"
+            assert item.source_owner_id is not None
+            assert item.source_organization_id == org_id

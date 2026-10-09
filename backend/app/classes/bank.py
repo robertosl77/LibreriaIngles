@@ -45,7 +45,8 @@ def bankable(exercise: Exercise) -> bool:
 
 
 def store(db: Session, exercise: Exercise, *, provider: str | None, model: str | None,
-          session_id: int | None) -> ExerciseBankItem | None:
+          session_id: int | None, owner_type: str | None = None, owner_id: int | None = None,
+          organization_id: int | None = None) -> ExerciseBankItem | None:
     """Guarda (o reconoce) el ejercicio en el banco y lo vincula. Devuelve el ítem."""
     if not bankable(exercise):
         return None
@@ -70,6 +71,9 @@ def store(db: Session, exercise: Exercise, *, provider: str | None, model: str |
             source_provider=provider,
             source_model=model,
             source_session_id=session_id,
+            source_owner_type=owner_type,
+            source_owner_id=owner_id,
+            source_organization_id=organization_id,
             times_served=1,
         )
         db.add(item)

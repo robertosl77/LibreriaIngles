@@ -259,7 +259,7 @@ def seed_campaigns(db: Session) -> None:
                         priority=100,
                         stackable=False,
                         notification=CampaignNotification.IN_APP,
-                        message="Bienvenido: tenés 3 días para probar la IA de Librería Inglés.",
+                        message=f"Bienvenido: tenés 3 días para probar la IA de {settings.brand_name}.",
                     )
                 )
                 db.flush()

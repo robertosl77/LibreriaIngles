@@ -260,6 +260,12 @@ class ExerciseBankItem(Base):
     source_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
     source_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
     source_session_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # T-220 (N-02): procedencia — quién pagó la generación. Dueño de la conexión usada
+    # (PLATFORM / ORGANIZATION / ACCOUNT + su id) y empresa del request. Hoy solo se registra;
+    # qué se comparte entre empresas o cuentas BYOK queda a decisión.
+    source_owner_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_owner_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_organization_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     # Calidad (T-216): se actualizan con el uso.
     times_served: Mapped[int] = mapped_column(Integer, default=1)
     appeals: Mapped[int] = mapped_column(Integer, default=0)

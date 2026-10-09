@@ -131,7 +131,8 @@ def candidate_connections(
     return [c for c in rows if c.is_usable]
 
 
-PLATFORM_LABEL = "IA de Librería Inglés"
+# T-220 (E-13): la marca sale de la configuración.
+PLATFORM_LABEL = f"IA de {settings.brand_name}"
 
 
 def shows_connection_details(account: Account | None, owner_type) -> bool:

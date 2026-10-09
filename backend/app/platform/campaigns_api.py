@@ -31,6 +31,7 @@ from app.campaigns.models import (
     CampaignTrigger,
 )
 from app.campaigns.service import preview_audience
+from app.core.config import settings
 from app.core.deps import DbSession
 from app.platform.api import PlatformOwner
 from app.subscriptions.models import Plan, ServiceLinkType
@@ -75,7 +76,7 @@ class CampaignIn(BaseModel):
 
 
 CAMPAIGN_ASSIST_SYSTEM = """Sos un asistente que transforma una intención comercial en un borrador
-de campaña para Librería Inglés. No inventes capacidades que el motor no tenga.
+de campaña para {brand}. No inventes capacidades que el motor no tenga.
 
 Devolvé SOLO JSON con esta forma:
 {
@@ -871,7 +872,7 @@ def assist_campaign(payload: CampaignAssistIn, owner: PlatformOwner, db: DbSessi
         result = run_platform_json_task(
             db,
             owner,
-            system=CAMPAIGN_ASSIST_SYSTEM + "\n\n" + ai_capabilities_text(),
+            system=CAMPAIGN_ASSIST_SYSTEM.replace("{brand}", settings.brand_name) + "\n\n" + ai_capabilities_text(),
             user=user_prompt,
             task=task,
             usage_context=AIUsageContext(
