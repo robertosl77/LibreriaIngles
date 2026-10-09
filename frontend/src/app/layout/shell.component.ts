@@ -28,12 +28,11 @@ import { BrandService } from '../core/brand.service';
               <select
                 class="org-select"
                 aria-label="Organización"
-                [value]="me.activeOrganizationId ?? ''"
                 (change)="switchOrganization($any($event.target).value)"
               >
-                <option value="">Personal</option>
+                <option value="" [selected]="me.activeOrganizationId === null">Personal</option>
                 @for (org of me.organizations; track org.id) {
-                  <option [value]="org.id">{{ org.name }}</option>
+                  <option [value]="org.id" [selected]="org.id === me.activeOrganizationId">{{ org.name }}</option>
                 }
               </select>
             }
