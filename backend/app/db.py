@@ -39,4 +39,20 @@ def _engine_options() -> dict[str, object]:
 
 engine = create_engine(settings.resolved_database_url, **_engine_options())
 
+
+if make_url(settings.resolved_database_url).get_backend_name() == "sqlite":
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_concurrency(dbapi_connection, _record) -> None:
+        """T-211: WAL deja leer mientras otro escribe; busy_timeout hace esperar (no fallar) al
+        segundo escritor. Así una corrección larga no deja en blanco otras pestañas."""
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA busy_timeout=15000")
+            if make_url(settings.resolved_database_url).database not in (None, "", ":memory:"):
+                cursor.execute("PRAGMA journal_mode=WAL")
+        finally:
+            cursor.close()
+
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)

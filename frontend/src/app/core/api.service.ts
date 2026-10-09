@@ -53,8 +53,7 @@ import {
   PlatformService,
   PlatformServiceDraft,
   ProviderInfo,
-  TokenResponse
-} from './models';
+  TokenResponse, BankReviewItem } from './models';
 
 export function errorMessage(error: unknown, fallback = 'Ocurrió un error inesperado.'): string {
   if (error instanceof HttpErrorResponse) {
@@ -250,6 +249,15 @@ export class ApiService {
     return this.http.post<ClassDetail>(`${this.base}/classes`, {});
   }
 
+  /** T-214: "Nueva clase" = práctica continua por tandas. */
+  createPractice(): Observable<ClassDetail> {
+    return this.http.post<ClassDetail>(`${this.base}/classes/practice`, {});
+  }
+
+  continuePractice(classId: number, answers: Record<number, string>): Observable<ClassDetail> {
+    return this.http.post<ClassDetail>(`${this.base}/classes/${classId}/continue`, { answers });
+  }
+
   getClass(id: number): Observable<ClassDetail> {
     return this.http.get<ClassDetail>(`${this.base}/classes/${id}`);
   }
@@ -340,6 +348,11 @@ export class ApiService {
     );
   }
 
+  /** T-216: "Este ejercicio se repite" / "Este ejercicio está mal". */
+  reportExercise(classId: number, exerciseId: number, reason: 'REPEATED' | 'WRONG'): Observable<ClassDetail> {
+    return this.http.post<ClassDetail>(`${this.base}/classes/${classId}/exercises/${exerciseId}/report`, { reason });
+  }
+
   appeal(classId: number, exerciseId: number): Observable<ClassDetail> {
     return this.http.post<ClassDetail>(
       `${this.base}/classes/${classId}/exercises/${exerciseId}/appeal`,
@@ -360,6 +373,23 @@ export class ApiService {
   }
 
   // Plataforma (PLATFORM_OWNER)
+  bankReview(): Observable<BankReviewItem[]> {
+    return this.http.get<BankReviewItem[]>(`${this.base}/platform/bank/review`);
+  }
+
+  bankDecision(itemId: number, action: 'ACTIVATE' | 'RETIRE' | 'FIX', acceptedAnswers?: string[]): Observable<BankReviewItem[]> {
+    return this.http.post<BankReviewItem[]>(`${this.base}/platform/bank/${itemId}/decision`, { action, acceptedAnswers });
+  }
+
+  /** T-217: tope diario de pedidos por persona (todas las conexiones de plataforma). */
+  aiLimits(): Observable<{ personDailyRequests: number | null }> {
+    return this.http.get<{ personDailyRequests: number | null }>(`${this.base}/platform/ai-limits`);
+  }
+
+  setAiLimits(personDailyRequests: number | null): Observable<{ personDailyRequests: number | null }> {
+    return this.http.put<{ personDailyRequests: number | null }>(`${this.base}/platform/ai-limits`, { personDailyRequests });
+  }
+
   platformOverview(): Observable<PlatformOverview> {
     return this.http.get<PlatformOverview>(`${this.base}/platform/overview`);
   }

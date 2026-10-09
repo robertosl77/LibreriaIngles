@@ -191,6 +191,13 @@ def generation_user_prompt(level: str, slots: list[dict], purpose: str = "class"
     rules = [NEW_TYPE_RULES[t] for t in requested if t in NEW_TYPE_RULES]
     if rules:
         header += "Rules for these exercise types:\n" + "\n".join(rules) + "\n"
+    if any(slot.get("avoid") for slot in slots):
+        # T-215: el alumno ya vio esto; la IA tiende a repetir el mismo ejemplo.
+        header += ('Slots with "avoid": the student already saw those questions. Do NOT repeat or paraphrase '
+                   "them: use a different sentence, context and vocabulary.\n")
+    if any(slot.get("reinforce") for slot in slots):
+        header += ('Slots with "reinforce": the student just made these mistakes. Create an exercise that '
+                   "practices exactly that point with a NEW sentence (never the same one).\n")
     return header + compact_json({"level": level, "slots": slots})
 
 

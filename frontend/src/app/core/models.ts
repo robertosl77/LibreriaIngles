@@ -560,6 +560,10 @@ export interface PronunciationResult {
 }
 
 export interface Exercise {
+  /** T-216: reportes que hizo este alumno sobre el ejercicio. */
+  reported?: ('REPEATED' | 'WRONG')[];
+  /** T-214: tanda de la práctica continua (1 en clases clásicas). */
+  batch?: number;
   id: number;
   position: number;
   type:
@@ -652,6 +656,8 @@ export interface ClassDetail {
   answered: number;
   history: { attempt: number; score: number }[];
   notice: string | null;
+  /** T-214: práctica continua por tandas (null en la clase clásica y el examen). */
+  practice?: { batch: number; batchSize: number; finished: boolean } | null;
 }
 
 export interface SkillProgress {
@@ -1145,4 +1151,22 @@ export interface JobTitleResolveResult {
   status: 'EXISTING' | 'CREATED' | 'SIMILAR';
   item: JobTitleOption | null;
   similar: JobTitleOption[];
+}
+
+/** T-216: ejercicio del banco reportado por alumnos (cola de revisión de SrMacros). */
+export interface BankReviewItem {
+  id: number;
+  level: string;
+  skillKey: string;
+  type: string;
+  instruction: string | null;
+  prompt: string;
+  options: string[] | null;
+  acceptedAnswers: string[];
+  wrongReports: number;
+  repeatReports: number;
+  appeals: number;
+  appealsAccepted: number;
+  timesServed: number;
+  reports: { reason: 'WRONG' | 'REPEATED'; at: string; email: string | null; reporterTotal: number }[];
 }

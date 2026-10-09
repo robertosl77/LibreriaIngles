@@ -11,7 +11,7 @@ from conftest import correct_answer, login
 from app.classes.generation import EVALUATION_MODE_BY_TYPE, _validate_exercise, ensure_listening, slot_for
 from app.curriculum.service import EXERCISE_TYPES, get_level
 from app.db import SessionLocal
-from app.learning.models import Exercise
+from app.learning.models import Exercise, SELECT_TYPES
 
 API = "/api/v1"
 SKILL = "a1.grammar.to_be.affirmative"
@@ -114,7 +114,7 @@ def test_listening_class_flow_and_ability_progress(client) -> None:
     assert item["type"] in EXERCISE_TYPES
     assert item["stimulus"]["mode"] == "LISTEN" and item["stimulus"]["text"]
     assert item["stimulus"]["lang"] == "en-US" and item["stimulus"]["rate"] == 0.85
-    if item["type"].endswith("multiple_choice"):
+    if item["type"] in SELECT_TYPES:
         assert item["response"] == "SELECT"
     else:
         assert item["response"] in ("WRITE", "SPEAK")

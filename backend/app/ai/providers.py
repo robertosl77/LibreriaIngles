@@ -126,6 +126,8 @@ def reasoning_budget(task: dict | None) -> int | None:
     if not settings.ai_reasoning_control or not task:
         return None
     kind = task.get("kind")
+    if kind == "generate_class" and task.get("reinforce"):
+        return max(0, settings.ai_reasoning_budget_open)  # T-215: ejercicio dirigido a un error
     if kind in NO_REASONING_KINDS:
         return 0
     if kind == "evaluate_answer":
@@ -144,11 +146,27 @@ def gemini_budget_supported(model: str | None) -> bool:
     return (model or "").lower().startswith("gemini-2.5-flash")
 
 
+# T-202: Gemini 3 controla el razonamiento con niveles (thinkingLevel), no con presupuesto.
+# "minimal" solo lo aceptan algunos modelos (3.8 Flash y Pro no): ahí lo más bajo es "low".
+_GEMINI3_MINIMAL = ("gemini-3.5-flash", "gemini-3.6-flash", "gemini-3-flash", "gemini-3.1-flash-lite")
+
+
+def gemini_thinking_level(model: str | None, budget: int | None) -> str | None:
+    name = (model or "").lower()
+    if budget is None or not name.startswith("gemini-3"):
+        return None
+    if budget == 0:
+        return "minimal" if name.startswith(_GEMINI3_MINIMAL) else "low"
+    return "low"  # corrección abierta: un poco de razonamiento, nunca el "medium" por defecto
+
+
 def gemini_generation_config(model: str | None, task: dict | None, base: dict) -> dict:
     config = dict(base)
     budget = reasoning_budget(task)
     if budget is not None and gemini_budget_supported(model):
         config["thinkingConfig"] = {"thinkingBudget": budget}
+    elif (level := gemini_thinking_level(model, budget)) is not None:
+        config["thinkingConfig"] = {"thinkingLevel": level}
     schema = (task or {}).get("schema")
     if schema and settings.ai_response_schema and config.get("responseMimeType") == "application/json":
         config["responseSchema"] = schema
