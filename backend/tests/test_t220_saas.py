@@ -2,6 +2,8 @@
 
 import importlib
 
+import pytest
+
 from sqlalchemy import func, select
 
 from app.db import SessionLocal
@@ -197,3 +199,163 @@ def test_revoked_membership_cannot_act_for_the_organization(client) -> None:
     response = client.post(f"{API}/classes", headers={**headers, "X-Organization-Id": str(org_id)})
     assert response.status_code == 403
     assert client.get(f"{API}/me", headers=headers).json()["organizations"] == []
+
+
+# ---------------------------------------------------------------- E-02 / E-11 tareas periódicas
+
+
+def _run(name: str, **kwargs):
+    from app.jobs.registry import get_job
+    from app.jobs.runner import run_job
+
+    return run_job(get_job(name), **kwargs)
+
+
+def test_jobs_are_registered_from_framework_and_core() -> None:
+    from app.jobs.registry import registered_jobs
+
+    names = {job.name for job in registered_jobs()}
+    assert {
+        "subscriptions.expire",
+        "campaigns.reconcile_first_login",
+        "classes.process_pending_evaluations",
+    } <= names
+
+
+def test_me_is_a_pure_read(client) -> None:
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    headers = login(client)
+    commits: list[int] = []
+
+    def count(_session) -> None:
+        commits.append(1)
+
+    event.listen(Session, "before_commit", count)
+    try:
+        assert client.get(f"{API}/me", headers=headers).status_code == 200
+    finally:
+        event.remove(Session, "before_commit", count)
+    # Antes /me reconciliaba campañas, vencía suscripciones y hacía commit.
+    assert commits == []
+
+
+def test_expired_subscription_reads_as_expired_and_the_job_persists_it(client) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from app.accounts.models import Account
+    from app.subscriptions.models import Plan, Subscription, SubscriptionStatus
+    from app.subscriptions.service import grant_service
+
+    headers = login(client)
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "roberto@example.com"))
+        plan = db.scalar(select(Plan).where(Plan.code == "INDIVIDUAL_PLATFORM"))
+        subscription = grant_service(db, account, plan, granted_by=None, days=3)
+        subscription.expires_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+        db.commit()
+        subscription_id = subscription.id
+
+    # La lectura ya lo muestra vencido aunque la tarea no haya corrido...
+    service = client.get(f"{API}/me", headers=headers).json()["service"]
+    assert service["source"] == "BYOK"
+    assert service["expired"]["name"] == plan.name
+    with SessionLocal() as db:
+        # ...y no escribió nada.
+        assert db.get(Subscription, subscription_id).status == SubscriptionStatus.ACTIVE
+
+    outcome = _run("subscriptions.expire", force=True)
+    assert outcome.ok and outcome.processed == 1
+    with SessionLocal() as db:
+        row = db.get(Subscription, subscription_id)
+        assert row.status == SubscriptionStatus.EXPIRED
+        assert row.ended_at is not None
+
+
+def test_job_lease_prevents_a_second_run_in_the_same_window(client) -> None:
+    from app.jobs.models import JobLease
+
+    first = _run("subscriptions.expire")
+    second = _run("subscriptions.expire")
+    assert first.ran is True
+    assert second.ran is False
+    with SessionLocal() as db:
+        lease = db.get(JobLease, "subscriptions.expire")
+        assert lease.last_ok is True
+        assert lease.locked_until is not None
+
+
+def test_a_failing_job_is_recorded_and_does_not_stop_the_others(client, monkeypatch) -> None:
+    from app.jobs import registry
+    from app.jobs.models import JobLease
+    from app.jobs.runner import run_due_jobs
+
+    def boom(db):
+        raise RuntimeError("boom")
+
+    job = registry.get_job("subscriptions.expire")
+    monkeypatch.setitem(registry._JOBS, job.name, registry.PeriodicJob(job.name, job.every_seconds, boom, ""))
+
+    outcomes = {o.name: o for o in run_due_jobs()}
+    assert outcomes["subscriptions.expire"].ok is False
+    assert outcomes["campaigns.reconcile_first_login"].ok is True
+    with SessionLocal() as db:
+        assert "boom" in db.get(JobLease, "subscriptions.expire").last_error
+
+
+def test_pending_evaluation_is_completed_by_the_job_without_the_browser(client, monkeypatch) -> None:
+    from app.core.config import settings
+    from app.learning.models import ClassSession, ClassSessionStatus
+
+    # Mismo escenario que test_all_providers_down_keeps_answers_and_recovers, pero sin que el
+    # navegador llame a /process-pending: lo resuelve la tarea periódica.
+    monkeypatch.setattr(settings, "ai_rule_first_closed", False)
+    headers = _student_with_level(client)
+    klass = client.post(f"{API}/classes", headers=headers).json()
+    answers = {
+        str(e["id"]): "Every morning I get up early and I drink coffee with my family."
+        for e in klass["exercises"]
+    }
+    connections = client.get(f"{API}/ai/connections", headers=headers).json()
+    client.patch(
+        f"{API}/ai/connections/{connections[0]['id']}",
+        json={"model": "mock-fail-quota"},
+        headers=headers,
+    )
+    submitted = client.post(
+        f"{API}/classes/{klass['id']}/submit", json={"answers": answers}, headers=headers
+    ).json()
+    if submitted["status"] != "AWAITING_EVALUATION":
+        pytest.skip("todo se resolvió sin IA: no hay pendiente que probar")
+
+    client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Backup", "model": "mock", "priority": 2},
+        headers=headers,
+    )
+    outcome = _run("classes.process_pending_evaluations", force=True)
+    assert outcome.ok and outcome.processed == 1
+    with SessionLocal() as db:
+        assert db.get(ClassSession, klass["id"]).status == ClassSessionStatus.COMPLETED
+
+
+def test_in_process_worker_runs_jobs_and_stops(client) -> None:
+    import time
+
+    from app.jobs.models import JobLease
+    from app.jobs.worker import JobWorker
+
+    worker = JobWorker(tick_seconds=0.05)
+    worker.start()
+    try:
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            with SessionLocal() as db:
+                if db.scalar(select(func.count(JobLease.name)).where(JobLease.last_ok.is_(True))) >= 3:
+                    break
+            time.sleep(0.05)
+    finally:
+        worker.stop()
+    with SessionLocal() as db:
+        assert db.scalar(select(func.count(JobLease.name)).where(JobLease.last_ok.is_(True))) >= 3

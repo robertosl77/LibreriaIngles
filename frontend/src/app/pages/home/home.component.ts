@@ -252,15 +252,9 @@ export class HomeComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const me = await this.auth.refreshMe();
-      // Documento funcional §27.2: al volver a entrar, reintentar correcciones pendientes.
-      if (me.classes.awaitingEvaluation > 0 && me.ai.available > 0) {
-        const result = await firstValueFrom(this.api.processPending());
-        if (result.completed > 0) {
-          this.toast.success(`Se corrigieron ${result.completed} clase(s) pendiente(s).`);
-          await this.auth.refreshMe();
-        }
-      }
+      // T-220 (E-11): las correcciones pendientes las reintenta el backend en segundo plano
+      // (tarea periódica); Inicio ya no las dispara al entrar.
+      await this.auth.refreshMe();
       const [classes, progress] = await Promise.all([
         firstValueFrom(this.api.classes()),
         firstValueFrom(this.api.progress())

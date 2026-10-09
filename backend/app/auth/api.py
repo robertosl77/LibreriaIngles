@@ -170,12 +170,9 @@ def _me_payload(study, db) -> dict:
 
 @router.get("/me")
 def me(study: CurrentStudy, db: DbSession) -> dict:
-    # Si el request de autenticación no alcanzó a aplicar FIRST_LOGIN, /me lo reconcilia
-    # usando first_login_at + activated_at persistidos.
-    _reconcile_campaigns_safely(db, study.account)
-    payload = _me_payload(study, db)
-    db.commit()  # persiste campaña/vencimientos perezosos del servicio
-    return payload
+    # T-220 (E-02): lectura pura. Las campañas FIRST_LOGIN que el login no alcanzó a aplicar y
+    # los vencimientos los resuelven las tareas periódicas (app/jobs), no esta lectura.
+    return _me_payload(study, db)
 
 
 @router.put("/me/level")

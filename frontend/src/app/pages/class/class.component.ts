@@ -115,7 +115,7 @@ const RESULT_LABELS: Record<string, string> = {
             <div class="banner stack">
               <span>
                 Tus respuestas están guardadas. La corrección está pendiente porque no hay
-                conexiones de IA disponibles; se reintenta automáticamente cuando vuelvas a entrar.
+                conexiones de IA disponibles; se reintenta sola cada pocos minutos, aunque no estés en la app.
               </span>
               <div class="row">
                 <button class="btn btn-sm" type="button" (click)="retryEvaluation()" [disabled]="busy()">

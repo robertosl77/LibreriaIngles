@@ -125,70 +125,84 @@ DEFAULT_SERVICE = EffectiveService(
 )
 
 
-def _expire_due(db: Session, account: Account) -> None:
-    """Marca como vencidas las suscripciones cuya vigencia terminó (vencimiento perezoso)."""
+def _is_due(subscription: Subscription, now: datetime) -> bool:
+    expires = _as_utc(subscription.expires_at)
+    return expires is not None and expires <= now
+
+
+def _settle_expired(subscription: Subscription, now: datetime) -> bool:
+    """Persiste como EXPIRED una suscripción ACTIVE cuya vigencia ya terminó."""
+    if subscription.status == SubscriptionStatus.ACTIVE and _is_due(subscription, now):
+        subscription.status = SubscriptionStatus.EXPIRED
+        subscription.ended_at = subscription.expires_at
+        return True
+    return False
+
+
+def expire_due_subscriptions(db: Session, *, limit: int = 500) -> int:
+    """T-220 (E-02): la tarea periódica vence las suscripciones, no la lectura de /me."""
     now = utcnow()
-    changed = False
-    for subscription in db.scalars(
-        select(Subscription).where(
-            Subscription.account_id == account.id,
+    rows = db.scalars(
+        select(Subscription)
+        .where(
             Subscription.status == SubscriptionStatus.ACTIVE,
             Subscription.expires_at.is_not(None),
         )
-    ).all():
-        if _as_utc(subscription.expires_at) <= now:
-            subscription.status = SubscriptionStatus.EXPIRED
-            subscription.ended_at = subscription.expires_at
-            changed = True
-    if changed:
-        db.flush()  # la sesión no hace autoflush
+        .order_by(Subscription.expires_at.asc())
+        .limit(limit)
+    ).all()
+    expired = sum(1 for subscription in rows if _settle_expired(subscription, now))
+    db.flush()
+    return expired
 
 
 def effective_service(db: Session, account: Account) -> EffectiveService:
-    """Servicio que rige ahora para la cuenta."""
-    _expire_due(db, account)
-    row = db.execute(
+    """Servicio que rige ahora para la cuenta.
+
+    T-220 (E-02): lectura pura. Una suscripción ACTIVE ya vencida se trata como vencida aunque la
+    tarea periódica todavía no la haya marcado; nada se escribe acá.
+    """
+    now = utcnow()
+    rows = db.execute(
         select(Subscription, Plan)
         .join(Plan, Plan.id == Subscription.plan_id)
         .where(
             Subscription.account_id == account.id,
-            Subscription.status == SubscriptionStatus.ACTIVE,
+            Subscription.status.in_([SubscriptionStatus.ACTIVE, SubscriptionStatus.EXPIRED]),
         )
         .order_by(Subscription.started_at.desc(), Subscription.id.desc())
-    ).first()
-    if row is not None:
-        subscription, plan = row
-        benefit_name = None
-        if subscription.benefit_id is not None:
-            from app.benefits.models import Benefit
-            benefit = db.get(Benefit, subscription.benefit_id)
-            benefit_name = benefit.name if benefit is not None else None
-        return EffectiveService(
-            name=plan.name,
-            source=plan.ai_source,
-            link_type=plan.link_type,
-            code=plan.code,
-            plan_id=plan.id,
-            subscription_id=subscription.id,
-            expires_at=_as_utc(subscription.expires_at),
-            origin=subscription.origin,
-            benefit_id=subscription.benefit_id,
-            benefit_name=benefit_name,
-        )
+    ).all()
 
-    expired = db.execute(
-        select(Subscription, Plan)
-        .join(Plan, Plan.id == Subscription.plan_id)
-        .where(
-            Subscription.account_id == account.id,
-            Subscription.status == SubscriptionStatus.EXPIRED,
-        )
-        .order_by(Subscription.ended_at.desc(), Subscription.id.desc())
-    ).first()
-    if expired is not None:
-        subscription, plan = expired
-        ended = _as_utc(subscription.ended_at or subscription.expires_at)
-        if ended and utcnow() - ended <= RECENT_EXPIRY:
+    for subscription, plan in rows:
+        if subscription.status == SubscriptionStatus.ACTIVE and not _is_due(subscription, now):
+            benefit_name = None
+            if subscription.benefit_id is not None:
+                from app.benefits.models import Benefit
+                benefit = db.get(Benefit, subscription.benefit_id)
+                benefit_name = benefit.name if benefit is not None else None
+            return EffectiveService(
+                name=plan.name,
+                source=plan.ai_source,
+                link_type=plan.link_type,
+                code=plan.code,
+                plan_id=plan.id,
+                subscription_id=subscription.id,
+                expires_at=_as_utc(subscription.expires_at),
+                origin=subscription.origin,
+                benefit_id=subscription.benefit_id,
+                benefit_name=benefit_name,
+            )
+
+    # Vencidas: las ya marcadas EXPIRED y las ACTIVE cuya vigencia terminó.
+    ended_rows = [
+        (_as_utc(subscription.ended_at or subscription.expires_at), subscription.id, plan)
+        for subscription, plan in rows
+        if subscription.status == SubscriptionStatus.EXPIRED or _is_due(subscription, now)
+    ]
+    ended_rows = [row for row in ended_rows if row[0] is not None]
+    if ended_rows:
+        ended, _, plan = max(ended_rows, key=lambda row: (row[0], row[1]))
+        if now - ended <= RECENT_EXPIRY:
             return EffectiveService(
                 name=DEFAULT_SERVICE.name,
                 source=DEFAULT_SERVICE.source,
@@ -240,6 +254,9 @@ def revoke_service(db: Session, account: Account) -> int:
             Subscription.status == SubscriptionStatus.ACTIVE,
         )
     ).all():
+        # Si ya había vencido (y la tarea todavía no la marcó), queda como vencida, no cancelada.
+        if _settle_expired(subscription, now):
+            continue
         subscription.status = SubscriptionStatus.CANCELLED
         subscription.ended_at = now
         count += 1

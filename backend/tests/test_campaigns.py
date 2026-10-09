@@ -132,6 +132,13 @@ def test_first_login_campaign_reconciles_from_persisted_timestamps(client) -> No
             db.delete(subscription)
         db.commit()
 
+    # T-220 (E-02): /me ya no escribe; la tarea periódica reconcilia el FIRST_LOGIN perdido.
+    assert client.get(f"{API}/me", headers=alice).json()["service"]["origin"] != "CAMPAIGN"
+    from app.jobs.registry import get_job
+    from app.jobs.runner import run_job
+
+    assert run_job(get_job("campaigns.reconcile_first_login"), force=True).ok
+
     me = client.get(f"{API}/me", headers=alice)
     assert me.status_code == 200
     assert me.json()["service"]["source"] == "PLATFORM"

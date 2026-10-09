@@ -10,6 +10,7 @@ import app.models  # noqa: F401  (registra todas las tablas en el metadata)
 from app.api import router
 from app.bootstrap import run_bootstrap
 from app.core.config import settings
+from app.jobs.worker import start_in_process_worker
 
 if settings.is_production and settings.jwt_secret.startswith("dev-insecure"):
     raise RuntimeError("Configurá JWT_SECRET antes de levantar en production.")
@@ -18,7 +19,11 @@ if settings.is_production and settings.jwt_secret.startswith("dev-insecure"):
 async def lifespan(_: FastAPI):
     # T-220 (E-04): datos de referencia al arrancar; los GET ya no siembran.
     run_bootstrap()
+    # T-220 (E-02/E-11): vencimientos, campañas y correcciones pendientes fuera del request.
+    worker = start_in_process_worker()
     yield
+    if worker is not None:
+        worker.stop()
 
 
 app = FastAPI(

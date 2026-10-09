@@ -24,6 +24,8 @@ os.environ["VERIFICATION_RESEND_COOLDOWN_SECONDS"] = "60"
 os.environ["VERIFICATION_MAX_SENDS_PER_HOUR"] = "5"
 os.environ["VERIFICATION_MAX_SENDS_PER_DESTINATION_PER_HOUR"] = "5"
 os.environ["EMAIL_DELIVERY_PROVIDER"] = "dev"
+# T-220: los tests corren las tareas periódicas a mano (sin hilo de fondo).
+os.environ["JOBS_IN_PROCESS"] = "false"
 
 
 @pytest.fixture(autouse=True)

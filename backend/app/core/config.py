@@ -15,6 +15,11 @@ def escape_configparser_value(value: str) -> str:
 
 class Settings(BaseSettings):
     app_name: str = "Libreria Ingles API"
+    # T-220 (E-02/E-11): tareas periódicas (vencimientos, campañas, correcciones pendientes).
+    # true = corren en un hilo junto con la API (local). En producción: false en la API y un
+    # proceso aparte `python -m app.jobs`. El lease en base evita corridas dobles.
+    jobs_in_process: bool = True
+    jobs_tick_seconds: float = 30.0
     # T-220 (E-13): marca visible del producto (títulos, encabezado, emails). Cambiar de producto
     # o de cliente = cambiar esta variable, no el código.
     brand_name: str = "Librería Inglés"
