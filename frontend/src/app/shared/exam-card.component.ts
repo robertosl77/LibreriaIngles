@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService, errorMessage } from '../core/api.service';
 import { ExamStatus } from '../core/models';
 import { ToastService } from '../core/toast.service';
+import { BrandService } from '../core/brand.service';
 
 /** Examen de aprobación del nivel actual (T-024 + presentación progresiva T-045). */
 @Component({
@@ -33,7 +34,7 @@ import { ToastService } from '../core/toast.service';
 
           @if (s.passed) {
             <p class="muted">
-              Tu certificado de Librería Inglés ya está disponible.
+              Tu certificado de {{ brand.name() }} ya está disponible.
               @if (s.nextLevel; as next) {
                 @if (next.available) {
                   Podés seguir con {{ next.level }}.
@@ -194,6 +195,7 @@ import { ToastService } from '../core/toast.service';
   `
 })
 export class ExamCardComponent implements OnInit {
+  readonly brand = inject(BrandService);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);

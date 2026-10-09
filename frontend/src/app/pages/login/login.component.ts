@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { AuthConfig } from '../../core/models';
+import { BrandService } from '../../core/brand.service';
 
 interface GoogleAccounts {
   accounts: {
@@ -46,7 +47,7 @@ function loadGoogleScript(): Promise<void> {
   imports: [FormsModule, RouterLink],
   template: `
     <main class="login">
-      <a class="brand" routerLink="/">Librería Inglés</a>
+      <a class="brand" routerLink="/">{{ brand.name() }}</a>
       <section class="card login-card stack">
         <div>
           <h1>Ingresar</h1>
@@ -123,6 +124,7 @@ function loadGoogleScript(): Promise<void> {
   `
 })
 export class LoginComponent implements OnInit, AfterViewInit {
+  readonly brand = inject(BrandService);
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly zone = inject(NgZone);

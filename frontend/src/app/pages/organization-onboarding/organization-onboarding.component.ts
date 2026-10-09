@@ -20,6 +20,7 @@ import {
   EmailVerificationStartResult,
   OrganizationOnboardingEmailService
 } from './organization-onboarding-email.service';
+import { BrandService } from '../../core/brand.service';
 
 @Component({
   selector: 'app-organization-onboarding',
@@ -27,7 +28,7 @@ import {
   template: `
     <main class="onboarding">
       <header class="topbar">
-        <a class="brand" routerLink="/">Librería Inglés</a>
+        <a class="brand" routerLink="/">{{ brand.name() }}</a>
         <a class="back" routerLink="/">Volver al inicio</a>
       </header>
 
@@ -115,7 +116,7 @@ import {
 
               @if (companyLookup.platform.alreadyRegistered) {
                 <p class="platform-warning">
-                  Esta organización ya está registrada en Librería Inglés. No se puede iniciar un alta duplicada.
+                  Esta organización ya está registrada en {{ brand.name() }}. No se puede iniciar un alta duplicada.
                 </p>
               } @else if (companyLookup.platform.onboardingInProgress) {
                 <div class="platform-warning stack-small">
@@ -506,6 +507,7 @@ import {
   `
 })
 export class OrganizationOnboardingComponent implements OnInit, OnDestroy {
+  readonly brand = inject(BrandService);
   private readonly api = inject(ApiService);
   private readonly validation = inject(OrganizationOnboardingValidationService);
   private readonly emailVerification = inject(OrganizationOnboardingEmailService);

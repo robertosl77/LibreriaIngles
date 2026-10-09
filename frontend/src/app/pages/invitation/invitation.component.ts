@@ -6,13 +6,14 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService, errorMessage } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { InvitationPreview, InvitationRedemption } from '../../core/models';
+import { BrandService } from '../../core/brand.service';
 
 @Component({
   selector: 'app-invitation',
   imports: [DatePipe, RouterLink],
   template: `
     <main class="invite-page">
-      <a class="brand" routerLink="/">Librería Inglés</a>
+      <a class="brand" routerLink="/">{{ brand.name() }}</a>
       <section class="card invite-card stack">
         @if (loading()) {
           <p class="muted"><span class="spinner"></span> Cargando invitación…</p>
@@ -90,6 +91,7 @@ import { InvitationPreview, InvitationRedemption } from '../../core/models';
   `
 })
 export class InvitationComponent implements OnInit {
+  readonly brand = inject(BrandService);
   private readonly api = inject(ApiService);
   readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);

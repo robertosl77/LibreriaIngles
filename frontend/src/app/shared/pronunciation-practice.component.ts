@@ -1,5 +1,6 @@
-import { Component, OnDestroy, output, signal } from '@angular/core';
+import { Component, OnDestroy, output, signal, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { BrandService } from '../core/brand.service';
 
 interface SpeechAlternative {
   transcript: string;
@@ -112,7 +113,7 @@ export interface PronunciationPracticeEvent {
 
       <footer>
         <span class="muted small">
-          Librería Inglés no guarda el audio. El reconocimiento lo hace tu navegador
+          {{ brand.name() }} no guarda el audio. El reconocimiento lo hace tu navegador
           (puede usar un servicio de Google o Microsoft). Esta práctica no cuenta como respuesta.
         </span>
         <button class="btn btn-sm" type="button" (click)="closed.emit()">Entendido, volver al ejercicio</button>
@@ -156,6 +157,7 @@ export interface PronunciationPracticeEvent {
   `
 })
 export class PronunciationPracticeComponent implements OnDestroy {
+  readonly brand = inject(BrandService);
   readonly closed = output<void>();
   readonly practiced = output<PronunciationPracticeEvent>();
 

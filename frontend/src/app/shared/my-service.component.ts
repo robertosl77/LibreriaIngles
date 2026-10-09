@@ -4,12 +4,19 @@ import { RouterLink } from '@angular/router';
 
 import { AuthService } from '../core/auth.service';
 import { AiSource } from '../core/models';
+import { BrandService } from '../core/brand.service';
 
-export const SOURCE_LABELS: Record<AiSource, string> = {
-  BYOK: 'Tus propias API keys',
-  PLATFORM: 'IA de Librería Inglés',
-  HYBRID: 'Híbrido: tus keys y, si fallan, Librería Inglés'
-};
+/** T-220 (E-13): la marca llega del backend; las etiquetas se arman con ella. */
+export function sourceLabel(source: AiSource, brand: string): string {
+  switch (source) {
+    case 'BYOK':
+      return 'Tus propias API keys';
+    case 'PLATFORM':
+      return `IA de ${brand}`;
+    case 'HYBRID':
+      return `Híbrido: tus keys y, si fallan, ${brand}`;
+  }
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -49,7 +56,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
               Generás y corregís tus clases con tus propias API keys.
             }
             @if (s.source === 'HYBRID') {
-              Primero se usan tus conexiones; si fallan, la IA de Librería Inglés.
+              Primero se usan tus conexiones; si fallan, la IA de {{ brand.name() }}.
             }
           </p>
         </section>
@@ -65,6 +72,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
   `
 })
 export class MyServiceComponent {
+  readonly brand = inject(BrandService);
   private readonly auth = inject(AuthService);
 
   /** En el inicio solo se muestra si hay un servicio otorgado o un aviso. */
@@ -74,7 +82,7 @@ export class MyServiceComponent {
   readonly ownKeys = computed(() => this.auth.me()?.ai.own ?? 0);
   readonly sourceLabel = computed(() => {
     const s = this.service();
-    return s ? SOURCE_LABELS[s.source] : '';
+    return s ? sourceLabel(s.source, this.brand.name()) : '';
   });
   readonly daysLeftLabel = computed(() => {
     const expires = this.service()?.expiresAt;

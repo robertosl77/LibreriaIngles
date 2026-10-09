@@ -107,3 +107,93 @@ def test_branding_endpoint_is_public_and_configurable(client, monkeypatch) -> No
     assert client.get(f"{API}/system/branding").json() == {"name": settings.brand_name}
     monkeypatch.setattr(settings, "brand_name", "Pañales SA")
     assert client.get(f"{API}/system/branding").json() == {"name": "Pañales SA"}
+
+
+# ---------------------------------------------------------------- E-01 contexto de empresa
+
+
+def _student_with_level(client, email: str = "ana@example.com") -> dict:
+    headers = login(client, email)
+    assert client.put(f"{API}/me/level", json={"level": "A1"}, headers=headers).status_code == 200
+    client.post(
+        f"{API}/ai/connections",
+        json={"provider": "MOCK", "name": "Simulado", "model": "mock", "priority": 1},
+        headers=headers,
+    )
+    return headers
+
+
+def _organization(name: str = "Acme") -> int:
+    from app.organizations.models import Organization
+
+    with SessionLocal() as db:
+        org = Organization(slug=name.lower(), legal_name=f"{name} SA", display_name=name)
+        db.add(org)
+        db.commit()
+        return org.id
+
+
+def _membership(email: str, organization_id: int, *, status=None) -> int:
+    from app.accounts.models import Account
+    from app.memberships.models import Membership, MembershipStatus
+
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == email))
+        membership = Membership(
+            account_id=account.id,
+            organization_id=organization_id,
+            status=status or MembershipStatus.ACTIVE,
+        )
+        db.add(membership)
+        db.commit()
+        return membership.id
+
+
+def test_without_header_the_request_is_personal(client) -> None:
+    headers = _student_with_level(client)
+    me = client.get(f"{API}/me", headers=headers).json()
+    assert me["activeOrganizationId"] is None
+    assert me["organizations"] == []
+
+
+def test_header_with_active_membership_sets_the_organization(client) -> None:
+    from app.learning.models import ClassSession
+
+    headers = _student_with_level(client)
+    org_id = _organization()
+    membership_id = _membership("ana@example.com", org_id)
+    org_headers = {**headers, "X-Organization-Id": str(org_id)}
+
+    me = client.get(f"{API}/me", headers=org_headers).json()
+    assert me["activeOrganizationId"] == org_id
+    assert me["organizations"] == [{"id": org_id, "name": "Acme", "role": "STUDENT"}]
+
+    klass = client.post(f"{API}/classes", headers=org_headers)
+    assert klass.status_code == 201, klass.text
+    with SessionLocal() as db:
+        session = db.get(ClassSession, klass.json()["id"])
+        # Antes quedaba siempre None aunque el alumno estudiara para su empresa.
+        assert session.organization_id == org_id
+        assert session.membership_id == membership_id
+
+
+def test_header_of_a_foreign_organization_is_rejected(client) -> None:
+    headers = _student_with_level(client)
+    _student_with_level(client, "beto@example.com")
+    org_id = _organization()
+    _membership("beto@example.com", org_id)
+
+    response = client.get(f"{API}/me", headers={**headers, "X-Organization-Id": str(org_id)})
+    assert response.status_code == 403
+
+
+def test_revoked_membership_cannot_act_for_the_organization(client) -> None:
+    from app.memberships.models import MembershipStatus
+
+    headers = _student_with_level(client)
+    org_id = _organization()
+    _membership("ana@example.com", org_id, status=MembershipStatus.REVOKED)
+
+    response = client.post(f"{API}/classes", headers={**headers, "X-Organization-Id": str(org_id)})
+    assert response.status_code == 403
+    assert client.get(f"{API}/me", headers=headers).json()["organizations"] == []

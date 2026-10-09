@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from '../core/auth.service';
+import { BrandService } from '../core/brand.service';
 
 @Component({
   selector: 'app-shell',
@@ -9,7 +10,7 @@ import { AuthService } from '../core/auth.service';
   template: `
     <header class="shell-header">
       <div class="shell-inner">
-        <a class="brand" routerLink="/app">Librería Inglés</a>
+        <a class="brand" routerLink="/app">{{ brand.name() }}</a>
         <nav aria-label="Principal">
           <a routerLink="/app" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Inicio</a>
           <a routerLink="/app/progreso" routerLinkActive="active">Progreso</a>
@@ -22,6 +23,20 @@ import { AuthService } from '../core/auth.service';
         </nav>
         <div class="user">
           @if (auth.me(); as me) {
+            @if (me.organizations.length > 0) {
+              <!-- T-220 (E-01): en qué empresa actúa la sesión (personal o una membresía activa). -->
+              <select
+                class="org-select"
+                aria-label="Organización"
+                [value]="me.activeOrganizationId ?? ''"
+                (change)="switchOrganization($any($event.target).value)"
+              >
+                <option value="">Personal</option>
+                @for (org of me.organizations; track org.id) {
+                  <option [value]="org.id">{{ org.name }}</option>
+                }
+              </select>
+            }
             @if (me.studyProfile.operationalLevel) {
               <a class="chip" routerLink="/app/nivel" title="Nivel operativo">{{ me.studyProfile.operationalLevel }}</a>
             }
@@ -80,6 +95,15 @@ import { AuthService } from '../core/auth.service';
     .user .chip {
       text-decoration: none;
     }
+    .org-select {
+      font: inherit;
+      font-size: 0.85rem;
+      padding: 0.25rem 0.4rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+    }
     @media (max-width: 640px) {
       .email { display: none; }
       nav { order: 3; flex-basis: 100%; }
@@ -87,5 +111,10 @@ import { AuthService } from '../core/auth.service';
   `
 })
 export class ShellComponent {
+  readonly brand = inject(BrandService);
   readonly auth = inject(AuthService);
+
+  switchOrganization(value: string): void {
+    void this.auth.switchOrganization(value ? Number(value) : null);
+  }
 }

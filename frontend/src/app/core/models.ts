@@ -20,6 +20,16 @@ export interface Me {
   };
   ai: { connections: number; available: number; own: number };
   service: MyService;
+  /** T-220 (E-01): empresas en las que la cuenta puede actuar. */
+  organizations: MyOrganization[];
+  /** Empresa del request (null = actividad personal). */
+  activeOrganizationId: number | null;
+}
+
+export interface MyOrganization {
+  id: number;
+  name: string;
+  role: 'ADMIN' | 'STUDENT';
 }
 
 /** Servicio vigente de la cuenta (T-004): vínculo × fuente de IA. */

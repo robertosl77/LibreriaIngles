@@ -7,6 +7,7 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { Certificate } from '../../core/models';
 import { ToastService } from '../../core/toast.service';
+import { BrandService } from '../../core/brand.service';
 
 /**
  * Certificado de nivel (T-024). Página pública de verificación y a la vez el documento:
@@ -34,7 +35,7 @@ import { ToastService } from '../../core/toast.service';
         <article class="sheet" aria-label="Certificado">
           <div class="frame">
             <header>
-              <p class="brand">Librería Inglés</p>
+              <p class="brand">{{ brand.name() }}</p>
               <h1>Certificado de nivel</h1>
               <p class="lead">Se certifica que</p>
             </header>
@@ -73,7 +74,7 @@ import { ToastService } from '../../core/toast.service';
       @if (!loading() && !cert()) {
         <section class="card missing">
           <h1>Certificado no encontrado</h1>
-          <p class="muted">El código <strong>{{ code() }}</strong> no corresponde a ningún certificado emitido por Librería Inglés.</p>
+          <p class="muted">El código <strong>{{ code() }}</strong> no corresponde a ningún certificado emitido por {{ brand.name() }}.</p>
         </section>
       }
     </main>
@@ -148,6 +149,7 @@ import { ToastService } from '../../core/toast.service';
   `
 })
 export class CertificateComponent {
+  readonly brand = inject(BrandService);
   readonly code = input.required<string>();
 
   readonly auth = inject(AuthService);

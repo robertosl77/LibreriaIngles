@@ -10,6 +10,7 @@ import { ToastService } from '../../core/toast.service';
 import { ExamCardComponent } from '../../shared/exam-card.component';
 import { MyServiceComponent } from '../../shared/my-service.component';
 import { STATUS_LABELS, statusChip } from '../../shared/status';
+import { BrandService } from '../../core/brand.service';
 
 @Component({
   selector: 'app-home',
@@ -98,12 +99,12 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
                     } @else if (corporate()) {
                       <p class="muted small">Tu organización administra la IA de tus clases: no tenés que configurar nada.</p>
                     } @else {
-                      <p class="muted small">Tu servicio usa la IA de Librería Inglés: no tenés que configurar nada.</p>
+                      <p class="muted small">Tu servicio usa la IA de {{ brand.name() }}: no tenés que configurar nada.</p>
                     }
                   }
                   @case ('optional') {
                     <p class="muted small">
-                      Tu servicio usa la IA de Librería Inglés. Si cargás tus propias API keys, se usan primero.
+                      Tu servicio usa la IA de {{ brand.name() }}. Si cargás tus propias API keys, se usan primero.
                     </p>
                   }
                   @default {
@@ -222,6 +223,7 @@ import { STATUS_LABELS, statusChip } from '../../shared/status';
   `
 })
 export class HomeComponent implements OnInit {
+  readonly brand = inject(BrandService);
   readonly auth = inject(AuthService);
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);

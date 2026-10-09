@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 
 import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
+import { BrandService } from '../../core/brand.service';
 
 @Component({
   selector: 'app-ai-sources-info',
@@ -17,7 +18,7 @@ import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
         </article>
         <article>
           <strong>Plataforma</strong>
-          <p class="muted small">La persona usa las conexiones de IA administradas por Librería Inglés.</p>
+          <p class="muted small">La persona usa las conexiones de IA administradas por {{ brand.name() }}.</p>
         </article>
         <article>
           <strong>Híbrido</strong>
@@ -53,4 +54,6 @@ import { CollapseCardComponent } from '../../shared/ui/collapse-card.component';
     }
   `
 })
-export class AiSourcesInfoComponent {}
+export class AiSourcesInfoComponent {
+  readonly brand = inject(BrandService);
+}

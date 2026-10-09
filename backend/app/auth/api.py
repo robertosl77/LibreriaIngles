@@ -9,7 +9,7 @@ from app.ai.models import AIConnection, AIConnectionOwnerType
 from app.ai.service import ai_sources, candidate_connections
 from app.auth import service
 from app.core.config import settings
-from app.core.deps import CurrentStudy, DbSession
+from app.core.deps import CurrentStudy, DbSession, active_memberships
 from app.core.security import create_access_token
 from app.curriculum.service import CEFR_LEVELS, available_levels
 from app.campaigns.service import reconcile_first_login_campaigns
@@ -159,6 +159,12 @@ def _me_payload(study, db) -> dict:
             or 0,
         },
         "service": service_payload,
+        # T-220 (E-01): empresas en las que puede actuar y la del request actual.
+        "organizations": [
+            {"id": org.id, "name": org.display_name, "role": membership.role.value}
+            for membership, org in active_memberships(db, account)
+        ],
+        "activeOrganizationId": study.organization_id,
     }
 
 

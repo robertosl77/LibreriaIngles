@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from app.accounts.models import Account, AccountStatus
 from app.core.security import InvalidSessionToken, decode_access_token
 from app.db import SessionLocal
+from app.memberships.models import Membership, MembershipRole, MembershipStatus
+from app.organizations.models import Organization
 from app.study_profiles.models import (
     AccountStudyProfile,
     AccountStudyProfileStatus,
@@ -59,6 +61,81 @@ def get_current_account(
 CurrentAccount = Annotated[Account, Depends(get_current_account)]
 
 
+ORGANIZATION_HEADER = "X-Organization-Id"
+
+
+@dataclass(frozen=True)
+class TenantContext:
+    """T-220 (E-01): empresa en la que actúa el request.
+
+    Sin header = actividad personal (organization_id None). Con header, la cuenta tiene que tener
+    una membresía ACTIVA en esa empresa activa; si no, 403. Ningún endpoint arma este dato a mano.
+    """
+
+    organization_id: int | None = None
+    membership_id: int | None = None
+    role: MembershipRole | None = None
+
+    @property
+    def is_personal(self) -> bool:
+        return self.organization_id is None
+
+
+PERSONAL = TenantContext()
+
+
+def resolve_tenant(db: Session, account: Account, organization_id: int | None) -> TenantContext:
+    if organization_id is None:
+        return PERSONAL
+    membership = db.scalar(
+        select(Membership)
+        .join(Organization, Organization.id == Membership.organization_id)
+        .where(
+            Membership.account_id == account.id,
+            Membership.organization_id == organization_id,
+            Membership.status == MembershipStatus.ACTIVE,
+            Organization.active.is_(True),
+        )
+    )
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tenés una membresía activa en esa organización.",
+        )
+    return TenantContext(
+        organization_id=membership.organization_id,
+        membership_id=membership.id,
+        role=membership.role,
+    )
+
+
+def get_tenant(
+    db: DbSession,
+    account: CurrentAccount,
+    x_organization_id: Annotated[int | None, Header(alias=ORGANIZATION_HEADER)] = None,
+) -> TenantContext:
+    return resolve_tenant(db, account, x_organization_id)
+
+
+CurrentTenant = Annotated[TenantContext, Depends(get_tenant)]
+
+
+def active_memberships(db: Session, account: Account) -> list[tuple[Membership, Organization]]:
+    """Empresas en las que la cuenta puede actuar (para el selector del front)."""
+    return list(
+        db.execute(
+            select(Membership, Organization)
+            .join(Organization, Organization.id == Membership.organization_id)
+            .where(
+                Membership.account_id == account.id,
+                Membership.status == MembershipStatus.ACTIVE,
+                Organization.active.is_(True),
+            )
+            .order_by(Organization.display_name)
+        ).all()
+    )
+
+
 @dataclass
 class StudyContext:
     """Cuenta autenticada + perfil de estudio activo.
@@ -89,14 +166,22 @@ def get_active_profile(db: Session, account: Account) -> StudyProfile | None:
     )
 
 
-def get_study_context(db: DbSession, account: CurrentAccount) -> StudyContext:
+def get_study_context(
+    db: DbSession, account: CurrentAccount, tenant: CurrentTenant
+) -> StudyContext:
     profile = get_active_profile(db, account)
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="La cuenta no tiene un perfil de estudio activo.",
         )
-    return StudyContext(account=account, profile=profile)
+    # T-220 (E-01): la empresa sale del request validado, no queda siempre en None.
+    return StudyContext(
+        account=account,
+        profile=profile,
+        organization_id=tenant.organization_id,
+        membership_id=tenant.membership_id,
+    )
 
 
 CurrentStudy = Annotated[StudyContext, Depends(get_study_context)]
