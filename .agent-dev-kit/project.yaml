@@ -37,6 +37,10 @@ git_workflow:
     protected_branches: deny
     exception: explicit_human_authorization
 
+context:
+  rule_sources:
+    git_workflow: "docs/tareas_pendientes_v0_1.md#4. Regla de ramas a partir de ahora"
+
 gateway:
   session_ttl_seconds: 3600
   max_sessions: 100
