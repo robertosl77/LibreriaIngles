@@ -50,6 +50,8 @@ from app.verifications.service import (
 )
 
 router = APIRouter(prefix="/organization-onboarding", tags=["organization-onboarding"])
+# T-220 (E-07): rutas de desarrollo en un router aparte; solo se montan fuera de producción.
+dev_router = APIRouter(prefix="/organization-onboarding", tags=["organization-onboarding"])
 
 
 class CompanyLookupIn(BaseModel):
@@ -665,7 +667,7 @@ def change_referent_email(
     }
 
 
-@router.delete("/dev-purge")
+@dev_router.delete("/dev-purge")
 def dev_purge_onboarding(
     country: str,
     taxIdType: str,

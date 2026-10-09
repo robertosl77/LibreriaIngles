@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from app.ai.service import NoAIAvailable, run_platform_json_task
 from app.ai.usage import AIUsageContext
 from app.benefits.models import Benefit
-from app.benefits.service import benefit_duration, seed_benefits
+from app.benefits.service import benefit_duration
 from app.campaigns.capabilities import (
     CampaignCapabilityError,
     ai_capabilities_text,
@@ -30,7 +30,7 @@ from app.campaigns.models import (
     CampaignStatus,
     CampaignTrigger,
 )
-from app.campaigns.service import preview_audience, seed_campaigns
+from app.campaigns.service import preview_audience
 from app.core.deps import DbSession
 from app.platform.api import PlatformOwner
 from app.subscriptions.models import Plan, ServiceLinkType
@@ -803,9 +803,6 @@ def _campaign(db: DbSession, campaign_id: int) -> Campaign:
 
 @router.get("")
 def list_campaigns(_: PlatformOwner, db: DbSession) -> list[dict]:
-    seed_benefits(db)
-    seed_campaigns(db)
-    db.commit()
     campaigns = db.scalars(
         select(Campaign)
         .where(

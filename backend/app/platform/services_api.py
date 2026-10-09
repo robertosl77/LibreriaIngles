@@ -30,9 +30,11 @@ from app.subscriptions.models import (
     SubscriptionOrigin,
     SubscriptionStatus,
 )
-from app.subscriptions.service import effective_service, revoke_service, seed_services
+from app.subscriptions.service import effective_service, revoke_service
 
 router = APIRouter(prefix="/platform", tags=["platform"])
+# T-220 (E-07): rutas de desarrollo en un router aparte; solo se montan fuera de producción.
+dev_router = APIRouter(prefix="/platform", tags=["platform"])
 
 ACCOUNTS_PAGE = 50
 
@@ -154,12 +156,8 @@ def _apply(plan: Plan, payload: ServiceUpdateIn, db: DbSession) -> None:
 
 @router.get("/services")
 def list_services(_: PlatformOwner, db: DbSession) -> list[dict]:
-    seed_services(db)
-    db.commit()
     plans = db.scalars(select(Plan).order_by(Plan.id)).all()
-    rows = [_service_out(db, plan) for plan in plans]
-    db.commit()
-    return rows
+    return [_service_out(db, plan) for plan in plans]
 
 
 @router.put("/services/{service_id}")
@@ -304,7 +302,7 @@ def revoke(account_id: int, _: PlatformOwner, db: DbSession) -> dict:
     return _account_out(db, account)
 
 
-@router.delete("/accounts/{account_id}/dev-purge", status_code=status.HTTP_204_NO_CONTENT)
+@dev_router.delete("/accounts/{account_id}/dev-purge", status_code=status.HTTP_204_NO_CONTENT)
 def dev_purge_account(account_id: int, _: PlatformOwner, db: DbSession) -> None:
     """Borra físicamente una cuenta de prueba. Disponible solo en local/dev/test."""
     if not settings.dev_account_purge_allowed:

@@ -92,7 +92,6 @@ def search_job_titles(
     *,
     limit: int = 8,
 ) -> list[tuple[JobTitle, float]]:
-    seed_job_titles(db)
     rows = db.scalars(
         select(JobTitle)
         .where(JobTitle.active.is_(True))
@@ -137,7 +136,6 @@ def resolve_job_title(
     *,
     confirm_similar: bool = False,
 ) -> dict:
-    seed_job_titles(db)
     display = display_job_title(value)
     normalized = normalize_job_title(display)
     if len(display) < 2 or not normalized:

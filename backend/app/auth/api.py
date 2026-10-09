@@ -17,6 +17,8 @@ from app.learning.models import ClassSession, ClassSessionStatus
 from app.subscriptions.service import effective_service
 
 router = APIRouter(tags=["auth"])
+# T-220 (E-07): rutas de desarrollo en un router aparte; solo se montan fuera de producción.
+dev_router = APIRouter(tags=["auth"])
 logger = logging.getLogger(__name__)
 
 
@@ -83,7 +85,7 @@ def login_google(payload: GoogleLoginRequest, db: DbSession) -> TokenResponse:
     return TokenResponse(accessToken=create_access_token(account.id))
 
 
-@router.post("/auth/dev-login", response_model=TokenResponse)
+@dev_router.post("/auth/dev-login", response_model=TokenResponse)
 def login_dev(payload: DevLoginRequest, db: DbSession) -> TokenResponse:
     if not settings.dev_login_allowed:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No disponible.")

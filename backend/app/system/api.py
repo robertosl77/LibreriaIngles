@@ -17,7 +17,7 @@ def health() -> dict[str, str]:
 @router.get("/meta", tags=["system"])
 def meta() -> dict[str, object]:
     return {
-        "product": "Librería Inglés",
+        "product": settings.brand_name,
         "apiVersion": "v1",
         "architecture": {
             "backend": "FastAPI",
@@ -26,3 +26,9 @@ def meta() -> dict[str, object]:
             "domains": True,
         },
     }
+
+
+@router.get("/system/branding", tags=["system"])
+def branding() -> dict[str, str]:
+    """T-220 (E-13): marca visible del producto. Pública: la usa la pantalla de inicio sin sesión."""
+    return {"name": settings.brand_name}

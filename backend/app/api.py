@@ -2,17 +2,21 @@ from fastapi import APIRouter
 
 from app.ai.api import router as ai_router
 from app.ai.usage_api import router as ai_usage_router
+from app.auth.api import dev_router as auth_dev_router
 from app.auth.api import router as auth_router
 from app.classes.api import router as classes_router
+from app.core.config import settings
 from app.campaigns.api import router as campaign_notices_router
 from app.exams.api import router as exams_router
 from app.invitations.api import router as invitations_router
+from app.organizations.api import dev_router as organization_onboarding_dev_router
 from app.organizations.api import router as organization_onboarding_router
 from app.platform.api import router as platform_router
 from app.platform.benefits_api import router as platform_benefits_router
 from app.platform.campaigns_api import router as platform_campaigns_router
 from app.platform.campaign_policies_api import router as platform_campaign_policies_router
 from app.platform.invitations_api import router as platform_invitations_router
+from app.platform.services_api import dev_router as platform_services_dev_router
 from app.platform.services_api import router as platform_services_router
 from app.progress.api import router as progress_router
 from app.system.api import router as system_router
@@ -34,3 +38,10 @@ router.include_router(platform_campaign_policies_router)
 router.include_router(platform_campaigns_router)
 router.include_router(platform_invitations_router)
 router.include_router(platform_services_router)
+
+# T-220 (E-07): las rutas de desarrollo (dev-login, dev-purge) no existen en producción.
+# Cada una mantiene además su propio flag (DEV_LOGIN_ENABLED, entorno local/dev/test).
+if settings.dev_routes_mounted:
+    router.include_router(auth_dev_router)
+    router.include_router(organization_onboarding_dev_router)
+    router.include_router(platform_services_dev_router)

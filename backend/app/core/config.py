@@ -15,6 +15,9 @@ def escape_configparser_value(value: str) -> str:
 
 class Settings(BaseSettings):
     app_name: str = "Libreria Ingles API"
+    # T-220 (E-13): marca visible del producto (títulos, encabezado, emails). Cambiar de producto
+    # o de cliente = cambiar esta variable, no el código.
+    brand_name: str = "Librería Inglés"
     app_env: str = "local"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./data/libreria_ingles.db"
@@ -102,6 +105,11 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() in {"production", "prod"}
+
+    @property
+    def dev_routes_mounted(self) -> bool:
+        """T-220 (E-07): las rutas dev-* solo se registran fuera de producción."""
+        return not self.is_production
 
     @property
     def dev_login_allowed(self) -> bool:

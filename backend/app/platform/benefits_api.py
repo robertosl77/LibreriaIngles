@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 
 from app.benefits.models import Benefit, utcnow
-from app.benefits.service import benefit_duration, seed_benefits
+from app.benefits.service import benefit_duration
 from app.campaigns.models import Campaign, CampaignStatus
 from app.core.deps import DbSession
 from app.invitations.models import Invitation, InvitationStatus
@@ -143,8 +143,6 @@ def _apply(benefit: Benefit, payload: BenefitIn, db: DbSession) -> None:
 
 @router.get("")
 def list_benefits(_: PlatformOwner, db: DbSession) -> list[dict]:
-    seed_benefits(db)
-    db.commit()
     rows = db.scalars(
         select(Benefit)
         .where(Benefit.organization_id.is_(None), Benefit.deleted_at.is_(None))

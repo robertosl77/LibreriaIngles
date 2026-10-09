@@ -1237,7 +1237,6 @@ def _evaluate_campaigns(
 ) -> list[CampaignGrant]:
     if account.platform_role == PlatformRole.PLATFORM_OWNER:
         return []
-    seed_campaigns(db)
     now = utcnow()
     campaigns = db.scalars(
         select(Campaign)
