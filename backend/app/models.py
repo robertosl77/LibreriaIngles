@@ -16,4 +16,5 @@ from app.subscriptions.models import *  # noqa: F401,F403
 from app.campaigns.models import *  # noqa: F401,F403
 from app.exams.models import *  # noqa: F401,F403
 from app.jobs.models import *  # noqa: F401,F403
+from app.limits.models import *  # noqa: F401,F403
 from app.verifications.models import *  # noqa: F401,F403

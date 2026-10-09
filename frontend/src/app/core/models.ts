@@ -1180,3 +1180,33 @@ export interface BankReviewItem {
   timesServed: number;
   reports: { reason: 'WRONG' | 'REPEATED'; at: string; email: string | null; reporterTotal: number }[];
 }
+
+/** T-220 (N-01): catálogo único de límites (plan → plataforma → default). */
+export interface LimitDefinition {
+  key: string;
+  label: string;
+  unit: string;
+  description: string;
+  default: number | null;
+  platformValue: number | null;
+}
+
+export interface PlanLimits {
+  id: number;
+  code: string;
+  name: string;
+  source: AiSource;
+  active: boolean;
+  /** Solo las claves que el plan pisa; las demás heredan la plataforma. */
+  values: Record<string, number | null>;
+}
+
+export interface PlatformLimits {
+  definitions: LimitDefinition[];
+  plans: PlanLimits[];
+}
+
+export interface PlatformLimitsUpdate {
+  platform: Record<string, number | null>;
+  plans: Record<number, Record<string, number | null>>;
+}

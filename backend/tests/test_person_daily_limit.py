@@ -44,10 +44,10 @@ def _use(db, connection, account, count, success=True, operation="generate_class
 
 
 def _cap(db, value):
-    from app.ai.models import AIPlatformLimit
     from app.ai.service import PERSON_DAILY_REQUESTS
+    from app.limits.models import PlatformLimit
 
-    db.merge(AIPlatformLimit(key=PERSON_DAILY_REQUESTS, value=value))
+    db.merge(PlatformLimit(key=PERSON_DAILY_REQUESTS, value=value))
     db.flush()
 
 

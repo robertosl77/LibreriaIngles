@@ -33,10 +33,12 @@ from app.ai.models import (
     utcnow,
 )
 from app.ai import limits as quota
+from app.ai.limits_catalog import PERSON_DAILY_REQUESTS as PERSON_DAILY_REQUESTS_LIMIT
 from app.ai.providers import PROVIDERS, ProviderError, build_provider, cached_input_tokens
 from app.ai.usage import AIUsageContext, build_usage_event
 from app.core.config import settings
 from app.core.security import decrypt_secret
+from app.limits.service import resolve as resolve_limit
 from app.subscriptions.models import AISource
 from app.subscriptions.service import effective_service
 
@@ -403,14 +405,13 @@ def platform_requests(db: Session, account_id: int, *, since) -> int:
     )
 
 
-PERSON_DAILY_REQUESTS = "person_daily_requests"
+PERSON_DAILY_REQUESTS = PERSON_DAILY_REQUESTS_LIMIT.key
 
 
-def person_daily_limit(db: Session) -> int | None:
-    from app.ai.models import AIPlatformLimit
-
-    row = db.get(AIPlatformLimit, PERSON_DAILY_REQUESTS)
-    return row.value if row is not None and row.value else None
+def person_daily_limit(db: Session, account: Account | None = None) -> int | None:
+    """T-220 (N-01): se resuelve en el catálogo único de límites (plan → plataforma → default)."""
+    value = resolve_limit(db, PERSON_DAILY_REQUESTS, account=account).value
+    return value or None
 
 
 def limit_reason(db: Session, connection: AIConnection, account: Account) -> str | None:
@@ -422,7 +423,7 @@ def limit_reason(db: Session, connection: AIConnection, account: Account) -> str
         and account is not None
         and account.platform_role != PlatformRole.PLATFORM_OWNER
     ):
-        cap = person_daily_limit(db)
+        cap = person_daily_limit(db, account)
         if cap is not None and platform_requests(db, account.id, since=utcnow() - LIMIT_WINDOW) >= cap:
             return "alcanzaste tu límite diario de uso de la IA"
     if connection.daily_request_limit is None and connection.per_account_daily_limit is None:

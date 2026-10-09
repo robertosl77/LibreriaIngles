@@ -220,29 +220,97 @@ class AILimits(BaseModel):
 
 
 def _ai_limits(db) -> dict:
-    from app.ai.service import person_daily_limit
+    from app.ai.service import PERSON_DAILY_REQUESTS
+    from app.limits.service import platform_value
 
-    return {"personDailyRequests": person_daily_limit(db)}
+    return {"personDailyRequests": platform_value(db, PERSON_DAILY_REQUESTS)}
 
 
 @router.get("/ai-limits")
 def get_ai_limits(_: PlatformOwner, db: DbSession) -> dict:
-    """Tope diario de pedidos por persona, sumando todas las conexiones de la plataforma (vacío = sin tope)."""
+    """Tope diario de pedidos por persona, sumando todas las conexiones de la plataforma (vacío = sin tope).
+
+    T-220: atajo al valor de plataforma del catálogo único (GET/PUT /platform/limits)."""
     return _ai_limits(db)
 
 
 @router.put("/ai-limits")
 def set_ai_limits(payload: AILimits, _: PlatformOwner, db: DbSession) -> dict:
-    from app.ai.models import AIPlatformLimit
     from app.ai.service import PERSON_DAILY_REQUESTS
+    from app.limits.service import LimitValueError, set_platform_value
 
-    value = payload.personDailyRequests
-    if value is not None and value < 1:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El tope tiene que ser 1 o más (vacío = sin tope).")
-    row = db.get(AIPlatformLimit, PERSON_DAILY_REQUESTS)
-    if row is None:
-        db.add(AIPlatformLimit(key=PERSON_DAILY_REQUESTS, value=value))
-    else:
-        row.value = value
+    try:
+        set_platform_value(db, PERSON_DAILY_REQUESTS, payload.personDailyRequests)
+    except LimitValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     db.commit()
     return _ai_limits(db)
+
+
+# ---------------------------------------------------------------- T-220 (N-01): límites en un solo lugar
+
+
+class LimitsUpdate(BaseModel):
+    """Valores de plataforma y propios de cada plan. Plan sin clave = hereda la plataforma."""
+
+    platform: dict[str, int | None] = {}
+    plans: dict[int, dict[str, int | None]] = {}
+
+
+def _limits_payload(db) -> dict:
+    from app.limits.registry import limit_definitions
+    from app.limits.service import plan_overrides, platform_value
+    from app.subscriptions.models import Plan
+
+    definitions = limit_definitions()
+    plans = db.scalars(select(Plan).order_by(Plan.id)).all()
+    return {
+        "definitions": [
+            {
+                "key": d.key,
+                "label": d.label,
+                "unit": d.unit,
+                "description": d.description,
+                "default": d.default,
+                "platformValue": platform_value(db, d.key),
+            }
+            for d in definitions
+        ],
+        "plans": [
+            {
+                "id": plan.id,
+                "code": plan.code,
+                "name": plan.name,
+                "source": plan.ai_source.value,
+                "active": plan.active,
+                "values": plan_overrides(plan),
+            }
+            for plan in plans
+        ],
+    }
+
+
+@router.get("/limits")
+def get_limits(_: PlatformOwner, db: DbSession) -> dict:
+    """Catálogo único de límites: qué hay, cuánto vale en la plataforma y qué plan lo pisa."""
+    return _limits_payload(db)
+
+
+@router.put("/limits")
+def set_limits(payload: LimitsUpdate, _: PlatformOwner, db: DbSession) -> dict:
+    from app.limits.service import LimitValueError, set_plan_overrides, set_platform_value
+    from app.subscriptions.models import Plan
+
+    try:
+        for key, value in payload.platform.items():
+            set_platform_value(db, key, value)
+        for plan_id, values in payload.plans.items():
+            plan = db.get(Plan, plan_id)
+            if plan is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, f"Servicio {plan_id} inexistente.")
+            set_plan_overrides(plan, values)
+    except (LimitValueError, KeyError) as exc:
+        db.rollback()
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc).strip("'")) from exc
+    db.commit()
+    return _limits_payload(db)

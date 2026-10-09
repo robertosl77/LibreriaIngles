@@ -359,3 +359,112 @@ def test_in_process_worker_runs_jobs_and_stops(client) -> None:
         worker.stop()
     with SessionLocal() as db:
         assert db.scalar(select(func.count(JobLease.name)).where(JobLease.last_ok.is_(True))) >= 3
+
+
+# ---------------------------------------------------------------- N-01 / E-08 límites en un solo lugar
+
+
+def _platform_connection_and_usage(db, account, count: int):
+    from app.ai.models import AIConnection, AIConnectionOwnerType, AIUsageEvent
+
+    connection = AIConnection(
+        provider="MOCK", name="Plataforma", model="mock", priority=1, active=True,
+        owner_type=AIConnectionOwnerType.PLATFORM,
+    )
+    db.add(connection)
+    db.flush()
+    for _ in range(count):
+        db.add(AIUsageEvent(
+            connection_id=connection.id, connection_name=connection.name,
+            owner_type=connection.owner_type, provider="MOCK", model="mock",
+            operation="generate_class", account_id=account.id, success=True, total_tokens=10,
+        ))
+    db.flush()
+    return connection
+
+
+def test_limit_resolves_plan_then_platform_then_default(client) -> None:
+    from app.accounts.models import Account
+    from app.ai.service import PERSON_DAILY_REQUESTS, limit_reason
+    from app.limits.service import resolve, set_plan_overrides, set_platform_value
+    from app.subscriptions.models import Plan
+    from app.subscriptions.service import grant_service
+
+    login(client)
+    with SessionLocal() as db:
+        account = db.scalar(select(Account).where(Account.email == "roberto@example.com"))
+        connection = _platform_connection_and_usage(db, account, 5)
+
+        # Default declarado: sin tope.
+        assert resolve(db, PERSON_DAILY_REQUESTS, account=account).source == "DEFAULT"
+        assert limit_reason(db, connection, account) is None
+
+        # Plataforma: 5 por persona → ya llegó.
+        set_platform_value(db, PERSON_DAILY_REQUESTS, 5)
+        assert resolve(db, PERSON_DAILY_REQUESTS, account=account).source == "PLATFORM"
+        assert limit_reason(db, connection, account) is not None
+
+        # Un plan pago con su propio tope gana sobre la plataforma.
+        paid = db.scalar(select(Plan).where(Plan.code == "INDIVIDUAL_PLATFORM"))
+        set_plan_overrides(paid, {PERSON_DAILY_REQUESTS: 50})
+        grant_service(db, account, paid, granted_by=None, days=30)
+        resolved = resolve(db, PERSON_DAILY_REQUESTS, account=account)
+        assert (resolved.value, resolved.source) == (50, "PLAN")
+        assert limit_reason(db, connection, account) is None
+
+        # Plan sin la clave: hereda la plataforma.
+        set_plan_overrides(paid, {})
+        assert resolve(db, PERSON_DAILY_REQUESTS, account=account).source == "PLATFORM"
+
+
+def test_limits_endpoint_is_the_single_place_to_configure(client) -> None:
+    from app.subscriptions.models import Plan
+
+    headers = owner(client)
+    data = client.get(f"{API}/platform/limits", headers=headers).json()
+    keys = [d["key"] for d in data["definitions"]]
+    assert "person_daily_requests" in keys
+    with SessionLocal() as db:
+        plan_id = db.scalar(select(Plan.id).where(Plan.code == "INDIVIDUAL_PLATFORM"))
+
+    saved = client.put(
+        f"{API}/platform/limits",
+        json={"platform": {"person_daily_requests": 35}, "plans": {str(plan_id): {"person_daily_requests": 80}}},
+        headers=headers,
+    )
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["definitions"][keys.index("person_daily_requests")]["platformValue"] == 35
+    plan = next(p for p in body["plans"] if p["id"] == plan_id)
+    assert plan["values"] == {"person_daily_requests": 80}
+    # El atajo de T-217 lee el mismo valor (un solo lugar).
+    assert client.get(f"{API}/platform/ai-limits", headers=headers).json() == {"personDailyRequests": 35}
+
+    assert client.put(
+        f"{API}/platform/limits", json={"platform": {"no_existe": 3}}, headers=headers
+    ).status_code == 422
+    assert client.put(
+        f"{API}/platform/limits", json={"plans": {str(plan_id): {"person_daily_requests": 0}}}, headers=headers
+    ).status_code == 422
+    student = login(client, "ana@example.com")
+    assert client.get(f"{API}/platform/limits", headers=student).status_code == 403
+
+
+def test_migration_keeps_the_t217_platform_cap(tmp_path) -> None:
+    from alembic import command
+    from sqlalchemy import create_engine, text
+
+    from tests.test_migrations import _config
+
+    url = f"sqlite:///{(tmp_path / 'limits.db').as_posix()}"
+    config = _config(url)
+    command.upgrade(config, "0035_ai_platform_limits")
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO ai_platform_limits (key, value, updated_at) "
+            "VALUES ('person_daily_requests', 35, '2026-10-08 00:00:00')"
+        ))
+    command.upgrade(config, "head")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT value FROM platform_limits")).scalar() == 35

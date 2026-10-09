@@ -27,6 +27,8 @@ import {
   Exercise,
   LessonResponse,
   Me,
+  PlatformLimits,
+  PlatformLimitsUpdate,
   ModelOption,
   OrganizationCompanyLookupRequest,
   OrganizationCompanyLookupResult,
@@ -381,13 +383,13 @@ export class ApiService {
     return this.http.post<BankReviewItem[]>(`${this.base}/platform/bank/${itemId}/decision`, { action, acceptedAnswers });
   }
 
-  /** T-217: tope diario de pedidos por persona (todas las conexiones de plataforma). */
-  aiLimits(): Observable<{ personDailyRequests: number | null }> {
-    return this.http.get<{ personDailyRequests: number | null }>(`${this.base}/platform/ai-limits`);
+  /** T-220 (N-01): límites en un solo lugar (incluye el tope por persona de T-217). */
+  platformLimits(): Observable<PlatformLimits> {
+    return this.http.get<PlatformLimits>(`${this.base}/platform/limits`);
   }
 
-  setAiLimits(personDailyRequests: number | null): Observable<{ personDailyRequests: number | null }> {
-    return this.http.put<{ personDailyRequests: number | null }>(`${this.base}/platform/ai-limits`, { personDailyRequests });
+  setPlatformLimits(update: PlatformLimitsUpdate): Observable<PlatformLimits> {
+    return this.http.put<PlatformLimits>(`${this.base}/platform/limits`, update);
   }
 
   platformOverview(): Observable<PlatformOverview> {

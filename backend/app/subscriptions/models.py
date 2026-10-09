@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, String
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -60,6 +60,9 @@ class Plan(Base):
         SqlEnum(ServiceLinkType, native_enum=False), default=ServiceLinkType.PERSONAL
     )
     description: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    # T-220 (N-01/E-08): límites propios del plan {clave: valor}. Clave ausente = hereda el valor
+    # de plataforma. Las claves válidas son las del catálogo único (app/limits/registry.py).
+    limits: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class Subscription(Base):
