@@ -60,6 +60,17 @@ docs/       Guías prácticas de desarrollo
 
 Los prototipos HTML históricos permanecen como referencia, pero no forman parte de la nueva arquitectura.
 
+## Inicio local con doble clic (Windows)
+
+Una vez preparado el backend, abrir `scripts/iniciar-todo.bat` para iniciar **FastAPI y Angular en dos ventanas CMD**. También se pueden ejecutar por separado:
+
+- `scripts/iniciar-backend.bat` — FastAPI en `http://127.0.0.1:8000`.
+- `scripts/iniciar-frontend.bat` — Angular en `http://localhost:4200`.
+
+El frontend instala dependencias con `npm ci` cuando faltan. El backend requiere `backend/.venv` y `backend/.env` previamente configurados; **las migraciones Alembic se ejecutan manualmente**, no durante el arranque.
+
+Preparación inicial, verificación y problemas habituales: [`scripts/README.md`](scripts/README.md).
+
 ## Backend rápido
 
 ```bash
