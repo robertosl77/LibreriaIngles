@@ -15,7 +15,7 @@ Los scripts funcionan desde cualquier carpeta, incluso si la ruta del repositori
 ## Preparación inicial (una vez)
 
 1. Instalar Python 3.11+ y Node.js 22.12+ con npm.
-2. Crear `backend/.venv` e instalar dependencias según `docs/guia_desarrollo_backend.md` (desde `backend/`: `python -m venv .venv` y `\.venv\Scripts\python.exe -m pip install -e ".[dev]"`).
+2. Crear `backend/.venv` e instalar dependencias según `docs/guia_desarrollo_backend.md` (desde `backend/`: `python -m venv .venv` y `.venv\Scripts\python.exe -m pip install -e ".[dev]"`).
 3. Copiar `backend/.env.example` a `backend/.env` y completar las variables locales que correspondan. **No subir `.env` a Git.**
 4. Con respaldo previo si hay datos que conservar, ejecutar desde `backend/`: `.venv\Scripts\python.exe -m alembic upgrade head`. Las migraciones son deliberadamente **manuales**, no se ejecutan con doble clic.
 5. Ejecutar `scripts/iniciar-todo.bat`. El frontend instala automáticamente dependencias con `npm ci` si faltan. Si cambiaron `package.json` o `package-lock.json`, ejecutar `npm ci` manualmente antes de iniciar.
